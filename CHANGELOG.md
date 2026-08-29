@@ -4,6 +4,10 @@ Notable changes to the metric surface, one section per release, listing the pull
 
 A minor release may rename or remove a metric. Every collector module flag is off by default, so a release that adds one adds no series until you set it.
 
+## [Unreleased]
+
+- [#10](https://github.com/umatare5/xflow-exporter/pull/10) — Release only on a VERSION change, and configure gitleaks
+
 ## [v0.7.0]
 
 - [#9](https://github.com/umatare5/xflow-exporter/pull/9) — Serve metrics on the registered port 10053
@@ -33,6 +37,7 @@ A minor release may rename or remove a metric. Every collector module flag is of
 - [#1](https://github.com/umatare5/xflow-exporter/pull/1) — Start the exporter with its flags, HTTP surface and UDP receiver
 - [#2](https://github.com/umatare5/xflow-exporter/pull/2) — Add the release workflow the tag and the artifacts come from
 
+[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.7.0...HEAD
 [v0.7.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.7.0
 [v0.6.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.6.0
 [v0.5.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.5.0
