@@ -78,7 +78,7 @@ Each data collector is enabled per module:
 | `--collector.services`      | Traffic per address pair, protocol and port      |
 | `--collector.asns`          | Traffic per AS pair from device-exported numbers |
 | `--collector.applications`  | Traffic per AVC / App-ID / applicationId name    |
-| `--collector.countries`     | Traffic per country pair, needs a country database   |
+| `--collector.countries`     | Traffic per country pair, needs a geo database   |
 | `--collector.threats`       | Traffic per flagged address, needs a list file   |
 | `--collector.distributions` | Flow size and duration native histograms         |
 
@@ -188,6 +188,15 @@ Add the job config to your Prometheus YAML file using [examples/prometheus.yml](
 #### Alerting Rules Configuration Example
 
 Add the alerting rules to your Prometheus YAML file using [examples/prometheus_alert_rules.yml](./examples/prometheus_alert_rules.yml) as a reference.
+
+### Grafana Dashboard
+
+Import [examples/grafana_dashboard.json](./examples/grafana_dashboard.json). It covers reception and decoding, throughput per device, the Top-K composition views, the aggregation tables and the enrichment sources, and picks the data source and the devices through variables.
+
+> [!Note]
+> The dashboard ranks by packets, not by bytes. Flow export is sampled, so both are estimates scaled by the sampling rate, and a byte figure carries the variance of the packet-size distribution on top of the counting error — read volume as proportion and take an exact figure from the device's SNMP interface counters. What flow export gives that SNMP cannot is the dimensions, and the two orders genuinely differ: on one measured link an AS third by bytes was absent from the packet top five, and one second by packets was absent from the byte ranking.
+>
+> The composition panels rank; they do not total. Entries below `--aggregation.top-k` publish nothing, and `other` carries only what the entry bound folded at ingest. Each panel's description says what its numbers are worth.
 
 ## Contributing
 

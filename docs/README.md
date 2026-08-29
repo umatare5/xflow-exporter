@@ -2,11 +2,11 @@
 
 Reference pages for xflow-exporter. The [README](../README.md) covers getting flows received and scraped, and these pages carry the full metric catalogue and the behaviour every module shares.
 
-| Page                              | Focus                                  |
-| :-------------------------------- | :------------------------------------- |
-| [Protocols](protocols.md)         | Per-protocol behaviour and limits      |
-| [Collectors](collectors.md)       | Every metric family and its labels     |
-| [Configuration](configuration.md) | Flags and defaults, as `--help` prints |
+| Page                              | Focus                                     |
+| :-------------------------------- | :---------------------------------------- |
+| [Protocols](protocols.md)         | Per-protocol behaviour and limits         |
+| [Collectors](collectors.md)       | Every metric family and its labels        |
+| [Configuration](configuration.md) | Flags and defaults, as `--help` prints    |
 
 ## Technical Information
 
@@ -61,12 +61,12 @@ Every source is off by default and enabled per `--enrich.*` flag.
 
 The sources are these.
 
-| Flag                        | Fills                                    |
-| :-------------------------- | :--------------------------------------- |
-| `--enrich.services`         | The application, from the transport port |
-| `--enrich.asn-database`     | The AS numbers, from a MaxMind-format DB |
+| Flag                    | Fills                                    |
+| :---------------------- | :--------------------------------------- |
+| `--enrich.services`     | The application, from the transport port |
+| `--enrich.asn-database` | The AS numbers, from a MaxMind-format DB |
 | `--enrich.country-database` | The ISO country codes, from the same     |
-| `--enrich.threat-file`      | A flag on addresses a list file names    |
+| `--enrich.threat-file`  | A flag on addresses a list file names    |
 
 A database path that cannot be opened fails startup rather than enriching
 nothing in silence. Neither database ships with this exporter: point the flags
