@@ -57,6 +57,69 @@ func TestThreat_FlagsListedAddresses(t *testing.T) {
 	}
 }
 
+// TestThreat_MappedListEntryMatchesTheUnmappedRecord crosses the boundary the
+// decoder and the list meet at. The decoder unmaps every address it reads, so
+// a list naming the IPv4-mapped form has to be normalized the same way or it
+// keys a value no record can ever carry -- and the line parses, so the skipped
+// count reports full coverage over the gap.
+func TestThreat_MappedListEntryMatchesTheUnmappedRecord(t *testing.T) {
+	t.Parallel()
+
+	path := writeList(t, "mapped.txt", "::ffff:198.51.100.7\n203.0.113.9\n")
+
+	th, err := NewThreat([]string{path})
+	if err != nil {
+		t.Fatalf("NewThreat() error = %v, want nil", err)
+	}
+
+	// What the decoder produces for both spellings on the wire.
+	r := flow.Record{
+		SrcAddr: netip.MustParseAddr("::ffff:198.51.100.7").Unmap(),
+		DstAddr: netip.MustParseAddr("203.0.113.9"),
+	}
+	th.Enrich(&r)
+
+	if !r.SrcFlagged {
+		t.Error("SrcFlagged = false for an address the list names in mapped form, want true")
+	}
+	if !r.DstFlagged {
+		t.Error("DstFlagged = false for a plainly listed address, want true")
+	}
+
+	// Both spellings collapse to one key, so the set holds two addresses.
+	if got := th.Stats().Entries; got != 2 {
+		t.Errorf("Entries = %d, want the two distinct addresses", got)
+	}
+}
+
+// TestThreat_FlagsTheDestinationSide pins the side the outgoing lists exist
+// for: a hit on the destination is an inside host that reached a listed
+// address, which the source-side lists cannot see.
+func TestThreat_FlagsTheDestinationSide(t *testing.T) {
+	t.Parallel()
+
+	th, err := NewThreat([]string{writeList(t, "list.txt", "198.51.100.7\n")})
+	if err != nil {
+		t.Fatalf("NewThreat() error = %v, want nil", err)
+	}
+
+	r := flow.Record{
+		SrcAddr: netip.MustParseAddr("10.0.0.1"),
+		DstAddr: netip.MustParseAddr("198.51.100.7"),
+	}
+	th.Enrich(&r)
+
+	if r.SrcFlagged {
+		t.Error("SrcFlagged = true for an unlisted inside host, want false")
+	}
+	if !r.DstFlagged {
+		t.Error("DstFlagged = false for a listed destination, want true")
+	}
+	if got := th.Snapshot(); got.Filled != 1 {
+		t.Errorf("Snapshot() = %+v, want one filled", got)
+	}
+}
+
 // TestThreat_UnlistedIsAbsenceNotAVerdict pins the reading: an address no
 // list covers is unknown rather than found clean.
 func TestThreat_UnlistedIsAbsenceNotAVerdict(t *testing.T) {
@@ -282,6 +345,24 @@ func TestThreat_OverlongLineIsRejected(t *testing.T) {
 	}
 }
 
+// TestThreat_OverlongLineCostsTheWholeFile settles which of two readings the
+// length bound carries, since a file whose only line is overlong satisfies
+// both. The bound asserts a format rather than skipping a row: the scanner
+// cannot resynchronize past a line it would not hold, so what follows is
+// unread, and a set silently missing its tail under-flags -- which reads as a
+// clean address rather than an uncovered one.
+func TestThreat_OverlongLineCostsTheWholeFile(t *testing.T) {
+	t.Parallel()
+
+	path := writeList(t, "mixed.txt", "198.51.100.7\n"+
+		strings.Repeat("z", maxThreatLineLength+8)+"\n"+
+		"203.0.113.9\n")
+
+	if _, err := NewThreat([]string{path}); err == nil {
+		t.Error("NewThreat() error = nil for a list with one overlong row, want the file refused")
+	}
+}
+
 // TestThreat_ReloadIsSafeUnderLookups pins that a reload never leaves a
 // lookup consulting a partial set.
 func TestThreat_ReloadIsSafeUnderLookups(t *testing.T) {
@@ -333,7 +414,7 @@ func BenchmarkThreat_Enrich(b *testing.B) {
 
 	// A set the size of the published lists combined.
 	var builder strings.Builder
-	for i := range 420000 {
+	for i := range benchEntries {
 		builder.WriteString(netip.AddrFrom4([4]byte{
 			byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i),
 		}).String())
@@ -348,28 +429,68 @@ func BenchmarkThreat_Enrich(b *testing.B) {
 		b.Fatalf("NewThreat() error = %v, want nil", err)
 	}
 
-	// Random addresses rather than one repeated record. A single record
-	// keeps both probes in L1 and every branch predicted, which reports a
-	// figure several times faster than the traffic this ever sees.
+	// Both branches, because they cost differently and a uniform probe over
+	// the address space resolves a hit about once in ten thousand runs: an
+	// all-miss benchmark never executes the half that flags anything.
+	for _, bb := range []struct {
+		name    string
+		records []flow.Record
+	}{
+		{"miss", benchRecordsMissing()},
+		{"hit", benchRecordsListed()},
+	} {
+		b.Run(bb.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; b.Loop(); i++ {
+				// By pointer: copying the record under measurement costs
+				// more than the lookup it is measuring.
+				th.Enrich(&bb.records[i&(benchRecords-1)])
+			}
+		})
+	}
+}
+
+const (
+	// benchEntries is the measured size of the published lists combined, so
+	// the figure is the one a deployment sees rather than a favorable point
+	// on the map's fill curve.
+	benchEntries = 420000
+	// benchRecords is a power of two, so the walk over them is a mask.
+	benchRecords = 4096
+)
+
+// benchRecordsMissing draws addresses uniformly, which is what the traffic
+// does: almost nothing is listed.
+func benchRecordsMissing() []flow.Record {
 	rng := rand.New(rand.NewPCG(1, 2))
 	records := make([]flow.Record, benchRecords)
 	for i := range records {
 		records[i] = flow.Record{SrcAddr: randomAddr(rng), DstAddr: randomAddr(rng)}
 	}
-
-	b.ReportAllocs()
-	for i := 0; b.Loop(); i++ {
-		r := records[i&(benchRecords-1)]
-		th.Enrich(&r)
-	}
+	return records
 }
 
-// benchRecords is a power of two, so the walk over them is a mask.
-const benchRecords = 4096
+// benchRecordsListed draws from the set, so every lookup resolves.
+func benchRecordsListed() []flow.Record {
+	rng := rand.New(rand.NewPCG(3, 4))
+	records := make([]flow.Record, benchRecords)
+	for i := range records {
+		records[i] = flow.Record{SrcAddr: listedAddr(rng), DstAddr: listedAddr(rng)}
+	}
+	return records
+}
 
 func randomAddr(rng *rand.Rand) netip.Addr {
 	return netip.AddrFrom4([4]byte{
 		byte(rng.UintN(256)), byte(rng.UintN(256)),
 		byte(rng.UintN(256)), byte(rng.UintN(256)),
+	})
+}
+
+// listedAddr mirrors how the fixture above builds its keys.
+func listedAddr(rng *rand.Rand) netip.Addr {
+	i := rng.UintN(benchEntries)
+	return netip.AddrFrom4([4]byte{
+		byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i),
 	})
 }

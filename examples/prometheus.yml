@@ -2,6 +2,10 @@
 global:
   scrape_interval: 60s
   evaluation_interval: 60s
+  # --collector.distributions publishes native histograms, which a scrape
+  # negotiates rather than receives by default: without this the exporter's
+  # distributions arrive as a _count, a _sum and one +Inf bucket.
+  scrape_native_histograms: true
 
 rule_files:
   - prometheus_alert_rules.yml

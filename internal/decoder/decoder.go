@@ -88,11 +88,16 @@ type Decoder struct {
 
 // New creates a decoder enforcing the given parser limits.
 func New(cfg config.Parser) *Decoder {
+	// One interner serves both the per-record strings and the tables the
+	// options templates announce, so a name announced once and carried a
+	// million times is stored once and validated in one place.
+	intern := newInterner()
+
 	return &Decoder{
 		stats:     newStats(),
 		templates: newTemplateStore(cfg),
-		apps:      newAppTables(),
-		strings:   newInterner(),
+		apps:      newAppTables(intern),
+		strings:   intern,
 		now:       time.Now,
 	}
 }
@@ -116,6 +121,20 @@ func (d *Decoder) SweepDomains() int {
 // DomainsRefused reports how many domains the per-exporter budget turned away.
 func (d *Decoder) DomainsRefused() uint64 {
 	return d.templates.refused()
+}
+
+// VendorStringsRefused reports how many vendor strings were turned away as
+// unrepresentable, each one a record that falls back to its application
+// number, to its port name, or to no application series at all.
+func (d *Decoder) VendorStringsRefused() uint64 {
+	return d.strings.refusedCount()
+}
+
+// ApplicationsRefused reports how many application announcements the
+// per-exporter budget turned away, each one an application that stays
+// numbered rather than named.
+func (d *Decoder) ApplicationsRefused() uint64 {
+	return d.apps.refusedCount()
 }
 
 // Domains returns the per-observation-domain state for the metrics collector.

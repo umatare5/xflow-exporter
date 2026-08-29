@@ -132,6 +132,233 @@ func TestDecodeIPFIX_IPv4MappedAddressBecomesIPv4(t *testing.T) {
 	}
 }
 
+// addressOrders returns every ordering of the four address elements, so a
+// template's declaration order is exercised exhaustively rather than sampled.
+func addressOrders() [][]int {
+	orders := [][]int{{0}}
+	for n := 2; n <= 4; n++ {
+		var next [][]int
+		for _, sub := range orders {
+			for pos := 0; pos <= len(sub); pos++ {
+				o := make([]int, 0, n)
+				o = append(o, sub[:pos]...)
+				o = append(o, n-1)
+				o = append(o, sub[pos:]...)
+				next = append(next, o)
+			}
+		}
+		orders = next
+	}
+	return orders
+}
+
+// TestDecodeIPFIX_DualFamilyResolvesTheSameInAnyTemplateOrder covers the
+// template that announces both address families in one record and zero-fills
+// the pair that does not apply. The zero value of either family is a valid
+// address rather than an absent one, so no element can be judged as it
+// arrives: every ordering has to reach the family the device measured.
+func TestDecodeIPFIX_DualFamilyResolvesTheSameInAnyTemplateOrder(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		v4Src, v4Dst     string
+		v6Src, v6Dst     string
+		wantSrc, wantDst string
+	}{
+		{
+			name:  "the IPv6 pair carries the flow",
+			v4Src: "0.0.0.0", v4Dst: "0.0.0.0",
+			v6Src: "2001:db8::1", v6Dst: "2001:db8::2",
+			wantSrc: "2001:db8::1", wantDst: "2001:db8::2",
+		},
+		{
+			name:  "the IPv4 pair carries the flow",
+			v4Src: "198.51.100.7", v4Dst: "203.0.113.9",
+			v6Src: "::", v6Dst: "::",
+			wantSrc: "198.51.100.7", wantDst: "203.0.113.9",
+		},
+		{
+			name:  "an IPv4 DHCP client with no lease yet",
+			v4Src: "0.0.0.0", v4Dst: "255.255.255.255",
+			v6Src: "::", v6Dst: "::",
+			wantSrc: "0.0.0.0", wantDst: "255.255.255.255",
+		},
+		{
+			name:  "an IPv6 host joining a multicast group before it is addressed",
+			v4Src: "0.0.0.0", v4Dst: "0.0.0.0",
+			v6Src: "::", v6Dst: "ff02::1",
+			wantSrc: "::", wantDst: "ff02::1",
+		},
+		{
+			// The rule reads both sides of a pair, so a family holding a
+			// reading on the source alone carries the flow just as one
+			// holding it on the destination does.
+			name:  "only the source of a pair carries a reading",
+			v4Src: "0.0.0.0", v4Dst: "0.0.0.0",
+			v6Src: "2001:db8::1", v6Dst: "::",
+			wantSrc: "2001:db8::1", wantDst: "::",
+		},
+		{
+			// One flow with two sources is a contradiction no device can
+			// have measured, so there is no right answer -- only a settled
+			// one, without which the same flow keys two series.
+			name:  "both families carry a reading",
+			v4Src: "198.51.100.7", v4Dst: "203.0.113.9",
+			v6Src: "2001:db8::1", v6Dst: "2001:db8::2",
+			wantSrc: "198.51.100.7", wantDst: "203.0.113.9",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			elements := []struct {
+				field uint16
+				width uint16
+				value string
+			}{
+				{fieldIPv4SrcAddr, ipv4Len, tt.v4Src},
+				{fieldIPv4DstAddr, ipv4Len, tt.v4Dst},
+				{fieldIPv6SrcAddr, ipv6Len, tt.v6Src},
+				{fieldIPv6DstAddr, ipv6Len, tt.v6Dst},
+			}
+
+			for _, order := range addressOrders() {
+				specs := make([][]byte, 0, 6)
+				record := make([]byte, 0, 49)
+				declared := ""
+				for _, i := range order {
+					specs = append(specs, ipfixSpec(elements[i].field, elements[i].width, 0))
+					record = append(record, netip.MustParseAddr(elements[i].value).AsSlice()...)
+					declared += " " + elements[i].value
+				}
+				specs = append(specs, ipfixSpec(fieldProtocol, 1, 0), ipfixSpec(fieldInBytes, 8, 0))
+				record = append(record, protocolTCP)
+				record = be64(record, 4096)
+
+				d := newTestDecoder()
+				message := ipfixMessage(0, ipfixTemplateSet(specs...), flowSet(fixtureIPFIXTemplateID, record))
+
+				records, err := d.Decode(testExporter, message, nil)
+				if err != nil || len(records) != 1 {
+					t.Fatalf("order%s: Decode() = %d records, %v; want 1, nil", declared, len(records), err)
+				}
+
+				got := records[0]
+				if got.SrcAddr != netip.MustParseAddr(tt.wantSrc) || got.DstAddr != netip.MustParseAddr(tt.wantDst) {
+					t.Errorf("order%s: got %v -> %v, want %s -> %s",
+						declared, got.SrcAddr, got.DstAddr, tt.wantSrc, tt.wantDst)
+				}
+			}
+		})
+	}
+}
+
+// TestDecodeIPFIX_UnspecifiedAddressIsStillRecorded pins the other half of the
+// rule: a single-family template carries no filler to tell apart from a
+// reading, so the unspecified address a device really saw is published.
+func TestDecodeIPFIX_UnspecifiedAddressIsStillRecorded(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		srcField         uint16
+		dstField         uint16
+		width            uint16
+		src, dst         string
+		wantSrc, wantDst string
+	}{
+		{
+			name:     "a DHCP client with no lease yet",
+			srcField: fieldIPv4SrcAddr, dstField: fieldIPv4DstAddr, width: ipv4Len,
+			src: "0.0.0.0", dst: "255.255.255.255",
+			wantSrc: "0.0.0.0", wantDst: "255.255.255.255",
+		},
+		{
+			name:     "neither side addressed",
+			srcField: fieldIPv4SrcAddr, dstField: fieldIPv4DstAddr, width: ipv4Len,
+			src: "0.0.0.0", dst: "0.0.0.0",
+			wantSrc: "0.0.0.0", wantDst: "0.0.0.0",
+		},
+		{
+			name:     "neither side addressed, over IPv6",
+			srcField: fieldIPv6SrcAddr, dstField: fieldIPv6DstAddr, width: ipv6Len,
+			src: "::", dst: "::",
+			wantSrc: "::", wantDst: "::",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			singleFamily := ipfixTemplateSet(
+				ipfixSpec(tt.srcField, tt.width, 0),
+				ipfixSpec(tt.dstField, tt.width, 0),
+				ipfixSpec(fieldProtocol, 1, 0),
+				ipfixSpec(fieldInBytes, 8, 0),
+			)
+
+			record := make([]byte, 0, 41)
+			record = append(record, netip.MustParseAddr(tt.src).AsSlice()...)
+			record = append(record, netip.MustParseAddr(tt.dst).AsSlice()...)
+			record = append(record, protocolUDP)
+			record = be64(record, 328)
+
+			d := newTestDecoder()
+			message := ipfixMessage(0, singleFamily, flowSet(fixtureIPFIXTemplateID, record))
+
+			records, err := d.Decode(testExporter, message, nil)
+			if err != nil || len(records) != 1 {
+				t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
+			}
+
+			got := records[0]
+			if got.SrcAddr != netip.MustParseAddr(tt.wantSrc) || got.DstAddr != netip.MustParseAddr(tt.wantDst) {
+				t.Errorf("got %v -> %v, want the reading the device sent, %s -> %s",
+					got.SrcAddr, got.DstAddr, tt.wantSrc, tt.wantDst)
+			}
+		})
+	}
+}
+
+// TestDecodeIPFIX_TemplatePairingOneFamilyPerSideKeepsBoth pins the template
+// that declares one family's source element and the other's destination. The
+// pair that carries a reading is taken whole, and the other fills only the
+// side it left absent, so neither address the device sent is discarded.
+func TestDecodeIPFIX_TemplatePairingOneFamilyPerSideKeepsBoth(t *testing.T) {
+	t.Parallel()
+
+	mixed := ipfixTemplateSet(
+		ipfixSpec(fieldIPv4SrcAddr, ipv4Len, 0),
+		ipfixSpec(fieldIPv6DstAddr, ipv6Len, 0),
+		ipfixSpec(fieldInBytes, 8, 0),
+	)
+
+	record := make([]byte, 0, 28)
+	record = append(record, netip.MustParseAddr("198.51.100.7").AsSlice()...)
+	record = append(record, netip.MustParseAddr("2001:db8::9").AsSlice()...)
+	record = be64(record, 64)
+
+	d := newTestDecoder()
+	message := ipfixMessage(0, mixed, flowSet(fixtureIPFIXTemplateID, record))
+
+	records, err := d.Decode(testExporter, message, nil)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
+	}
+
+	got := records[0]
+	if got.SrcAddr != netip.MustParseAddr("198.51.100.7") {
+		t.Errorf("SrcAddr = %v, want 198.51.100.7", got.SrcAddr)
+	}
+	if got.DstAddr != netip.MustParseAddr("2001:db8::9") {
+		t.Errorf("DstAddr = %v, want 2001:db8::9", got.DstAddr)
+	}
+}
+
 func TestDecodeIPFIX_TemplateThenData(t *testing.T) {
 	t.Parallel()
 
@@ -249,30 +476,47 @@ func errorCountFor(d *Decoder, version flow.Version, reason string) uint64 {
 	return 0
 }
 
+// ipfixOptionsTemplate announces one options template whose first spec is its
+// only scope field, the shape RFC 6759 gives both AVC tables.
+func ipfixOptionsTemplate(id uint16, specs ...[]byte) []byte {
+	body := make([]byte, 6)
+	binary.BigEndian.PutUint16(body[0:2], id)
+	binary.BigEndian.PutUint16(body[2:4], uint16(len(specs)))
+	binary.BigEndian.PutUint16(body[4:6], 1)
+	for _, spec := range specs {
+		body = append(body, spec...)
+	}
+	return flowSet(ipfixOptionsTemplateSetID, body)
+}
+
+// TestDecodeIPFIX_NBARApplicationTableResolvesRecords covers the two options
+// templates a device exporting AVC announces, in the shape RFC 6759 defines
+// them: sections 6.8 and 6.9 both put applicationId in the scope, so the
+// field naming what the record describes is the one in the scope area.
 func TestDecodeIPFIX_NBARApplicationTableResolvesRecords(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()
 
-	// Options template: scope (1 field) + applicationId, name and the Cisco
-	// category attribute.
-	optionsBody := make([]byte, 6)
-	binary.BigEndian.PutUint16(optionsBody[0:2], 600)
-	binary.BigEndian.PutUint16(optionsBody[2:4], 4)                           // total fields
-	binary.BigEndian.PutUint16(optionsBody[4:6], 1)                           // scope fields
-	optionsBody = append(optionsBody, ipfixSpec(fieldApplicationID, 4, 0)...) // scope: app
-	optionsBody = append(optionsBody, ipfixSpec(fieldApplicationID, 4, 0)...)
-	optionsBody = append(optionsBody, ipfixSpec(fieldApplicationName, variableFieldLength, 0)...)
-	optionsBody = append(optionsBody, ipfixSpec(fieldCiscoAppCategory, variableFieldLength, ciscoPEN)...)
-	optionsTemplate := flowSet(ipfixOptionsTemplateSetID, optionsBody)
-
 	appID := uint32(0x0D_00_00_2A) // engine 13, selector 42
-	optionsRecord := be32(nil, appID)
-	optionsRecord = be32(optionsRecord, appID)
-	optionsRecord = append(optionsRecord, 5)
-	optionsRecord = append(optionsRecord, []byte("https")...)
-	optionsRecord = append(optionsRecord, 8)
-	optionsRecord = append(optionsRecord, []byte("browsing")...)
+
+	// RFC 6759 6.8, the application name mapping.
+	nameTemplate := ipfixOptionsTemplate(600,
+		ipfixSpec(fieldApplicationID, 4, 0),
+		ipfixSpec(fieldApplicationName, variableFieldLength, 0),
+	)
+	nameRecord := be32(nil, appID)
+	nameRecord = append(nameRecord, 5)
+	nameRecord = append(nameRecord, []byte("https")...)
+
+	// RFC 6759 6.9, the attribute values.
+	attributeTemplate := ipfixOptionsTemplate(601,
+		ipfixSpec(fieldApplicationID, 4, 0),
+		ipfixSpec(fieldCiscoAppCategory, variableFieldLength, ciscoPEN),
+	)
+	attributeRecord := be32(nil, appID)
+	attributeRecord = append(attributeRecord, 8)
+	attributeRecord = append(attributeRecord, []byte("browsing")...)
 
 	dataTemplate := ipfixTemplateSet(
 		ipfixSpec(fieldInBytes, 4, 0),
@@ -281,10 +525,10 @@ func TestDecodeIPFIX_NBARApplicationTableResolvesRecords(t *testing.T) {
 	dataRecord := be32(nil, 999)
 	dataRecord = be32(dataRecord, appID)
 
-	message := ipfixMessage(0, optionsTemplate,
-		flowSet(600, optionsRecord),
-		dataTemplate,
-		flowSet(fixtureIPFIXTemplateID, dataRecord),
+	message := ipfixMessage(0,
+		nameTemplate, flowSet(600, nameRecord),
+		attributeTemplate, flowSet(601, attributeRecord),
+		dataTemplate, flowSet(fixtureIPFIXTemplateID, dataRecord),
 	)
 
 	records, err := d.Decode(testExporter, message, nil)
@@ -521,5 +765,90 @@ func BenchmarkDecodeIPFIX(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// ipfixWithdrawal builds a withdrawal record: the template id and a field
+// count of zero, the four octets RFC 7011 figure T defines.
+func ipfixWithdrawal(setID uint16, templateIDs ...uint16) []byte {
+	body := make([]byte, 0, 4*len(templateIDs))
+	for _, id := range templateIDs {
+		body = be16(body, id)
+		body = be16(body, 0)
+	}
+	return flowSet(setID, body)
+}
+
+// TestDecodeIPFIX_HonoursOptionsTemplateWithdrawal pins RFC 7011 section 8.1.
+// A withdrawal record is four octets, the template id and a field count of
+// zero, and carries no scope field count -- figure T, and figure V for the
+// all-options form, whose set length is 8. The options reader claimed six
+// octets per record, so a set carrying one withdrawal fell short of its own
+// loop guard and was skipped whole, and a set carrying several advanced six
+// octets per record instead of four. The data template reader, which is the
+// same shape, has always been right.
+func TestDecodeIPFIX_HonoursOptionsTemplateWithdrawal(t *testing.T) {
+	t.Parallel()
+
+	optionsHeld := func(t *testing.T, d *Decoder) int {
+		t.Helper()
+		domains := d.Domains()
+		if len(domains) != 1 {
+			t.Fatalf("Domains() returned %d domains, want 1", len(domains))
+		}
+		return domains[0].OptionsTemplates
+	}
+
+	announce := func() []byte {
+		return ipfixMessage(0,
+			ipfixOptionsTemplate(700,
+				ipfixSpec(fieldApplicationID, 4, 0),
+				ipfixSpec(fieldApplicationName, 8, 0)),
+			ipfixOptionsTemplate(701,
+				ipfixSpec(fieldApplicationID, 4, 0),
+				ipfixSpec(fieldApplicationName, 8, 0)))
+	}
+
+	tests := []struct {
+		name     string
+		withdraw []byte
+		want     int
+	}{
+		{
+			name:     "one template id",
+			withdraw: ipfixWithdrawal(ipfixOptionsTemplateSetID, 700),
+			want:     1,
+		},
+		{
+			name:     "several in one set",
+			withdraw: ipfixWithdrawal(ipfixOptionsTemplateSetID, 700, 701),
+			want:     0,
+		},
+		{
+			name:     "all options templates",
+			withdraw: ipfixWithdrawal(ipfixOptionsTemplateSetID, ipfixOptionsTemplateSetID),
+			want:     0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			if _, err := d.Decode(testExporter, announce(), nil); err != nil {
+				t.Fatalf("Decode() error = %v, want the announcement accepted", err)
+			}
+			if got := optionsHeld(t, d); got != 2 {
+				t.Fatalf("options templates held = %d, want 2 before the withdrawal", got)
+			}
+
+			if _, err := d.Decode(testExporter, ipfixMessage(1, tt.withdraw), nil); err != nil {
+				t.Fatalf("Decode() error = %v, want the withdrawal accepted", err)
+			}
+			if got := optionsHeld(t, d); got != tt.want {
+				t.Errorf("options templates held = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }

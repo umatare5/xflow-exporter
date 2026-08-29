@@ -31,7 +31,7 @@ A dimension a flow record did not carry produces no series: never `0`, `false` o
 The table families are counters accumulated since each entry was created, and an entry evicted then re-created restarts from zero.
 
 - **Ranges** — give `rate()` a range that spans several scrapes. The staleness marker Prometheus writes at eviction separates the old series from a rebirth.
-- **Folding** — the `other` series of each family is seeded at zero and absorbs what the entry bound rejected at ingest and what eviction took away, so it only ever rises. The live tail below the Top-K cut is withheld rather than summed into it: those totals are still moving, and adding them per scrape would make the counter fall whenever one entry is evicted or grows into the cut.
+- **Folding** — the `other` series of each family is seeded at zero and absorbs what the entry bound rejected at ingest, so it only ever rises. Nothing else reaches it. The tail below the Top-K cut is withheld rather than summed into it, and an evicted entry's totals are not folded into it either: Prometheus already counted those bytes as increments on the entry's own series, so folding them again would make `sum(rate())` over the family read twice what was ingested.
 - **Flow counts** — `_flows_total` is as exported: a packet-sampling protocol observes flows rather than counting them, so no sampling multiplication is applied to it.
 
 ### Sampling correction
@@ -69,9 +69,17 @@ The sources are these.
 | `--enrich.threat-file`      | A flag on addresses a list file names    |
 
 A database path that cannot be opened fails startup rather than enriching
-nothing in silence. Neither database ships with this exporter: point the
-flags at a GeoLite2 or DB-IP file you already hold. Database lookups are
+nothing in silence. Neither database ships with this exporter: point the flags
+at a GeoLite2 or DB-IP file you already hold, or let
+`scripts/fetch-enrichment-data.sh databases` fetch one. Database lookups are
 local, so no address leaves the host.
+
+An anycast or large cloud prefix carries no country worth reading. A lab in
+Japan reaching Cloudflare over AS 13335 measured `src_country="CA"`, which is
+where the database places the prefix rather than where the traffic went, and
+no database can say otherwise: the same address answers from a different
+continent depending on who asks. Read `xflow_country_pair_*` as the country
+the prefix is registered in, and do not reconcile it with a transit bill.
 
 Nothing here reaches a network. The exporter reads files and never fetches
 them, so no address ever leaves the host and no credential is configured.
@@ -81,14 +89,33 @@ them, so no address ever leaves the host and no credential is configured.
 `--enrich.threat-file` reads a file of flagged addresses, one per line, and
 is repeatable so several published lists combine into one set.
 
-- **Fetching is not the exporter's job.** `scripts/fetch-threat-lists.sh`
+- **Fetching is not the exporter's job.** `scripts/fetch-enrichment-data.sh`
   downloads the published lists, merges and deduplicates them, and writes one
-  file. Run it from cron and reload afterwards, the same shape the MaxMind
-  databases are already kept in.
+  file. `fetch-enrichment-data.sh databases` fetches the ASN and country
+  databases beside them, from DB-IP unless `MAXMIND_LICENSE_KEY` is set. Run
+  it from cron and reload afterwards.
+- **A refreshed database needs a restart, a refreshed list does not.** The
+  mmdb enrichers open their reader once at startup and implement no reload,
+  so `/-/reload` passes over them and reports success having re-read only the
+  lists. Paths come from `THREAT_FILE`, `ASN_DATABASE` and `COUNTRY_DATABASE`.
+- **A failed fetch leaves the previous file alone.** The script checks that
+  each body names an address rather than trusting the status, since an empty
+  response and an access-denied page both arrive as a `200`, and it refuses to
+  write a merge below `MIN_ADDRESSES` (1000). A publisher that splits its list
+  fills each part before opening the next, so a missing part behind a full one
+  is read as a gap rather than as the end, and a list whose parts stop reaching
+  `SPLIT_PART_LINES` (131072) is refused rather than walked on an assumption
+  that no longer holds. Every refusal names its reason and exits non-zero, so
+  the exporter keeps serving the set it already holds.
 - **Format** — one address per line. Blank lines, `#` and `;` comments, and
   any trailing field after whitespace or a comma are skipped, so a CSV export
   loads without a converter. A line that is not an address is skipped rather
   than failing the file: one malformed row must not cost the rest.
+- **A line over 255 bytes fails the file**, which is the one exception to the
+  rule above. Nothing a list publishes is that long, so such a line says the
+  file is not a list, and the reader cannot resume past it — a set quietly
+  missing its tail would under-flag, and an unflagged address reads as a clean
+  one.
 - **An unlisted address is not a clean one.** It is an address no list
   covers, which is absence rather than a finding.
 - **Both directions are covered.** Most lists name the origins of inbound
@@ -135,13 +162,24 @@ protocol cannot choose its senders.
   device and raises `xflow_domains_refused_total`.
 - **Idle domains** — swept on the template TTL, which returns the slot to the
   device's budget and keeps the domain count following the fleet.
-- **Vendor strings** — the interner holds at most 65536. Past the bound a
-  value is copied per occurrence, which costs an allocation and never a wrong
-  reading.
+- **Vendor strings** — the interner holds at most 65536, each at most 255
+  bytes. Past the entry bound a value is copied per occurrence, which costs an
+  allocation and never a wrong reading. A string longer than the byte bound,
+  or one that is not valid UTF-8, is refused outright and counted in
+  `xflow_vendor_strings_refused_total`: the record then falls back to its
+  numbered `applicationId`, to its port name under `--enrich.services`, or to
+  no application series at all.
+- **Announced applications** — the `applicationId` is a wire field, so each
+  device may name at most 16384 of them, an order of magnitude above the
+  NBAR2 database a real device announces. A refusal raises
+  `xflow_applications_refused_total` and leaves that application numbered
+  rather than named; the ones already announced keep resolving and keep
+  refreshing.
 
 Maps keyed by the source address alone — the decode statistics, the
-application tables, the distribution histograms — are bounded by restricting
-the receiver to permitted senders. See [SECURITY.md](../SECURITY.md).
+per-device application tables, the distribution histograms — are bounded by
+restricting the receiver to permitted senders. See
+[SECURITY.md](../SECURITY.md).
 
 ### Templates
 
@@ -163,5 +201,6 @@ A NetFlow-Lite record carries one sampled packet section instead of parsed flow 
 
 `--collector.distributions` publishes `xflow_flow_bytes` and `xflow_flow_duration_seconds` as native histograms, one series per exporter with exponential buckets.
 
-- **Scraping** — Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration. The classic text exposition carries only `_count` and `_sum`.
+- **Scraping** — Prometheus v3.8+ with `scrape_native_histograms: true`, which [examples/prometheus.yml](../examples/prometheus.yml) sets. Without it the scrape negotiates the classic text exposition, which carries a `_count`, a `_sum` and one `+Inf` bucket.
 - **Duration** — observed only where the record carried both flow instants: sFlow samples and clock-less templates contribute size but no duration.
+- **Remote write does not carry them.** Remote Write 2.0 sends a histogram as its own message, and reducing one to a single sample would be a value nobody measured, so `--remote-write.url` ships the counters and gauges alone. Distributions are scrape-only.

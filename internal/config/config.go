@@ -138,6 +138,7 @@ type Collectors struct {
 	Exporters     bool `json:"exporters"`
 	Hosts         bool `json:"hosts"`
 	Services      bool `json:"services"`
+	Destinations  bool `json:"destinations"`
 	ASNs          bool `json:"asns"`
 	Applications  bool `json:"applications"`
 	Countries     bool `json:"countries"`
@@ -221,6 +222,7 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			Exporters:     cmd.Bool("collector.exporters"),
 			Hosts:         cmd.Bool("collector.hosts"),
 			Services:      cmd.Bool("collector.services"),
+			Destinations:  cmd.Bool("collector.destinations"),
 			ASNs:          cmd.Bool("collector.asns"),
 			Applications:  cmd.Bool("collector.applications"),
 			Countries:     cmd.Bool("collector.countries"),

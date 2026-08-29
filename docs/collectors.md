@@ -4,13 +4,14 @@ Every module is disabled by default and enabled per `--collector.<module>` flag.
 
 ## Traffic Metrics
 
-Each table family carries three metrics sharing one label set: `_bytes_total` and `_packets_total` are sampling-corrected counters, `_flows_total` counts flow records as exported. The `other` series of each family folds the tail — see [Counter semantics](README.md#counter-semantics).
+Each table family carries three metrics sharing one label set: `_bytes_total` and `_packets_total` are sampling-corrected counters, `_flows_total` counts flow records as exported. The `other` series of each family carries what the entry bound folded at ingest — see [Counter semantics](README.md#counter-semantics).
 
 | Module         | Family prefix        | Labels                             |
 | :------------- | :------------------- | :--------------------------------- |
 | `exporters`    | `xflow_exporter`     | `exporter,version`                 |
 | `hosts`        | `xflow_host_pair`    | `exporter,src,dst`                 |
 | `services`     | `xflow_service`      | `exporter,src,dst,proto,port`      |
+| `destinations` | `xflow_destination`  | `exporter,dst,proto,port`          |
 | `asns`         | `xflow_asn_pair`     | `exporter,src_asn,dst_asn`         |
 | `applications` | `xflow_application`  | `exporter,application`             |
 | `countries`    | `xflow_country_pair` | `exporter,src_country,dst_country` |
@@ -25,6 +26,7 @@ Each table family carries three metrics sharing one label set: `_bytes_total` an
 - `application` — the device-announced AVC name, the inline vendor string, or the `engine:selector` split of `applicationId` when only the number is known. `--enrich.services` fills it from the transport port where none of those exist.
 - `src_country`/`dst_country` — ISO codes from `--enrich.country-database`, `unknown` for a side the database could not place. A record neither side of which resolved feeds no entry.
 - `address`/`direction` — a single address a threat list names and the side it was seen on. Only flagged addresses appear, so the table holds what is worth acting on rather than one entry per address seen.
+- `destinations` is `services` without the source, so one entry reads as what a service received rather than who reached it. It is directional: an ingress-only pair of observation points keys the two directions of a conversation separately, so it is not a host total. Query-side folding of `services` matches it only while every source stays inside the Top-K cut, which a service reached by more sources than `--aggregation.top-k` does not.
 - The `exporters` family publishes unfolded: its cardinality is the fleet's, which no Top-K needs to guard.
 
 ## Distributions
@@ -54,6 +56,8 @@ These series describe the exporter itself. They have no module flag.
 | `xflow_sequence_missed_total`                       | Counter | Export packets lost per `exporter` and `odid`        |
 | `xflow_sampling_rate`                               | Gauge   | Declared sampling rate, absent until one arrives     |
 | `xflow_domains_refused_total`                       | Counter | Observation domains refused at the per-device budget |
+| `xflow_vendor_strings_refused_total`                | Counter | Vendor strings refused as unrepresentable            |
+| `xflow_applications_refused_total`                  | Counter | Announcements refused at the per-device app budget   |
 | `xflow_aggregation_entries`                         | Gauge   | Entries held per `aggregation` table                 |
 | `xflow_aggregation_evictions_total`                 | Counter | Idle entries evicted per `aggregation`               |
 | `xflow_aggregation_overflow_records_total`          | Counter | Records folded into `other` by the entry bound       |
@@ -64,7 +68,7 @@ These series describe the exporter itself. They have no module flag.
 | `xflow_threat_reload_failures_total`                | Counter | List loads that failed, keeping the previous set     |
 | `xflow_remote_write_sends_total`                    | Counter | Writes the remote endpoint accepted                  |
 | `xflow_remote_write_failures_total`                 | Counter | Writes that failed                                   |
-| `xflow_remote_write_samples_total`                  | Counter | Series shipped                                       |
+| `xflow_remote_write_samples_total`                  | Counter | Samples shipped, one per series per write            |
 | `xflow_remote_write_last_success_timestamp_seconds` | Gauge   | Unix time of the last accepted write                 |
 
 ### Reason values

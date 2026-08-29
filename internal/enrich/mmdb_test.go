@@ -2,7 +2,11 @@ package enrich
 
 import (
 	"net/netip"
+	"os"
+	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
@@ -218,5 +222,160 @@ func TestMMDB_CloseWithoutADatabase(t *testing.T) {
 	}
 	if err := newCountryWithLookup(countryTable(nil)).Close(); err != nil {
 		t.Errorf("Country.Close() error = %v, want nil", err)
+	}
+}
+
+// TestMMDB_ReloadPicksUpANewFile pins the defect the reload closes: the
+// databases are refreshed on disk by a cron job, and until a reload re-read
+// them the process kept answering from the file it opened at startup.
+func TestMMDB_ReloadPicksUpANewFile(t *testing.T) {
+	t.Parallel()
+
+	path := asnFixture(t, 64500)
+	a, err := NewASN(path)
+	if err != nil {
+		t.Fatalf("NewASN() error = %v, want nil", err)
+	}
+
+	if as, ok := a.lookup(publicSrc); !ok || as != 64500 {
+		t.Fatalf("lookup = %d %v, want 64500 true", as, ok)
+	}
+
+	replaceMMDB(t, path, asnFixture(t, 64501))
+	if err := a.Reload(); err != nil {
+		t.Fatalf("Reload() error = %v, want nil", err)
+	}
+
+	if as, ok := a.lookup(publicSrc); !ok || as != 64501 {
+		t.Errorf("lookup = %d %v after a reload, want 64501 true", as, ok)
+	}
+}
+
+// TestMMDB_FailedReloadKeepsTheDatabaseInForce pins that a truncated download
+// leaves the previous database serving rather than turning every lookup into
+// a miss, which would read as absence the operator cannot tell from a real
+// one.
+func TestMMDB_FailedReloadKeepsTheDatabaseInForce(t *testing.T) {
+	t.Parallel()
+
+	path := countryFixture(t, "JP")
+	c, err := NewCountry(path)
+	if err != nil {
+		t.Fatalf("NewCountry() error = %v, want nil", err)
+	}
+
+	// The fetch script installs by rename, so a bad download replaces the
+	// directory entry and leaves the inode the reader mapped untouched.
+	corrupt := filepath.Join(t.TempDir(), "corrupt.mmdb")
+	if err := os.WriteFile(corrupt, []byte("a captive portal login page"), 0o600); err != nil {
+		t.Fatalf("writing the replacement: %v", err)
+	}
+	if err := os.Rename(corrupt, path); err != nil {
+		t.Fatalf("installing the replacement: %v", err)
+	}
+
+	if err := c.Reload(); err == nil {
+		t.Fatal("Reload() error = nil for an unreadable database, want it reported")
+	}
+
+	if code, ok := c.lookup(publicSrc); !ok || code != "JP" {
+		t.Errorf("lookup = %q %v after a failed reload, want the previous JP true", code, ok)
+	}
+}
+
+// TestMMDB_LookupsSurviveConcurrentReloads is the test the design exists for.
+// A reload replaces a memory-mapped reader; closing the one it replaced
+// unmaps a region the decode workers may be reading, and that faults rather
+// than erroring. Run under -race.
+func TestMMDB_LookupsSurviveConcurrentReloads(t *testing.T) {
+	t.Parallel()
+
+	asnPath := asnFixture(t, 64500)
+	countryPath := countryFixture(t, "JP")
+
+	a, err := NewASN(asnPath)
+	if err != nil {
+		t.Fatalf("NewASN() error = %v, want nil", err)
+	}
+	c, err := NewCountry(countryPath)
+	if err != nil {
+		t.Fatalf("NewCountry() error = %v, want nil", err)
+	}
+
+	chain := NewChain(a, c)
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+
+	// Readers stand in for the decode workers.
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				r := flow.Record{SrcAddr: publicSrc, DstAddr: publicDst}
+				chain.Enrich([]flow.Record{r})
+			}
+		}()
+	}
+
+	// Reloaders stand in for the management endpoint and SIGHUP together.
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				if err := chain.Reload(); err != nil {
+					t.Errorf("Reload() error = %v, want nil", err)
+					return
+				}
+			}
+		}()
+	}
+
+	time.Sleep(500 * time.Millisecond)
+	close(stop)
+	wg.Wait()
+
+	// A close after the readers stop is the shutdown ordering, and it must
+	// still release the reader in force.
+	chain.Close()
+	if got := a.mmdb.reader(); got != nil {
+		t.Errorf("reader after Close() = %p, want nil", got)
+	}
+}
+
+// TestMMDB_LookupAfterCloseIsAMiss covers the reader the close left behind.
+// A miss leaves the dimension absent, which is what a source that knows
+// nothing is; a nil reader would fault instead.
+func TestMMDB_LookupAfterCloseIsAMiss(t *testing.T) {
+	t.Parallel()
+
+	a, err := NewASN(asnFixture(t, 64500))
+	if err != nil {
+		t.Fatalf("NewASN() error = %v, want nil", err)
+	}
+	if err := a.Close(); err != nil {
+		t.Fatalf("Close() error = %v, want nil", err)
+	}
+	if err := a.Close(); err != nil {
+		t.Errorf("second Close() error = %v, want nil", err)
+	}
+
+	r := flow.Record{SrcAddr: publicSrc, DstAddr: publicDst}
+	a.Enrich(&r)
+
+	if r.SrcAS != 0 || r.DstAS != 0 {
+		t.Errorf("record = %d -> %d, want both absent", r.SrcAS, r.DstAS)
 	}
 }

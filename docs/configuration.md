@@ -12,7 +12,7 @@ USAGE:
    xflow-exporter [global options]
 
 VERSION:
-   0.1.0
+   dev
 
 GLOBAL OPTIONS:
    --dry-run                    Validate configuration without starting the server
@@ -30,6 +30,7 @@ GLOBAL OPTIONS:
    --collector.applications   Enable application metrics from AVC, App-ID or applicationId
    --collector.asns           Enable AS pair metrics from device-exported AS numbers
    --collector.countries      Enable country pair metrics, which need --enrich.country-database
+   --collector.destinations   Enable destination address with protocol and port metrics
    --collector.distributions  Enable flow size and duration native histograms
    --collector.exporters      Enable per-device traffic metrics
    --collector.hosts          Enable source-destination address pair metrics
@@ -77,7 +78,6 @@ GLOBAL OPTIONS:
    --remote-write.timeout duration                                Timeout of one write (default: 30s)
    --remote-write.url string                                      Remote Write 2.0 endpoint to ship metrics to, which enables the client when set
    --remote-write.username string                                 Basic auth username for the endpoint [$XFLOW_REMOTE_WRITE_USERNAME]
-
 ```
 
 ## Notes

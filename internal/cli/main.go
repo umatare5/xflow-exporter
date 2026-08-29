@@ -203,6 +203,12 @@ func registerCollectorFlags() []cli.Flag {
 			HideDefault: true,
 		},
 		&cli.BoolFlag{
+			Name:        "collector.destinations",
+			Usage:       "Enable destination address with protocol and port metrics",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
 			Name:        "collector.asns",
 			Usage:       "Enable AS pair metrics from device-exported AS numbers",
 			Category:    "# Collector Options",

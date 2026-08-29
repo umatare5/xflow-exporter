@@ -57,6 +57,11 @@ type fieldState struct {
 	outBytes, outPackets        uint64
 	intern                      *interner
 
+	// The two address families, kept apart until every field is read: which
+	// pair the device measured and which it zero-filled is a property of
+	// the pairs together, not of any one element.
+	v4, v6 addrPair
+
 	// A sampled packet section, kept for resolution after every field is
 	// read so the device's own parsed fields can take precedence.
 	frameSection []byte
@@ -64,9 +69,15 @@ type fieldState struct {
 	frameSize    uint64
 }
 
+// addrPair holds one address family's two elements as they were read.
+type addrPair struct {
+	src, dst netip.Addr
+}
+
 // finishRecord resolves the accumulated state into the record and stamps the
 // domain sampling rate where the record carried none.
 func finishRecord(r *flow.Record, state *fieldState, bootTime time.Time, domain *domainState) {
+	resolveAddrs(r, state)
 	resolvePacketSection(r, state)
 
 	// An egress-only template carries OUT_* alone; both present would double
@@ -90,6 +101,51 @@ func finishRecord(r *flow.Record, state *fieldState, bootTime time.Time, domain 
 	if r.SamplingRate == 0 {
 		r.SamplingRate = domain.samplingRate.Load()
 	}
+}
+
+// resolveAddrs settles which address family the device actually measured.
+//
+// A template announcing both families carries four address elements per
+// record and zero-fills the pair it is not using. The zero value of either
+// family is a valid address rather than an absent one, so no element can be
+// judged alone: a flow really from 0.0.0.0 and an unused IPv4 pair are the
+// same four bytes, and only the other family's pair tells them apart. The
+// pair holding a reading is therefore taken whole -- taking each side on its
+// own merit produced a record whose source and destination were of different
+// families, which no flow is.
+//
+// Where neither pair holds one, whichever family the template carried still
+// stands: an all-zero single-family record keeps the reading the device sent
+// rather than falling to absence. A template mixing one family's source with
+// the other's destination keeps both, the losing pair filling only the side
+// the winner left absent -- nothing writes the record's addresses before
+// this runs, so the winning pair can be taken whole.
+//
+// Where both pairs hold a reading the record contradicts itself, and IPv4 is
+// taken. There is no right answer to pick, only a settled one: an unsettled
+// tie would key one flow into two series.
+func resolveAddrs(r *flow.Record, state *fieldState) {
+	first, second := state.v4, state.v6
+	if !first.carries() && second.carries() {
+		first, second = second, first
+	}
+
+	r.SrcAddr, r.DstAddr = first.src, first.dst
+	if !r.SrcAddr.IsValid() {
+		r.SrcAddr = second.src
+	}
+	if !r.DstAddr.IsValid() {
+		r.DstAddr = second.dst
+	}
+}
+
+// carries reports whether a pair holds a reading rather than the filler a
+// dual-family template writes into the family it is not using. The zero
+// netip.Addr is not the unspecified address, so an absent element has to be
+// excluded by validity first.
+func (p addrPair) carries() bool {
+	return (p.src.IsValid() && !p.src.IsUnspecified()) ||
+		(p.dst.IsValid() && !p.dst.IsUnspecified())
 }
 
 // resolvePacketSection decodes a sampled packet section through the header
@@ -165,19 +221,19 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 		}
 	case fieldIPv4SrcAddr:
 		if len(value) == ipv4Len {
-			r.SrcAddr = netip.AddrFrom4([4]byte(value))
+			state.v4.src = netip.AddrFrom4([4]byte(value))
 		}
 	case fieldIPv4DstAddr:
 		if len(value) == ipv4Len {
-			r.DstAddr = netip.AddrFrom4([4]byte(value))
+			state.v4.dst = netip.AddrFrom4([4]byte(value))
 		}
 	case fieldIPv6SrcAddr:
 		if len(value) == ipv6Len {
-			r.SrcAddr = addrFrom16([16]byte(value))
+			state.v6.src = addrFrom16([16]byte(value))
 		}
 	case fieldIPv6DstAddr:
 		if len(value) == ipv6Len {
-			r.DstAddr = addrFrom16([16]byte(value))
+			state.v6.dst = addrFrom16([16]byte(value))
 		}
 	case fieldSrcMask, fieldIPv6SrcMask:
 		if v, ok := beUint8(value); ok {

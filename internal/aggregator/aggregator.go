@@ -18,6 +18,7 @@ type Modules struct {
 	Exporters    bool
 	Hosts        bool
 	Services     bool
+	Destinations bool
 	ASNs         bool
 	Applications bool
 	Countries    bool
@@ -26,8 +27,8 @@ type Modules struct {
 
 // Any reports whether any aggregation is enabled.
 func (m Modules) Any() bool {
-	return m.Exporters || m.Hosts || m.Services || m.ASNs ||
-		m.Applications || m.Countries || m.Threats
+	return m.Exporters || m.Hosts || m.Services || m.Destinations ||
+		m.ASNs || m.Applications || m.Countries || m.Threats
 }
 
 // Table keys. Label values are derived from these at scrape time.
@@ -50,6 +51,17 @@ type HostKey struct {
 type ServiceKey struct {
 	Exporter netip.Addr
 	Src      netip.Addr
+	Dst      netip.Addr
+	Protocol uint8
+	Port     uint16
+}
+
+// DestinationKey keys the aggregation ServiceKey becomes without its source:
+// what one service received, summed over every host that reached it. It is
+// directional rather than a host total, so an ingress-only pair of
+// observation points keys the two directions separately.
+type DestinationKey struct {
+	Exporter netip.Addr
 	Dst      netip.Addr
 	Protocol uint8
 	Port     uint16
@@ -101,10 +113,13 @@ type Aggregator struct {
 	exporters *table[ExporterKey]
 	hosts     *table[HostKey]
 	services  *table[ServiceKey]
-	asns      *table[ASNKey]
-	apps      *table[AppKey]
-	countries *table[CountryKey]
-	threats   *table[ThreatKey]
+	// destinations holds the same records as services keyed without the
+	// source, so it is enabled and swept independently of it.
+	destinations *table[DestinationKey]
+	asns         *table[ASNKey]
+	apps         *table[AppKey]
+	countries    *table[CountryKey]
+	threats      *table[ThreatKey]
 
 	// now is pinned by tests.
 	now func() time.Time
@@ -125,6 +140,9 @@ func New(cfg config.Aggregation, modules Modules) *Aggregator {
 	}
 	if modules.Services {
 		a.services = newTable[ServiceKey](cfg.MaxEntries)
+	}
+	if modules.Destinations {
+		a.destinations = newTable[DestinationKey](cfg.MaxEntries)
 	}
 	if modules.ASNs {
 		a.asns = newTable[ASNKey](cfg.MaxEntries)
@@ -179,6 +197,17 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 		a.services.add(ServiceKey{
 			Exporter: r.Exporter,
 			Src:      r.SrcAddr,
+			Dst:      r.DstAddr,
+			Protocol: r.Protocol,
+			Port:     r.DstPort,
+		}, bytes, packets, r.Flows, now)
+	}
+
+	// The source is not read here, so a record whose source never resolved
+	// still names the service it reached.
+	if a.destinations != nil && r.DstAddr.IsValid() && r.Protocol != 0 {
+		a.destinations.add(DestinationKey{
+			Exporter: r.Exporter,
 			Dst:      r.DstAddr,
 			Protocol: r.Protocol,
 			Port:     r.DstPort,
@@ -275,13 +304,13 @@ func (a *Aggregator) Run(ctx context.Context) {
 func (a *Aggregator) sweep() {
 	cutoff := a.now().Add(-a.cfg.EntryTTL).UnixNano()
 	for _, t := range a.tables() {
-		t.sweep(cutoff)
+		_, _ = t.sweep(cutoff)
 	}
 }
 
 // sweepable lets the enabled tables be walked without their key types.
 type sweepable interface {
-	sweep(cutoff int64) int
+	sweep(cutoff int64) (int, Totals)
 	size() int
 	stats() (idle, folds uint64)
 }
@@ -292,7 +321,7 @@ func (t *table[K]) stats() (idle, folds uint64) {
 }
 
 // tableCount is how many aggregations exist, sizing the walk below.
-const tableCount = 7
+const tableCount = 8
 
 // tables returns the enabled tables keyed by their aggregation label value.
 func (a *Aggregator) tables() map[string]sweepable {
@@ -305,6 +334,9 @@ func (a *Aggregator) tables() map[string]sweepable {
 	}
 	if a.services != nil {
 		tables["services"] = a.services
+	}
+	if a.destinations != nil {
+		tables["destinations"] = a.destinations
 	}
 	if a.asns != nil {
 		tables["asns"] = a.asns
@@ -370,6 +402,14 @@ func (a *Aggregator) Services() ([]EntrySnapshot[ServiceKey], Totals) {
 		return nil, Totals{}
 	}
 	return a.services.snapshot()
+}
+
+// Destinations reads the destination-service table.
+func (a *Aggregator) Destinations() ([]EntrySnapshot[DestinationKey], Totals) {
+	if a.destinations == nil {
+		return nil, Totals{}
+	}
+	return a.destinations.snapshot()
 }
 
 // ASNs reads the AS-pair table.

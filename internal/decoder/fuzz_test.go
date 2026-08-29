@@ -57,3 +57,37 @@ func FuzzDecode(f *testing.F) {
 		}
 	})
 }
+
+// FuzzDecodeSequence drives one decoder with two datagrams in order. The
+// template-driven protocols carry state between datagrams, and the version is
+// a property of the datagram rather than of the domain, so a template
+// announced under one version and named under the other is reachable only
+// across a sequence. FuzzDecode builds a fresh decoder per input and cannot
+// express that.
+func FuzzDecodeSequence(f *testing.F) {
+	exporter := netip.MustParseAddr("192.0.2.10")
+
+	f.Add(ipfixMessage(0, ipfixTemplateSet(ipfixSpec(fieldApplicationName, variableFieldLength, 0))),
+		v9Packet(1, fixtureIPFIXODID, flowSet(fixtureIPFIXTemplateID, []byte{0, 0, 0, 0})))
+	f.Add(v9Packet(1, fixtureIPFIXODID, fixtureV9Template()),
+		ipfixMessage(0, flowSet(fixtureV9TemplateID, fixtureV9DataRecord())))
+	f.Add(ipfixMessage(0, fixtureIPFIXTemplate()),
+		ipfixMessage(1, flowSet(fixtureIPFIXTemplateID, fixtureIPFIXRecord())))
+	f.Add(v9Packet(1, fixtureV9ODID, fixtureV9Template()),
+		v9Packet(2, fixtureV9ODID, flowSet(fixtureV9TemplateID, fixtureV9DataRecord())))
+	f.Add([]byte{}, []byte{})
+
+	f.Fuzz(func(t *testing.T, first, second []byte) {
+		d := New(config.Parser{
+			MaxFieldsPerTemplate: config.DefaultParserMaxFieldsPerTemplate,
+			TemplateTTL:          config.DefaultParserTemplateTTL,
+		})
+
+		for _, payload := range [][]byte{first, second} {
+			records, err := d.Decode(exporter, payload, nil)
+			if err != nil && len(records) != 0 {
+				t.Errorf("Decode() returned %d records alongside error %v, want 0", len(records), err)
+			}
+		}
+	})
+}

@@ -367,6 +367,121 @@ func TestDecodeNetFlowV9_TemplateExpiresAfterTTL(t *testing.T) {
 	}
 }
 
+// v9OptionsTemplate assembles one options template under the given id from
+// raw (type, length) pairs, splitting them at scopeFields.
+func v9OptionsTemplate(id uint16, scopeFields int, specs ...[2]uint16) []byte {
+	const specLen = 4
+
+	body := make([]byte, 6)
+	binary.BigEndian.PutUint16(body[0:2], id)
+	binary.BigEndian.PutUint16(body[2:4], uint16(scopeFields*specLen))
+	binary.BigEndian.PutUint16(body[4:6], uint16((len(specs)-scopeFields)*specLen))
+	for _, spec := range specs {
+		body = be16(body, spec[0])
+		body = be16(body, spec[1])
+	}
+	return flowSet(optionsTemplateFlowSetID, body)
+}
+
+// TestDecodeNetFlowV9_OptionsTemplateThatConsumesNothingIsRefused covers the
+// options template every one of whose fields is a zero-length scope. A
+// zero-length scope is legitimate on its own, so the field walk admits it,
+// and a template made only of them describes a record of no bytes: the data
+// sets naming it divided their length by that. One datagram of 42 bytes,
+// needing no prior state, reached it.
+func TestDecodeNetFlowV9_OptionsTemplateThatConsumesNothingIsRefused(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	packet := v9Packet(1, fixtureV9ODID,
+		v9OptionsTemplate(300, 1, [2]uint16{1, 0}),
+		flowSet(300, []byte{0, 0, 0, 0}),
+	)
+	records, err := d.Decode(testExporter, packet, nil)
+	if err != nil || len(records) != 0 {
+		t.Fatalf("Decode() = %d records, %v; want 0, nil", len(records), err)
+	}
+	if got := errorCount(d, ReasonInvalidTemplate); got != 1 {
+		t.Errorf("invalid_template count = %d, want 1", got)
+	}
+
+	domains := d.Domains()
+	if len(domains) != 1 {
+		t.Fatalf("Domains() returned %d domains, want 1", len(domains))
+	}
+	if domains[0].OptionsTemplates != 0 {
+		t.Errorf("OptionsTemplates = %d, want the template not held", domains[0].OptionsTemplates)
+	}
+}
+
+// TestDecodeNetFlowV9_ZeroLengthScopeBesideAnOptionFieldIsKept pins the other
+// side of that rule: the bare system scope devices really send costs nothing
+// on its own, and the template still describes the option fields beside it.
+func TestDecodeNetFlowV9_ZeroLengthScopeBesideAnOptionFieldIsKept(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	packet := v9Packet(1, fixtureV9ODID,
+		v9OptionsTemplate(501, 1,
+			[2]uint16{1, 0},
+			[2]uint16{fieldSamplingInterval, 4},
+		),
+		flowSet(501, be32(nil, 100)),
+	)
+	if _, err := d.Decode(testExporter, packet, nil); err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+
+	domains := d.Domains()
+	if len(domains) != 1 {
+		t.Fatalf("Domains() returned %d domains, want 1", len(domains))
+	}
+	if domains[0].OptionsTemplates != 1 {
+		t.Errorf("OptionsTemplates = %d, want 1", domains[0].OptionsTemplates)
+	}
+	if domains[0].SamplingRate != 100 {
+		t.Errorf("SamplingRate = %d, want the rate the option field carried", domains[0].SamplingRate)
+	}
+}
+
+// TestDecodeNetFlowV9_OptionsScopeFieldIsRead pins that the scope area is
+// read here as it is in the IPFIX reader. RFC 3954 numbers v9 scopes 1 to 5,
+// none of which this exporter consumes, so a device spelling the application
+// mapping the way RFC 6759 does is the only thing this changes -- and one
+// rule across both readers is what keeps them from drifting.
+func TestDecodeNetFlowV9_OptionsScopeFieldIsRead(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	const appID = 0x0D_00_00_2A // engine 13, selector 42
+	const nameWidth = 16
+
+	name := make([]byte, nameWidth)
+	copy(name, "ms-office-365")
+
+	record := be32(nil, appID)
+	record = append(record, name...)
+
+	packet := v9Packet(1, fixtureV9ODID,
+		v9OptionsTemplate(502, 1,
+			[2]uint16{fieldApplicationID, 4},
+			[2]uint16{fieldApplicationName, nameWidth},
+		),
+		flowSet(502, record),
+	)
+	if _, err := d.Decode(testExporter, packet, nil); err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+
+	got, _ := d.apps.resolve(testExporter, appID)
+	if got != "ms-office-365" {
+		t.Errorf("resolve() = %q, want the name the scoped announcement carried", got)
+	}
+}
+
 func TestDecodeNetFlowV9_OptionsDeclareSamplingRate(t *testing.T) {
 	t.Parallel()
 
@@ -562,6 +677,92 @@ func BenchmarkDecodeNetFlowV9(b *testing.B) {
 	records := make([]byte, 0, 45*20)
 	for range 20 {
 		records = append(records, fixtureV9DataRecord()...)
+	}
+	payload := v9Packet(2, fixtureV9ODID, flowSet(fixtureV9TemplateID, records))
+	dst := make([]flow.Record, 0, 20)
+
+	b.ReportAllocs()
+	for b.Loop() {
+		var err error
+		dst, err = d.Decode(testExporter, payload, dst[:0])
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// appNameFieldLen is the fixed width an inline application name is exported
+// at, padded with NULs the way a fixed-width string element is.
+const appNameFieldLen = 32
+
+// fixtureV9AppNameTemplate announces the fixture template with the inline
+// application name element beside it, the shape a device exporting IE 96 per
+// record uses.
+func fixtureV9AppNameTemplate() []byte {
+	return flowSet(templateFlowSetID, templateSpec(fixtureV9TemplateID,
+		[2]uint16{fieldIPv4SrcAddr, 4},
+		[2]uint16{fieldIPv4DstAddr, 4},
+		[2]uint16{fieldL4SrcPort, 2},
+		[2]uint16{fieldL4DstPort, 2},
+		[2]uint16{fieldProtocol, 1},
+		[2]uint16{fieldSrcTOS, 1},
+		[2]uint16{fieldTCPFlags, 1},
+		[2]uint16{fieldSrcMask, 1},
+		[2]uint16{fieldDstMask, 1},
+		[2]uint16{fieldInputSNMP, 4},
+		[2]uint16{fieldOutputSNMP, 4},
+		[2]uint16{fieldInBytes, 4},
+		[2]uint16{fieldInPackets, 4},
+		[2]uint16{fieldSrcAS, 4},
+		[2]uint16{fieldDstAS, 4},
+		[2]uint16{fieldFirstSwitched, 4},
+		[2]uint16{fieldLastSwitched, 4},
+		[2]uint16{fieldApplicationName, appNameFieldLen},
+	))
+}
+
+// fixtureV9AppNameDataRecord writes one record matching
+// fixtureV9AppNameTemplate.
+func fixtureV9AppNameDataRecord() []byte {
+	name := make([]byte, appNameFieldLen)
+	copy(name, "ms-office-365")
+	return append(fixtureV9DataRecord(), name...)
+}
+
+// TestDecodeNetFlowV9_InlineApplicationName pins that the benchmark fixture
+// below actually reaches the interner: a template without the element would
+// measure a decode path the vendor strings never take.
+func TestDecodeNetFlowV9_InlineApplicationName(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	records, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID,
+		fixtureV9AppNameTemplate(),
+		flowSet(fixtureV9TemplateID, fixtureV9AppNameDataRecord()),
+	), nil)
+	if err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("Decode() returned %d records, want 1", len(records))
+	}
+	if records[0].AppName != "ms-office-365" {
+		t.Errorf("AppName = %q, want the padded inline name trimmed and carried", records[0].AppName)
+	}
+}
+
+// BenchmarkDecodeNetFlowV9AppName measures the decode path a record carrying
+// an inline application name takes, the only path the interner and its UTF-8
+// guard are on.
+func BenchmarkDecodeNetFlowV9AppName(b *testing.B) {
+	d := newTestDecoder()
+	if _, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID, fixtureV9AppNameTemplate()), nil); err != nil {
+		b.Fatal(err)
+	}
+
+	records := make([]byte, 0, (45+appNameFieldLen)*20)
+	for range 20 {
+		records = append(records, fixtureV9AppNameDataRecord()...)
 	}
 	payload := v9Packet(2, fixtureV9ODID, flowSet(fixtureV9TemplateID, records))
 	dst := make([]flow.Record, 0, 20)

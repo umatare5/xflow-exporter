@@ -41,7 +41,7 @@ func NewRemoteWriteCollector(src RemoteWriteSource) *RemoteWriteCollector {
 		),
 		samplesDesc: prometheus.NewDesc(
 			"xflow_remote_write_samples_total",
-			"Series shipped since process start",
+			"Samples shipped since process start, one per series per write",
 			nil, nil,
 		),
 		lastSuccessDesc: prometheus.NewDesc(

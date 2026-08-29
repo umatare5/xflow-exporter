@@ -85,15 +85,15 @@ Each data collector is enabled per module:
 Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from its port, and `--enrich.asn-database`, `--enrich.country-database` and `--enrich.threat-file` read files held locally. See [docs/README.md](docs/README.md#enrichment).
 
 > [!Note]
-> This exporter fetches nothing. [`scripts/fetch-threat-lists.sh`](scripts/fetch-threat-lists.sh) downloads and merges the published threat lists, and `/-/reload` picks up what it left behind — the same shape the MaxMind databases are already kept in.
+> This exporter fetches nothing and holds no credential. [`scripts/fetch-enrichment-data.sh`](scripts/fetch-enrichment-data.sh) downloads the published threat lists and the MaxMind-format databases; `/-/reload` picks up a refreshed list and a refreshed database alike.
 
-`--remote-write.url` ships the same registry to a Remote Write 2.0 endpoint for the deployments a scrape cannot reach, alongside or instead of `/metrics`.
+`--remote-write.url` ships the registry's counters and gauges to a Remote Write 2.0 endpoint for the deployments a scrape cannot reach, alongside or instead of `/metrics`. Native histograms stay scrape-only.
 
 The operational knobs live under `--receiver.*`, `--parser.*` and `--aggregation.*`. On Linux the read loops use `recvmmsg` batching — other platforms read one datagram per call.
 
 ## Endpoints
 
-The exporter serves three endpoints:
+The exporter serves four endpoints:
 
 - `/` — landing page, which confirms the exporter is running when reached at <http://localhost:10052/>
 - `/metrics` — metrics endpoint, configurable via `--web.telemetry-path`
@@ -102,13 +102,14 @@ The exporter serves three endpoints:
 
 ## Metrics
 
-This exporter aggregates flows into six modules, documented in [docs/collectors.md](docs/collectors.md):
+This exporter aggregates flows into nine modules, documented in [docs/collectors.md](docs/collectors.md):
 
 | Module          | Metric family (representative)   | Labels                             |
 | :-------------- | :------------------------------- | :--------------------------------- |
 | `exporters`     | `xflow_exporter_bytes_total`     | `exporter,version`                 |
 | `hosts`         | `xflow_host_pair_bytes_total`    | `exporter,src,dst`                 |
 | `services`      | `xflow_service_bytes_total`      | `exporter,src,dst,proto,port`      |
+| `destinations`  | `xflow_destination_bytes_total`  | `exporter,dst,proto,port`          |
 | `asns`          | `xflow_asn_pair_bytes_total`     | `exporter,src_asn,dst_asn`         |
 | `applications`  | `xflow_application_bytes_total`  | `exporter,application`             |
 | `countries`     | `xflow_country_pair_bytes_total` | `exporter,src_country,dst_country` |

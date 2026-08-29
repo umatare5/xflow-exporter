@@ -195,8 +195,11 @@ func (d *Decoder) parseV9FieldSpecs(
 // registerTemplate checks a compiled template's record length and registers
 // it. The caller has computed recordLen, fixed or minimum.
 func (d *Decoder) registerTemplate(key domainKey, id uint16, t *template, issue func(reason string)) {
-	// A record must fit a set alongside its header.
-	if t.recordLen > 65535-flowSetHeaderLen {
+	// A record must fit a set alongside its header, and must consume input.
+	// A v9 options template may declare a zero-length scope, so one whose
+	// every field is such a scope sums to nothing, and the data sets naming
+	// it divide their length by it.
+	if t.recordLen < 1 || t.recordLen > 65535-flowSetHeaderLen {
 		issue(ReasonInvalidTemplate)
 		return
 	}
@@ -287,6 +290,16 @@ func (d *Decoder) decodeV9DataSet(
 		return dst
 	}
 
+	// NetFlow v9 has no variable-length encoding, so a template carrying one
+	// reached this domain over IPFIX. Its recordLen is a minimum rather than
+	// a width, and the walk below reads every field at its declared length --
+	// 65535 for the variable one, past the end of a record carved to the
+	// minimum.
+	if tpl.hasVariable {
+		issue(ReasonInvalidTemplate)
+		return dst
+	}
+
 	count := len(set) / tpl.recordLen
 	if count == 0 {
 		issue(ReasonMalformed)
@@ -310,12 +323,9 @@ func (d *Decoder) readV9OptionsRecord(exporter netip.Addr, domain *domainState, 
 	var opts optionsState
 
 	offset := 0
-	for i, f := range tpl.fields {
+	for _, f := range tpl.fields {
 		value := record[offset : offset+int(f.length)]
 		offset += int(f.length)
-		if i < tpl.scopeCount {
-			continue
-		}
 		opts.apply(f.fieldType, f.enterprise, value)
 	}
 

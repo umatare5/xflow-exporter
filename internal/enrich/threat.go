@@ -16,8 +16,12 @@ import (
 )
 
 // maxThreatLineLength bounds one line of a list file. An address is far
-// shorter than this, so a longer line is a file that is not a list at all,
-// and reading it whole would be reading an arbitrary file into memory.
+// shorter than this, so a longer line says the file is not a list, and the
+// bound is that assertion rather than a memory guard -- bufio.Scanner already
+// stops at 64 KiB on its own.
+//
+// It is the scanner's buffer, which has to hold the line separator too, so
+// the longest line that loads is one byte shorter.
 const maxThreatLineLength = 256
 
 // threatSet is one immutable snapshot of the flagged addresses. It is
@@ -238,5 +242,9 @@ func parseThreatLine(line string) (netip.Addr, bool) {
 
 	// An address carrying a zone is a link-local one scoped to an interface
 	// of the host that wrote it, which cannot match a flow record here.
-	return addr.WithZone(""), true
+	//
+	// Unmap because the decoder unmaps: a list naming ::ffff:198.51.100.7
+	// means the address every record spells 198.51.100.7, and netip holds
+	// the two as distinct keys, so a mapped entry would match nothing.
+	return addr.WithZone("").Unmap(), true
 }

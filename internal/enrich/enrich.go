@@ -8,8 +8,10 @@
 package enrich
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 
 	"github.com/umatare5/xflow-exporter/internal/flow"
@@ -77,6 +79,14 @@ type Snapshotter interface {
 // Chain applies its enrichers in order to every record of a batch. An empty
 // chain is a no-op, so the ingest path needs no nil check.
 type Chain struct {
+	// reloadMu serializes the rebuilds. Both triggers -- the management
+	// endpoint and SIGHUP -- reach the chain, and without the lock two of
+	// them each build a whole new set before either publishes: the peak
+	// grows with the number of callers rather than with the data, and the
+	// set left in force is the build that finished last rather than the one
+	// that read the newest file.
+	reloadMu sync.Mutex
+
 	enrichers []Enricher
 }
 
@@ -117,24 +127,33 @@ func (c *Chain) Snapshot() []Snapshot {
 	return snapshots
 }
 
-// Reload re-reads every source that can be re-read, and reports the first
+// Reload re-reads every source that can be re-read, and reports every
 // failure. A source that fails keeps whatever it already held, so a reload
 // of a list that has gone missing never empties it.
+//
+// Every source is attempted even after one fails. The sources are
+// independent -- separate files, refreshed by separate steps of the same
+// cron job -- so stopping at the first failure would let one truncated
+// download hold back the refresh of everything listed after it.
 func (c *Chain) Reload() error {
 	if c == nil {
 		return nil
 	}
 
+	c.reloadMu.Lock()
+	defer c.reloadMu.Unlock()
+
+	var errs []error
 	for _, e := range c.enrichers {
 		reloader, ok := e.(Reloader)
 		if !ok {
 			continue
 		}
 		if err := reloader.Reload(); err != nil {
-			return fmt.Errorf("reloading %s: %w", e.Name(), err)
+			errs = append(errs, fmt.Errorf("reloading %s: %w", e.Name(), err))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // Close releases whatever the enrichers hold open.
