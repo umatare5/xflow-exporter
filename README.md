@@ -16,7 +16,28 @@ This exporter receives traffic flow records from on-premises network devices —
 - 📊 **Native Histograms**: Flow size and duration distributions in single series
 
 > [!IMPORTANT]
-> This project is under initial development. No release exists yet, and every interface below may change without notice.
+> This project is pre-1.0: a minor release may rename or remove a metric. Read the [CHANGELOG](CHANGELOG.md) before upgrading.
+
+## Quick Start
+
+### 1. Point your devices at the exporter
+
+Configure each device to export flows to the exporter's address, UDP port 2055 by default. Every listener accepts every supported protocol, identified per datagram.
+
+### 2. Run the exporter with Docker
+
+```bash
+docker run -p 10040:10040 -p 2055:2055/udp   ghcr.io/umatare5/xflow-exporter:latest   --collector.exporters --collector.hosts
+```
+
+> [!Tip]
+> If you prefer using binaries, download them from the [release page](https://github.com/umatare5/xflow-exporter/releases).
+>
+> Supported Platforms are: `linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64` and `windows_amd64`
+
+### 3. Scrape it
+
+Add a job for `localhost:10040` using [examples/prometheus.yml](examples/prometheus.yml) as a reference, and the alerting rules from [examples/prometheus_alert_rules.yml](examples/prometheus_alert_rules.yml).
 
 ## Protocol Support
 
@@ -40,57 +61,22 @@ Transport is plaintext UDP. DTLS is not supported: no shipping network OS export
 
 ## Syntax
 
-`xflow-exporter --help` prints every flag.
+`xflow-exporter --help` prints every flag, and [docs/configuration.md](docs/configuration.md) carries the same list.
 
-```bash
-NAME:
-   xflow-exporter - Prometheus exporter for NetFlow, IPFIX and sFlow
+Each data collector is enabled per module, all off by default:
 
-GLOBAL OPTIONS:
-   --dry-run                    Validate configuration without starting the server
-   --log.format string          Log format (json, text) (default: "json")
-   --log.level string           Log level (debug, info, warn, error) (default: "info")
-   --web.listen-address string  Address to bind the HTTP server to (default: "0.0.0.0")
-   --web.listen-port int        Port number to bind the HTTP server to (default: 10040)
-   --web.telemetry-path string  Path for the metrics endpoint (default: "/metrics")
+| Module                      | Publishes                                        |
+| :-------------------------- | :----------------------------------------------- |
+| `--collector.exporters`     | Per-device traffic by `exporter` and `version`   |
+| `--collector.hosts`         | Traffic per source-destination address pair      |
+| `--collector.services`      | Traffic per address pair, protocol and port      |
+| `--collector.asns`          | Traffic per AS pair from device-exported numbers |
+| `--collector.applications`  | Traffic per AVC / App-ID / applicationId name    |
+| `--collector.distributions` | Flow size and duration native histograms         |
 
-   * Internal Collector Options
+The operational knobs live under `--receiver.*` (listeners, batching, queue), `--parser.*` (template limits) and `--aggregation.*` (entry TTL, bounds, Top-K, byte threshold).
 
-   --collector.internal.go-runtime  Enable Go runtime metrics collector
-   --collector.internal.process     Enable process metrics collector
-
-   * Receiver Options
-
-   --receiver.address string [ --receiver.address string ]  Address to receive flow datagrams on (repeatable) (default: ":2055")
-   --receiver.batch-size int                                Maximum datagrams read per kernel round trip (default: 64)
-   --receiver.buffer-bytes int                              UDP socket receive buffer size in bytes (0 keeps the OS default) (default: 4194304)
-   --receiver.max-packet-size int                           Largest datagram in bytes kept whole; larger ones are dropped (default: 9216)
-   --receiver.queue-size int                                Datagrams buffered between the read loops and the decoders (default: 8192)
-   --receiver.workers int                                   Decode workers consuming the queue (0 sizes to the CPU count) (default: 0)
-
-   # Collector Options
-
-   --collector.applications   Enable application metrics from AVC, App-ID or applicationId
-   --collector.asns           Enable AS pair metrics from device-exported AS numbers
-   --collector.distributions  Enable flow size and duration native histograms
-   --collector.exporters      Enable per-device traffic metrics
-   --collector.hosts          Enable source-destination address pair metrics
-   --collector.services       Enable address pair with protocol and port metrics
-
-   * Aggregation Options
-
-   --aggregation.entry-ttl duration  How long an idle aggregation entry keeps its series (default: 15m0s)
-   --aggregation.max-entries int     Entry bound per aggregation table; new keys past it fold into other (default: 100000)
-   --aggregation.min-bytes int       Bytes below which an entry folds into other at scrape time (0 publishes all) (default: 0)
-   --aggregation.top-k int           Entries each table publishes as their own series; the rest fold into other (default: 1000)
-
-   * Parser Options
-
-   --parser.max-fields-per-template int  Most fields one NetFlow v9 or IPFIX template may declare (default: 128)
-   --parser.template-ttl duration        How long an unrefreshed template stays usable (default: 30m0s)
-```
-
-Every listener accepts every supported protocol, identified per datagram, so one port can carry NetFlow and IPFIX together and an sFlow deployment adds `--receiver.address :6343` rather than a mode switch. On Linux the read loops use `recvmmsg` batching; other platforms read one datagram per call, so performance figures are Linux figures.
+On Linux the read loops use `recvmmsg` batching; other platforms read one datagram per call, so performance figures are Linux figures. Transport is plaintext UDP — no shipping network OS exports flows over DTLS, and Go has no production DTLS 1.3 implementation yet.
 
 ## Endpoints
 

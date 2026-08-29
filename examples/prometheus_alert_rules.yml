@@ -1,0 +1,78 @@
+---
+# Alerting rules for xflow-exporter.
+groups:
+  - name: xflow-exporter
+    rules:
+      - alert: XflowExporterSilent
+        expr: time() - xflow_last_flow_timestamp_seconds > 900
+        keep_firing_for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "xflow-exporter has heard nothing from {{ $labels.exporter }}"
+          description: >-
+            No datagram from this device has decoded for 15 minutes. Every
+            counter it feeds is frozen, which rate() reports as zero, so this
+            timestamp is the only signal separating a silent device from a
+            quiet network.
+
+      - alert: XflowReceiverDropping
+        expr: increase(xflow_receiver_dropped_packets_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "xflow-exporter is dropping datagrams on {{ $labels.listener }}"
+          description: >-
+            Datagrams were dropped before decoding: queue_full means a burst
+            outran the decoders, truncated means a datagram exceeded
+            --receiver.max-packet-size. Dropped flows are missing from every
+            series, not folded into other.
+
+      - alert: XflowDecodeErrors
+        expr: increase(xflow_decode_errors_total{reason!="missing_template"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "xflow-exporter is rejecting datagrams from {{ $labels.exporter }}"
+          description: >-
+            Datagrams failed to decode for a reason other than a template
+            that has not arrived yet. A rising counter here means malformed
+            or unsupported export configuration on the device.
+
+      - alert: XflowTemplatesMissing
+        expr: increase(xflow_decode_errors_total{reason="missing_template"}[30m]) > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "xflow-exporter still lacks templates from {{ $labels.exporter }}"
+          description: >-
+            Data flowsets keep arriving without their template half an hour
+            after the counter started rising. Devices resend templates every
+            few minutes, so check the device's template refresh settings.
+
+      - alert: XflowSequenceLoss
+        expr: increase(xflow_sequence_missed_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "xflow-exporter is missing export packets from {{ $labels.exporter }}"
+          description: >-
+            The export sequence numbers say packets were lost between the
+            device and this exporter. The flows they carried are missing
+            from every series.
+
+      - alert: XflowAggregationOverflow
+        expr: increase(xflow_aggregation_overflow_records_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "xflow-exporter is folding {{ $labels.aggregation }} records at the entry bound"
+          description: >-
+            The table hit --aggregation.max-entries, so new keys fold into
+            the other series and per-key visibility is lost until eviction
+            frees entries or the bound is raised.
