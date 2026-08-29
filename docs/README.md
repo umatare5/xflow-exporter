@@ -2,11 +2,11 @@
 
 Reference pages for xflow-exporter. The [README](../README.md) covers getting flows received and scraped, and these pages carry the full metric catalogue and the behaviour every module shares.
 
-| Page                              | Focus                                     |
-| :-------------------------------- | :---------------------------------------- |
-| [Protocols](protocols.md)         | Per-protocol behaviour and limits         |
-| [Collectors](collectors.md)       | Every metric family and its labels        |
-| [Configuration](configuration.md) | Flags and defaults, as `--help` prints    |
+| Page                              | Focus                                  |
+| :-------------------------------- | :------------------------------------- |
+| [Protocols](protocols.md)         | Per-protocol behaviour and limits      |
+| [Collectors](collectors.md)       | Every metric family and its labels     |
+| [Configuration](configuration.md) | Flags and defaults, as `--help` prints |
 
 ## Technical Information
 
@@ -41,6 +41,23 @@ The table families are counters accumulated since each entry was created, and an
 - **Sources** — the v5 header interval, the v9/IPFIX options (PSAMP interval and space pair first, then the random-sampler interval, then the plain interval), and the per-sample rate sFlow carries inline.
 - **Audit** — `xflow_sampling_rate` publishes the rate each observation domain declared, so a corrected series can be traced to the rate that scaled it.
 - **Unsampled** — a record carrying no rate multiplies by one, and PAN-OS NetFlow is always unsampled.
+
+### Enrichment
+
+An enrichment source fills a dimension the exporting device did not carry.
+Every source is off by default and enabled per `--enrich.*` flag.
+
+- **Never overwrites** — the device saw the packet and this exporter did not,
+  so an exported reading is the authority and enrichment fills absence alone.
+  That is what keeps an enriched series comparable with an unenriched one.
+- **Feeds the existing families** — a filled dimension keys the module that
+  already publishes it, so naming an application from its port populates
+  `xflow_application_*` rather than a family of its own.
+- **Cardinality** — a filled dimension creates series that were previously
+  absent, which is why each source is a deliberate opt-in.
+- **Observability** — `xflow_enrichment_lookups_total` reports what each
+  source made of the records it saw: `filled`, `unknown` where it knew
+  nothing, `skipped` where the device had already carried the dimension.
 
 ### Bounded state
 

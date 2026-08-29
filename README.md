@@ -80,6 +80,8 @@ Each data collector is enabled per module:
 | `--collector.applications`  | Traffic per AVC / App-ID / applicationId name    |
 | `--collector.distributions` | Flow size and duration native histograms         |
 
+Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from the transport port. See [docs/README.md](docs/README.md#enrichment).
+
 The operational knobs live under `--receiver.*`, `--parser.*` and `--aggregation.*`. On Linux the read loops use `recvmmsg` batching — other platforms read one datagram per call.
 
 ## Endpoints

@@ -32,6 +32,7 @@ func parseFlags() []cli.Flag {
 		&cli.StringFlag{Name: "log.format", Value: DefaultLogFormat},
 		&cli.BoolFlag{Name: "collector.internal.go-runtime"},
 		&cli.BoolFlag{Name: "collector.internal.process"},
+		&cli.BoolFlag{Name: "enrich.services"},
 		&cli.BoolFlag{Name: "dry-run"},
 	}
 }

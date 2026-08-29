@@ -54,6 +54,7 @@ func registerFlags() []cli.Flag {
 	flags = append(flags, registerParserFlags()...)
 	flags = append(flags, registerAggregationFlags()...)
 	flags = append(flags, registerCollectorFlags()...)
+	flags = append(flags, registerEnrichmentFlags()...)
 	flags = append(flags, registerLogFlags()...)
 	flags = append(flags, registerUtilityFlags()...)
 	flags = append(flags, registerInternalCollectorFlags()...)
@@ -211,6 +212,18 @@ func registerCollectorFlags() []cli.Flag {
 			Name:        "collector.distributions",
 			Usage:       "Enable flow size and duration native histograms",
 			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+	}
+}
+
+// registerEnrichmentFlags defines the record enrichment switches.
+func registerEnrichmentFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.BoolFlag{
+			Name:        "enrich.services",
+			Usage:       "Name the application from the transport port where the device named none",
+			Category:    "# Enrichment Options",
 			HideDefault: true,
 		},
 	}

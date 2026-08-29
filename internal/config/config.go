@@ -77,6 +77,7 @@ type Config struct {
 	Parser            Parser            `json:"parser"`
 	Aggregation       Aggregation       `json:"aggregation"`
 	Collectors        Collectors        `json:"collectors"`
+	Enrichment        Enrichment        `json:"enrichment"`
 	Log               Log               `json:"log"`
 	InternalCollector InternalCollector `json:"internal_collector"`
 	DryRun            bool              `json:"dry_run"`
@@ -125,6 +126,13 @@ type Collectors struct {
 	Distributions bool `json:"distributions"`
 }
 
+// Enrichment holds the optional record enrichment switches. Every source is
+// off by default: enrichment fills dimensions that then key their own series,
+// so enabling one is a deliberate choice about cardinality.
+type Enrichment struct {
+	Services bool `json:"services"`
+}
+
 // Log holds logging configuration.
 type Log struct {
 	Level  string `json:"level"`
@@ -162,6 +170,9 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			MaxEntries: cmd.Int("aggregation.max-entries"),
 			TopK:       cmd.Int("aggregation.top-k"),
 			MinBytes:   cmd.Int64("aggregation.min-bytes"),
+		},
+		Enrichment: Enrichment{
+			Services: cmd.Bool("enrich.services"),
 		},
 		Collectors: Collectors{
 			Exporters:     cmd.Bool("collector.exporters"),

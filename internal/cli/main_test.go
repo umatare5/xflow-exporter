@@ -11,7 +11,7 @@ func TestRegisterFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerFlags()
-	if got, want := len(flags), 26; got != want {
+	if got, want := len(flags), 27; got != want {
 		t.Errorf("registerFlags() returned %d flags, want %d", got, want)
 	}
 }
@@ -103,6 +103,19 @@ func TestRegisterCollectorFlags(t *testing.T) {
 		if _, ok := flag.(*cli.BoolFlag); !ok {
 			t.Errorf("flag[%d] is %T, want *cli.BoolFlag", i, flag)
 		}
+	}
+}
+
+// TestRegisterEnrichmentFlags verifies the enrichment switches.
+func TestRegisterEnrichmentFlags(t *testing.T) {
+	t.Parallel()
+
+	flags := registerEnrichmentFlags()
+	if got, want := len(flags), 1; got != want {
+		t.Fatalf("registerEnrichmentFlags() returned %d flags, want %d", got, want)
+	}
+	if _, ok := flags[0].(*cli.BoolFlag); !ok {
+		t.Errorf("flag[0] is %T, want *cli.BoolFlag", flags[0])
 	}
 }
 

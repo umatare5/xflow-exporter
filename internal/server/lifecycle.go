@@ -20,6 +20,7 @@ import (
 	"github.com/umatare5/xflow-exporter/internal/collector"
 	"github.com/umatare5/xflow-exporter/internal/config"
 	"github.com/umatare5/xflow-exporter/internal/decoder"
+	"github.com/umatare5/xflow-exporter/internal/enrich"
 	"github.com/umatare5/xflow-exporter/internal/flow"
 	"github.com/umatare5/xflow-exporter/internal/receiver"
 )
@@ -84,6 +85,14 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		dist = collectorMgr.RegisterDistributions()
 	}
 
+	// Enrichment runs before anything reads a record, so a dimension it
+	// fills reaches the aggregation tables and the histograms alike.
+	chain := buildEnrichmentChain(cfg.Enrichment)
+	if chain.Enabled() {
+		collectorMgr.RegisterEnrichmentCollector(chain)
+		defer chain.Close()
+	}
+
 	// The receiver stops when this context ends, which Run ties to the
 	// shutdown signals.
 	ctx, cancel := context.WithCancel(ctx)
@@ -123,7 +132,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		decodeWG.Add(1)
 		go func() {
 			defer decodeWG.Done()
-			decodeLoop(recv, dec, agg, dist)
+			decodeLoop(recv, dec, chain, agg, dist)
 		}()
 	}
 
@@ -137,6 +146,19 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	<-aggDone
 	<-domainSweepDone
 	return err
+}
+
+// buildEnrichmentChain assembles the enabled enrichment sources in the order
+// they are applied. Order matters where two sources fill one dimension: the
+// first to know wins, and every source leaves a device reading alone.
+func buildEnrichmentChain(cfg config.Enrichment) *enrich.Chain {
+	var enrichers []enrich.Enricher
+
+	if cfg.Services {
+		enrichers = append(enrichers, enrich.NewServices())
+	}
+
+	return enrich.NewChain(enrichers...)
 }
 
 // sweepDomains drops idle observation domains until ctx ends. The interval is
@@ -169,7 +191,7 @@ func sweepDomains(ctx context.Context, dec *decoder.Decoder, ttl time.Duration) 
 // consumers until the queue closes. The records slice is reused across
 // datagrams, so a steady worker allocates nothing per packet.
 func decodeLoop(
-	recv *receiver.Receiver, dec *decoder.Decoder,
+	recv *receiver.Receiver, dec *decoder.Decoder, chain *enrich.Chain,
 	agg *aggregator.Aggregator, dist *collector.Distributions,
 ) {
 	var records []flow.Record
@@ -182,6 +204,8 @@ func decodeLoop(
 				"exporter", pkt.Src.Addr(), "listener", pkt.Listener, "error", err)
 		}
 		recv.Release(pkt)
+
+		chain.Enrich(records)
 
 		if agg != nil {
 			agg.Ingest(records)

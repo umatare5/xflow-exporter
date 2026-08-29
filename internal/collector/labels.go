@@ -19,4 +19,8 @@ const (
 	labelSrcASN      = "src_asn"     // Source AS number
 	labelDstASN      = "dst_asn"     // Destination AS number
 	labelApplication = "application" // Resolved application name or engine:selector
+
+	// Enrichment labels.
+	labelEnricher = "enricher" // Enrichment source a lookup went through
+	labelResult   = "result"   // What an enrichment source made of a record
 )

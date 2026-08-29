@@ -6,13 +6,13 @@ Every module is disabled by default and enabled per `--collector.<module>` flag.
 
 Each table family carries three metrics sharing one label set: `_bytes_total` and `_packets_total` are sampling-corrected counters, `_flows_total` counts flow records as exported. The `other` series of each family folds the tail — see [Counter semantics](README.md#counter-semantics).
 
-| Module          | Family prefix        | Labels                        |
-| :-------------- | :------------------- | :---------------------------- |
-| `exporters`     | `xflow_exporter`     | `exporter,version`            |
-| `hosts`         | `xflow_host_pair`    | `exporter,src,dst`            |
-| `services`      | `xflow_service`      | `exporter,src,dst,proto,port` |
-| `asns`          | `xflow_asn_pair`     | `exporter,src_asn,dst_asn`    |
-| `applications`  | `xflow_application`  | `exporter,application`        |
+| Module         | Family prefix       | Labels                        |
+| :------------- | :------------------ | :---------------------------- |
+| `exporters`    | `xflow_exporter`    | `exporter,version`            |
+| `hosts`        | `xflow_host_pair`   | `exporter,src,dst`            |
+| `services`     | `xflow_service`     | `exporter,src,dst,proto,port` |
+| `asns`         | `xflow_asn_pair`    | `exporter,src_asn,dst_asn`    |
+| `applications` | `xflow_application` | `exporter,application`        |
 
 ### Label semantics
 
@@ -53,26 +53,27 @@ These series describe the exporter itself. They have no module flag.
 | `xflow_aggregation_evictions_total`        | Counter | Idle entries evicted per `aggregation`               |
 | `xflow_aggregation_overflow_records_total` | Counter | Records folded into `other` by the entry bound       |
 | `xflow_domains_refused_total`              | Counter | Observation domains refused at the per-device budget |
+| `xflow_enrichment_lookups_total`           | Counter | Records per `enricher` and `result`                  |
 
 ### Reason values
 
 `xflow_decode_errors_total` carries one of a closed set of reasons:
 
-| Reason                    | Meaning                                              |
-| :------------------------ | :--------------------------------------------------- |
-| `unsupported_version`     | A datagram no decoder claims                         |
-| `malformed`               | A structure that does not fit its bytes              |
-| `unsupported_aggregation` | A NetFlow v8 method outside the fourteen known       |
-| `missing_template`        | A v9/IPFIX template that has not arrived yet         |
-| `invalid_template`        | A template announcement the parser limits refuse     |
-| `reserved_set`            | A flowset in the reserved 2-255 range                |
-| `domain_limit`            | An observation domain past the device's budget       |
+| Reason                    | Meaning                                          |
+| :------------------------ | :----------------------------------------------- |
+| `unsupported_version`     | A datagram no decoder claims                     |
+| `malformed`               | A structure that does not fit its bytes          |
+| `unsupported_aggregation` | A NetFlow v8 method outside the fourteen known   |
+| `missing_template`        | A v9/IPFIX template that has not arrived yet     |
+| `invalid_template`        | A template announcement the parser limits refuse |
+| `reserved_set`            | A flowset in the reserved 2-255 range            |
+| `domain_limit`            | An observation domain past the device's budget   |
 
 `xflow_receiver_dropped_packets_total` carries one of two:
 
-| Reason       | Meaning                                              |
-| :----------- | :--------------------------------------------------- |
-| `queue_full` | A burst the queue could not absorb                   |
-| `truncated`  | A datagram larger than `--receiver.max-packet-size`  |
+| Reason       | Meaning                                             |
+| :----------- | :-------------------------------------------------- |
+| `queue_full` | A burst the queue could not absorb                  |
+| `truncated`  | A datagram larger than `--receiver.max-packet-size` |
 
 **Freshness** — alert on `time() - xflow_last_flow_timestamp_seconds`: a silent device stops moving its timestamp while every counter freezes, and nothing else can tell that from a healthy quiet network.

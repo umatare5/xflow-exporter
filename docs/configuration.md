@@ -33,6 +33,10 @@ GLOBAL OPTIONS:
    --collector.hosts          Enable source-destination address pair metrics
    --collector.services       Enable address pair with protocol and port metrics
 
+   # Enrichment Options
+
+   --enrich.services  Name the application from the transport port where the device named none
+
    * Aggregation Options
 
    --aggregation.entry-ttl duration  How long an idle aggregation entry keeps its series (default: 15m0s)
