@@ -1,6 +1,6 @@
 # Collectors
 
-Every module is disabled by default and enabled per `--collector.<module>` flag, underscores in the name spelled as hyphens: `tcp_flags` takes `--collector.tcp-flags`. With none enabled the exporter still receives, decodes and counts flows in the [health series](../README.md#exporter-health-metrics), and publishes no traffic series.
+Every module is disabled by default and enabled per `--collector.<module>` flag, underscores in the name spelled as hyphens: `tcp_flags` takes `--collector.tcp-flags`. With none enabled the exporter still receives, decodes and counts flows in the [health series](health.md), and publishes no traffic series.
 
 ## Metrics
 
