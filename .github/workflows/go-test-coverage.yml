@@ -1,0 +1,18 @@
+name: Coverage
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "0 2 * * 1" # every Monday at 2:00
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    uses: umatare5/common/.github/workflows/go-test-coverage.yml@ae7dde8aa1448a79660db0d935bbf865d85f58c5 # v0.17.0
+    with:
+      go_version: "1.27.0"
+      coverage_threshold: 80
