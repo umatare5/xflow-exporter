@@ -11,7 +11,7 @@ func TestRegisterFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerFlags()
-	if got, want := len(flags), 8; got != want {
+	if got, want := len(flags), 13; got != want {
 		t.Errorf("registerFlags() returned %d flags, want %d", got, want)
 	}
 }
@@ -39,6 +39,25 @@ func TestRegisterWebFlags(t *testing.T) {
 
 		if gotType != expectedTypes[i] {
 			t.Errorf("flag[%d] type = %s, want %s", i, gotType, expectedTypes[i])
+		}
+	}
+}
+
+// TestRegisterReceiverFlags verifies the UDP flow receiver flags.
+func TestRegisterReceiverFlags(t *testing.T) {
+	t.Parallel()
+
+	flags := registerReceiverFlags()
+	if got, want := len(flags), 5; got != want {
+		t.Fatalf("registerReceiverFlags() returned %d flags, want %d", got, want)
+	}
+
+	if _, ok := flags[0].(*cli.StringSliceFlag); !ok {
+		t.Errorf("flag[0] is %T, want *cli.StringSliceFlag", flags[0])
+	}
+	for i, flag := range flags[1:] {
+		if _, ok := flag.(*cli.IntFlag); !ok {
+			t.Errorf("flag[%d] is %T, want *cli.IntFlag", i+1, flag)
 		}
 	}
 }

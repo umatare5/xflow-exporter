@@ -50,7 +50,17 @@ GLOBAL OPTIONS:
 
    --collector.internal.go-runtime  Enable Go runtime metrics collector
    --collector.internal.process     Enable process metrics collector
+
+   * Receiver Options
+
+   --receiver.address string [ --receiver.address string ]  Address to receive flow datagrams on (repeatable) (default: ":2055")
+   --receiver.batch-size int                                Maximum datagrams read per kernel round trip (default: 64)
+   --receiver.buffer-bytes int                              UDP socket receive buffer size in bytes (0 keeps the OS default) (default: 4194304)
+   --receiver.max-packet-size int                           Largest datagram in bytes kept whole; larger ones are dropped (default: 9216)
+   --receiver.queue-size int                                Datagrams buffered between the read loops and the decoders (default: 8192)
 ```
+
+Every listener accepts every supported protocol, identified per datagram, so one port can carry NetFlow and IPFIX together and an sFlow deployment adds `--receiver.address :6343` rather than a mode switch. On Linux the read loops use `recvmmsg` batching; other platforms read one datagram per call, so performance figures are Linux figures.
 
 ## Endpoints
 
@@ -62,11 +72,23 @@ The exporter serves three endpoints:
 
 ## Metrics
 
-| Metric             | Type  | Description                                       |
-| :----------------- | :---- | :------------------------------------------------ |
-| `xflow_build_info` | Gauge | Exporter version in the `version` label, always 1 |
+### Exporter Health Metrics
 
-The flow receiver, the parsers and the aggregation metrics land in the upcoming milestones, each behind its own `--collector.*` flag and disabled by default.
+These series describe the exporter itself. They have no module and no collector flag.
+
+| Metric                                 | Type    | Description                                          |
+| :------------------------------------- | :------ | :--------------------------------------------------- |
+| `xflow_build_info`                     | Gauge   | Exporter version in the `version` label, always 1    |
+| `xflow_receiver_packets_total`         | Counter | Datagrams received per `listener`, dropped included  |
+| `xflow_receiver_bytes_total`           | Counter | Payload bytes received per `listener`                |
+| `xflow_receiver_read_errors_total`     | Counter | Socket read failures per `listener`                  |
+| `xflow_receiver_dropped_packets_total` | Counter | Drops per `listener` and `reason` before decoding    |
+| `xflow_receiver_queue_length`          | Gauge   | Datagrams waiting between read loops and decoders    |
+| `xflow_receiver_queue_capacity`        | Gauge   | Bound of that queue                                  |
+
+`reason` is `queue_full` for a burst the queue could not absorb and `truncated` for a datagram larger than `--receiver.max-packet-size`. Both series are seeded at 0, so a first drop is a rise on a series that was already there.
+
+The parsers and the aggregation metrics land in the upcoming milestones, each behind its own `--collector.*` flag and disabled by default. Until then received datagrams are counted, then discarded.
 
 ## Contributing
 

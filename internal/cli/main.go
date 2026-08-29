@@ -50,6 +50,7 @@ func NewApp() *cli.Command {
 func registerFlags() []cli.Flag {
 	flags := []cli.Flag{}
 	flags = append(flags, registerWebFlags()...)
+	flags = append(flags, registerReceiverFlags()...)
 	flags = append(flags, registerLogFlags()...)
 	flags = append(flags, registerUtilityFlags()...)
 	flags = append(flags, registerInternalCollectorFlags()...)
@@ -73,6 +74,45 @@ func registerWebFlags() []cli.Flag {
 			Name:  "web.telemetry-path",
 			Usage: "Path for the metrics endpoint",
 			Value: config.DefaultTelemetryPath,
+		},
+	}
+}
+
+// registerReceiverFlags defines flags for the UDP flow receiver.
+func registerReceiverFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringSliceFlag{
+			Name:     "receiver.address",
+			Usage:    "Address to receive flow datagrams on (repeatable)",
+			Value:    []string{config.DefaultReceiverAddress},
+			Category: "* Receiver Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
+		},
+		&cli.IntFlag{
+			Name:     "receiver.batch-size",
+			Usage:    "Maximum datagrams read per kernel round trip",
+			Value:    config.DefaultReceiverBatchSize,
+			Category: "* Receiver Options",
+		},
+		&cli.IntFlag{
+			Name:     "receiver.queue-size",
+			Usage:    "Datagrams buffered between the read loops and the decoders",
+			Value:    config.DefaultReceiverQueueSize,
+			Category: "* Receiver Options",
+		},
+		&cli.IntFlag{
+			Name:     "receiver.buffer-bytes",
+			Usage:    "UDP socket receive buffer size in bytes (0 keeps the OS default)",
+			Value:    config.DefaultReceiverSockBufBytes,
+			Category: "* Receiver Options",
+		},
+		&cli.IntFlag{
+			Name:     "receiver.max-packet-size",
+			Usage:    "Largest datagram in bytes kept whole; larger ones are dropped",
+			Value:    config.DefaultReceiverMaxPacketSize,
+			Category: "* Receiver Options",
 		},
 	}
 }

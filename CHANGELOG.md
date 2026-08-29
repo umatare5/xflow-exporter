@@ -6,4 +6,6 @@ A minor release may rename or remove a metric. Every collector module flag is of
 
 ## [Unreleased]
 
-Initial scaffolding: CLI, configuration, HTTP server (`/metrics`, `/healthz`), and the `xflow_build_info` series. No flow reception yet.
+Initial scaffolding: CLI, configuration, HTTP server (`/metrics`, `/healthz`), and the `xflow_build_info` series.
+
+The UDP flow receiver: `--receiver.*` flags, `recvmmsg` batching on Linux, a bounded queue that drops rather than blocks, and the `xflow_receiver_*` health series. Received datagrams are counted and discarded until the decoders land.

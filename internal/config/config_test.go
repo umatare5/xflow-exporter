@@ -16,6 +16,11 @@ func parseFlags() []cli.Flag {
 		&cli.StringFlag{Name: "web.listen-address", Value: DefaultListenAddress},
 		&cli.IntFlag{Name: "web.listen-port", Value: DefaultListenPort},
 		&cli.StringFlag{Name: "web.telemetry-path", Value: DefaultTelemetryPath},
+		&cli.StringSliceFlag{Name: "receiver.address", Value: []string{DefaultReceiverAddress}},
+		&cli.IntFlag{Name: "receiver.batch-size", Value: DefaultReceiverBatchSize},
+		&cli.IntFlag{Name: "receiver.queue-size", Value: DefaultReceiverQueueSize},
+		&cli.IntFlag{Name: "receiver.buffer-bytes", Value: DefaultReceiverSockBufBytes},
+		&cli.IntFlag{Name: "receiver.max-packet-size", Value: DefaultReceiverMaxPacketSize},
 		&cli.StringFlag{Name: "log.level", Value: DefaultLogLevel},
 		&cli.StringFlag{Name: "log.format", Value: DefaultLogFormat},
 		&cli.BoolFlag{Name: "collector.internal.go-runtime"},
@@ -63,6 +68,21 @@ func TestParse_Defaults(t *testing.T) {
 	if cfg.Web.TelemetryPath != DefaultTelemetryPath {
 		t.Errorf("TelemetryPath = %q, want %q", cfg.Web.TelemetryPath, DefaultTelemetryPath)
 	}
+	if len(cfg.Receiver.Addresses) != 1 || cfg.Receiver.Addresses[0] != DefaultReceiverAddress {
+		t.Errorf("Receiver.Addresses = %v, want [%s]", cfg.Receiver.Addresses, DefaultReceiverAddress)
+	}
+	if cfg.Receiver.BatchSize != DefaultReceiverBatchSize {
+		t.Errorf("Receiver.BatchSize = %d, want %d", cfg.Receiver.BatchSize, DefaultReceiverBatchSize)
+	}
+	if cfg.Receiver.QueueSize != DefaultReceiverQueueSize {
+		t.Errorf("Receiver.QueueSize = %d, want %d", cfg.Receiver.QueueSize, DefaultReceiverQueueSize)
+	}
+	if cfg.Receiver.SockBufBytes != DefaultReceiverSockBufBytes {
+		t.Errorf("Receiver.SockBufBytes = %d, want %d", cfg.Receiver.SockBufBytes, DefaultReceiverSockBufBytes)
+	}
+	if cfg.Receiver.MaxPacketSize != DefaultReceiverMaxPacketSize {
+		t.Errorf("Receiver.MaxPacketSize = %d, want %d", cfg.Receiver.MaxPacketSize, DefaultReceiverMaxPacketSize)
+	}
 	if cfg.Log.Level != DefaultLogLevel {
 		t.Errorf("Log.Level = %q, want %q", cfg.Log.Level, DefaultLogLevel)
 	}
@@ -85,6 +105,9 @@ func TestParse_Overrides(t *testing.T) {
 
 	cfg, err := runParse(t,
 		"--web.listen-address", "127.0.0.1",
+		"--receiver.address", "127.0.0.1:2055",
+		"--receiver.address", "[::1]:6343",
+		"--receiver.batch-size", "8",
 		"--web.listen-port", "19999",
 		"--web.telemetry-path", "/xflow-metrics",
 		"--log.level", "debug",
@@ -105,6 +128,13 @@ func TestParse_Overrides(t *testing.T) {
 	}
 	if cfg.Web.TelemetryPath != "/xflow-metrics" {
 		t.Errorf("TelemetryPath = %q, want /xflow-metrics", cfg.Web.TelemetryPath)
+	}
+	if len(cfg.Receiver.Addresses) != 2 ||
+		cfg.Receiver.Addresses[0] != "127.0.0.1:2055" || cfg.Receiver.Addresses[1] != "[::1]:6343" {
+		t.Errorf("Receiver.Addresses = %v, want the two configured listeners", cfg.Receiver.Addresses)
+	}
+	if cfg.Receiver.BatchSize != 8 {
+		t.Errorf("Receiver.BatchSize = %d, want 8", cfg.Receiver.BatchSize)
 	}
 	if cfg.Log.Level != "debug" {
 		t.Errorf("Log.Level = %q, want debug", cfg.Log.Level)
@@ -142,6 +172,13 @@ func validConfig() *Config {
 			ListenAddress: DefaultListenAddress,
 			ListenPort:    DefaultListenPort,
 			TelemetryPath: DefaultTelemetryPath,
+		},
+		Receiver: Receiver{
+			Addresses:     []string{DefaultReceiverAddress},
+			BatchSize:     DefaultReceiverBatchSize,
+			QueueSize:     DefaultReceiverQueueSize,
+			SockBufBytes:  DefaultReceiverSockBufBytes,
+			MaxPacketSize: DefaultReceiverMaxPacketSize,
 		},
 		Log: Log{
 			Level:  DefaultLogLevel,
@@ -237,6 +274,71 @@ func TestConfig_Validate(t *testing.T) {
 			name:    "telemetry path at the root is allowed",
 			mutate:  func(c *Config) { c.Web.TelemetryPath = "/" },
 			wantErr: "",
+		},
+		{
+			name:    "no receiver address",
+			mutate:  func(c *Config) { c.Receiver.Addresses = nil },
+			wantErr: "at least one receiver address",
+		},
+		{
+			name:    "receiver address without a port",
+			mutate:  func(c *Config) { c.Receiver.Addresses = []string{"127.0.0.1"} },
+			wantErr: "invalid receiver address",
+		},
+		{
+			name:    "receiver address with port zero",
+			mutate:  func(c *Config) { c.Receiver.Addresses = []string{":0"} },
+			wantErr: "port must be 1-65535",
+		},
+		{
+			name:    "receiver address with a hostname",
+			mutate:  func(c *Config) { c.Receiver.Addresses = []string{"localhost:2055"} },
+			wantErr: "host must be an IP address or empty",
+		},
+		{
+			name:    "duplicate receiver address",
+			mutate:  func(c *Config) { c.Receiver.Addresses = []string{":2055", ":2055"} },
+			wantErr: "duplicate receiver address",
+		},
+		{
+			name:    "receiver IPv6 address is accepted",
+			mutate:  func(c *Config) { c.Receiver.Addresses = []string{"[::1]:6343"} },
+			wantErr: "",
+		},
+		{
+			name:    "receiver batch size zero",
+			mutate:  func(c *Config) { c.Receiver.BatchSize = 0 },
+			wantErr: "invalid receiver batch size",
+		},
+		{
+			name:    "receiver batch size above bound",
+			mutate:  func(c *Config) { c.Receiver.BatchSize = 1025 },
+			wantErr: "invalid receiver batch size",
+		},
+		{
+			name:    "receiver queue size zero",
+			mutate:  func(c *Config) { c.Receiver.QueueSize = 0 },
+			wantErr: "invalid receiver queue size",
+		},
+		{
+			name:    "receiver negative buffer bytes",
+			mutate:  func(c *Config) { c.Receiver.SockBufBytes = -1 },
+			wantErr: "invalid receiver buffer bytes",
+		},
+		{
+			name:    "receiver buffer bytes zero keeps the OS default",
+			mutate:  func(c *Config) { c.Receiver.SockBufBytes = 0 },
+			wantErr: "",
+		},
+		{
+			name:    "receiver max packet size below minimum",
+			mutate:  func(c *Config) { c.Receiver.MaxPacketSize = 100 },
+			wantErr: "invalid receiver max packet size",
+		},
+		{
+			name:    "receiver max packet size above maximum",
+			mutate:  func(c *Config) { c.Receiver.MaxPacketSize = 70000 },
+			wantErr: "invalid receiver max packet size",
 		},
 		{
 			name:    "invalid log level",

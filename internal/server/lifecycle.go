@@ -16,6 +16,7 @@ import (
 
 	"github.com/umatare5/xflow-exporter/internal/collector"
 	"github.com/umatare5/xflow-exporter/internal/config"
+	"github.com/umatare5/xflow-exporter/internal/receiver"
 )
 
 // LifecycleManager manages HTTP server startup and graceful shutdown.
@@ -35,8 +36,8 @@ func NewLifecycleManager(registry *prometheus.Registry, cfg *config.Config) *Lif
 	}
 }
 
-// StartAndServe creates collectors, sets up the server, and starts serving.
-// It handles the complete server lifecycle from setup to shutdown.
+// StartAndServe creates the receiver and the collectors, sets up the server,
+// and starts serving. It handles the complete lifecycle from setup to shutdown.
 func StartAndServe(ctx context.Context, cfg *config.Config, version string) error {
 	slog.Info("Starting xflow-exporter",
 		"version", version,
@@ -44,13 +45,44 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		"listen_port", cfg.Web.ListenPort,
 		"telemetry_path", cfg.Web.TelemetryPath)
 
+	// Bind the flow listeners before anything serves, so a taken port fails
+	// startup instead of surfacing as a receiver that never counts a packet.
+	recv := receiver.New(cfg.Receiver)
+	if err := recv.Listen(); err != nil {
+		return err
+	}
+
 	// Create and setup collector manager
 	collectorMgr := collector.NewCollector(cfg)
 	collectorMgr.Setup(version)
+	collectorMgr.RegisterReceiverCollector(recv)
+
+	// The receiver stops when this context ends, which Run ties to the
+	// shutdown signals.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	receiverDone := make(chan struct{})
+	go func() {
+		defer close(receiverDone)
+		recv.Serve(ctx)
+	}()
+
+	// Drain and discard until the decoders land: the receive path and its
+	// metrics stay honest, and no queue backs up behind a missing consumer.
+	go func() {
+		for pkt := range recv.Packets() {
+			recv.Release(pkt)
+		}
+	}()
 
 	// Create and run server lifecycle manager
 	serverMgr := NewLifecycleManager(collectorMgr.Registry(), cfg)
-	return serverMgr.Run(ctx)
+	err := serverMgr.Run(ctx)
+
+	cancel()
+	<-receiverDone
+	return err
 }
 
 // Run starts the HTTP server and handles graceful shutdown.

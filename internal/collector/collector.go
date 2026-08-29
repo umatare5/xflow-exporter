@@ -48,6 +48,12 @@ func (c *Collector) RegisterBuildInfo(version string) {
 	c.registry.MustRegister(buildInfo)
 }
 
+// RegisterReceiverCollector registers the receiver self-monitoring collector.
+func (c *Collector) RegisterReceiverCollector(src ReceiverSource) {
+	c.registry.MustRegister(NewSafeCollector(NewReceiverCollector(src), "Receiver"))
+	slog.Debug("Registered receiver collector")
+}
+
 // RegisterSystemCollectors registers Go and process collectors conditionally.
 func (c *Collector) RegisterSystemCollectors() {
 	if c.cfg.InternalCollector.EnableGoCollector {
