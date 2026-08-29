@@ -5,13 +5,37 @@ tmp_dir = "tmp"
 
 [build]
   cmd = "go build -o ./tmp/xflow-exporter ./cmd/main.go"
-  full_bin = 'tmp/xflow-exporter \
-                  --collector.exporters \
-                  --collector.hosts \
-                  --collector.services \
-                  --collector.asns \
-                  --collector.applications \
-                  --collector.distributions'
+
+  # The file-backed enrichment is passed only where the file is present: an
+  # unreadable database aborts startup, and the databases are fetched rather
+  # than committed. XFLOW_DATA_DIR is the variable
+  # scripts/fetch-enrichment-data.sh writes to.
+  full_bin = '''
+    D="${XFLOW_DATA_DIR:-./tmp}"
+
+    set -- --collector.exporters \
+           --collector.hosts \
+           --collector.services \
+           --collector.destinations \
+           --collector.tcp-flags \
+           --collector.dscp \
+           --collector.asns \
+           --collector.applications \
+           --collector.countries \
+           --collector.threats \
+           --collector.distributions \
+           --enrich.services \
+           --web.enable-lifecycle
+
+    [ -f "$D/asn.mmdb" ]       && set -- "$@" --enrich.asn-database "$D/asn.mmdb"
+    [ -f "$D/country.mmdb" ]   && set -- "$@" --enrich.country-database "$D/country.mmdb"
+    [ -f "$D/threat-ips.txt" ] && set -- "$@" --enrich.threat-file "$D/threat-ips.txt"
+
+    [ -f "$D/asn.mmdb" ] || [ -f "$D/country.mmdb" ] || [ -f "$D/threat-ips.txt" ] ||
+      echo "no enrichment data in $D -- run: XFLOW_DATA_DIR=$D ./scripts/fetch-enrichment-data.sh all"
+
+    exec tmp/xflow-exporter "$@"
+  '''
 
   exclude_dir = ["assets", "tmp", "vendor", "test_data", ".git", ".github", ".vscode", "node_modules", "dist", "build"]
   exclude_regex = ["_test\\.go"]

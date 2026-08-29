@@ -22,6 +22,14 @@ type entry struct {
 	packets  atomic.Uint64
 	flows    atomic.Uint64
 	lastSeen atomic.Int64
+
+	// born orders entries the byte counts cannot separate. Two entries
+	// carrying the same bytes compare equal, and the snapshot arrives in map
+	// order, so a Top-K cut falling inside a tie group admits a different
+	// subset of it on every scrape and the series set churns with nothing
+	// being ingested. Sampling makes such groups the normal case: at one in
+	// N, every single-packet minimum-size flow corrects to the same figure.
+	born uint64
 }
 
 // add accumulates one record into the entry.
@@ -59,6 +67,10 @@ type table[K comparable] struct {
 
 	idleEvictions atomic.Uint64
 	capacityFolds atomic.Uint64
+
+	// nextBorn stamps each entry as it is created, under the write lock the
+	// creation already takes.
+	nextBorn uint64
 }
 
 // newTable creates an empty table with the given entry bound.
@@ -109,7 +121,8 @@ func (t *table[K]) insert(key K, bytes, packets, flows uint64, now int64) bool {
 		return false
 	}
 
-	e := &entry{}
+	t.nextBorn++
+	e := &entry{born: t.nextBorn}
 	e.add(bytes, packets, flows, now)
 	t.entries[key] = e
 	return true
@@ -149,9 +162,11 @@ func (t *table[K]) sweep(cutoff int64) (int, Totals) {
 	return evicted, dropped
 }
 
-// EntrySnapshot is one entry at one instant.
+// EntrySnapshot is one entry at one instant. Born orders entries the totals
+// cannot separate.
 type EntrySnapshot[K comparable] struct {
-	Key K
+	Key  K
+	Born uint64
 	Totals
 }
 
@@ -162,7 +177,7 @@ func (t *table[K]) snapshot() ([]EntrySnapshot[K], Totals) {
 
 	entries := make([]EntrySnapshot[K], 0, len(t.entries))
 	for key, e := range t.entries {
-		entries = append(entries, EntrySnapshot[K]{Key: key, Totals: e.totals()})
+		entries = append(entries, EntrySnapshot[K]{Key: key, Born: e.born, Totals: e.totals()})
 	}
 	return entries, t.overflow.totals()
 }

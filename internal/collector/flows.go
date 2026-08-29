@@ -8,6 +8,7 @@ package collector
 import (
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -24,6 +25,8 @@ type FlowSource interface {
 	Hosts() ([]aggregator.EntrySnapshot[aggregator.HostKey], aggregator.Totals)
 	Services() ([]aggregator.EntrySnapshot[aggregator.ServiceKey], aggregator.Totals)
 	Destinations() ([]aggregator.EntrySnapshot[aggregator.DestinationKey], aggregator.Totals)
+	TCPFlags() ([]aggregator.EntrySnapshot[aggregator.TCPFlagsKey], aggregator.Totals)
+	DSCP() ([]aggregator.EntrySnapshot[aggregator.DSCPKey], aggregator.Totals)
 	ASNs() ([]aggregator.EntrySnapshot[aggregator.ASNKey], aggregator.Totals)
 	Applications() ([]aggregator.EntrySnapshot[aggregator.AppKey], aggregator.Totals)
 	Countries() ([]aggregator.EntrySnapshot[aggregator.CountryKey], aggregator.Totals)
@@ -89,7 +92,13 @@ type FlowCollector struct {
 	hosts        familyDescs
 	services     familyDescs
 	destinations familyDescs
+	tcpFlags     familyDescs
+	dscp         familyDescs
 	asns         familyDescs
+	// asnNames answers what a database calls an AS, nil where no ASN
+	// database is enabled.
+	asnNames     func(uint32) (string, bool)
+	asnInfoDesc  *prometheus.Desc
 	applications familyDescs
 	countries    familyDescs
 	threats      familyDescs
@@ -100,9 +109,14 @@ type FlowCollector struct {
 }
 
 // NewFlowCollector creates a collector over the aggregator.
-func NewFlowCollector(src FlowSource, modules config.Collectors, agg config.Aggregation) *FlowCollector {
+// asnNames answers what a database calls an AS. It is nil where no ASN
+// database is enabled, and the naming series is then absent rather than empty.
+func NewFlowCollector(
+	src FlowSource, modules config.Collectors, agg config.Aggregation, asnNames func(uint32) (string, bool),
+) *FlowCollector {
 	c := &FlowCollector{
 		src:      src,
+		asnNames: asnNames,
 		modules:  modules,
 		topK:     agg.TopK,
 		minBytes: uint64(agg.MinBytes), //nolint:gosec // Validate rejects negatives.
@@ -139,9 +153,22 @@ func NewFlowCollector(src FlowSource, modules config.Collectors, agg config.Aggr
 		c.destinations = newFamilyDescs("xflow_destination", "destination service",
 			[]string{labelExporter, labelDst, labelProto, labelPort})
 	}
+	if modules.TCPFlags {
+		c.tcpFlags = newFamilyDescs("xflow_tcp_flags", "TCP control-bit profile",
+			[]string{labelExporter, labelFlags})
+	}
+	if modules.DSCP {
+		c.dscp = newFamilyDescs("xflow_dscp", "DSCP class",
+			[]string{labelExporter, labelDSCP})
+	}
 	if modules.ASNs {
 		c.asns = newFamilyDescs("xflow_asn_pair", "AS pair",
 			[]string{labelExporter, labelSrcASN, labelDstASN})
+		c.asnInfoDesc = prometheus.NewDesc(
+			"xflow_asn_info",
+			"Always 1, carrying what a database calls each AS the pair table holds",
+			[]string{labelASN, labelOrg}, nil,
+		)
 	}
 	if modules.Applications {
 		c.applications = newFamilyDescs("xflow_application", "application",
@@ -173,8 +200,17 @@ func (c *FlowCollector) Describe(ch chan<- *prometheus.Desc) {
 	if c.modules.Destinations {
 		c.destinations.describe(ch)
 	}
+	if c.modules.TCPFlags {
+		c.tcpFlags.describe(ch)
+	}
+	if c.modules.DSCP {
+		c.dscp.describe(ch)
+	}
 	if c.modules.ASNs {
 		c.asns.describe(ch)
+		if c.asnInfoDesc != nil {
+			ch <- c.asnInfoDesc
+		}
 	}
 	if c.modules.Applications {
 		c.applications.describe(ch)
@@ -211,8 +247,15 @@ func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
 	if c.modules.Destinations {
 		collectFamily(c, ch, &c.destinations, c.src.Destinations, destinationLabels)
 	}
+	if c.modules.TCPFlags {
+		collectFamily(c, ch, &c.tcpFlags, c.src.TCPFlags, tcpFlagsLabels)
+	}
+	if c.modules.DSCP {
+		collectFamily(c, ch, &c.dscp, c.src.DSCP, dscpLabels)
+	}
 	if c.modules.ASNs {
 		collectFamily(c, ch, &c.asns, c.src.ASNs, asnLabels)
+		c.collectASNNames(ch)
 	}
 	if c.modules.Applications {
 		collectFamily(c, ch, &c.applications, c.src.Applications, appLabels)
@@ -252,12 +295,20 @@ func collectFamily[K comparable](
 ) {
 	entries, fold := read()
 
-	// The largest entries by bytes keep their own series.
+	// The largest entries by bytes keep their own series, the older entry
+	// winning a tie. The order has to be total: a comparison that returns
+	// zero leaves the sort free to place either first, and the snapshot
+	// arrives in map order, so the cut would admit a different subset of a
+	// tie group on every scrape and publish churn nothing ingested.
 	slices.SortFunc(entries, func(a, b aggregator.EntrySnapshot[K]) int {
 		switch {
 		case a.Bytes > b.Bytes:
 			return -1
 		case a.Bytes < b.Bytes:
+			return 1
+		case a.Born < b.Born:
+			return -1
+		case a.Born > b.Born:
 			return 1
 		default:
 			return 0
@@ -316,6 +367,47 @@ func destinationLabels(k aggregator.DestinationKey) []string {
 	}
 }
 
+func tcpFlagsLabels(k aggregator.TCPFlagsKey) []string {
+	return []string{k.Exporter.String(), tcpFlagNames(k.Flags)}
+}
+
+func dscpLabels(k aggregator.DSCPKey) []string {
+	return []string{k.Exporter.String(), dscpName(k.DSCP)}
+}
+
+// collectASNNames publishes what a database calls each AS the pair table
+// holds. The name rides its own series rather than the counters': a database
+// respelling a company would otherwise break every counter it touches, and
+// the pair table is Top-K bounded while a database names every AS there is.
+// An AS no lookup resolved carries no name and so no series, which a join
+// shows by finding nothing to join to.
+func (c *FlowCollector) collectASNNames(ch chan<- prometheus.Metric) {
+	if c.asnNames == nil {
+		return
+	}
+
+	entries, _ := c.src.ASNs()
+	named := make(map[uint32]struct{}, len(entries))
+	for _, e := range entries {
+		for _, as := range [2]uint32{e.Key.SrcAS, e.Key.DstAS} {
+			if as == 0 {
+				continue
+			}
+			if _, done := named[as]; done {
+				continue
+			}
+			named[as] = struct{}{}
+
+			org, ok := c.asnNames(as)
+			if !ok {
+				continue
+			}
+			ch <- prometheus.MustNewConstMetric(c.asnInfoDesc, prometheus.GaugeValue, 1,
+				strconv.FormatUint(uint64(as), 10), org)
+		}
+	}
+}
+
 func asnLabels(k aggregator.ASNKey) []string {
 	return []string{
 		k.Exporter.String(),
@@ -349,16 +441,25 @@ func countryLabel(code string) string {
 }
 
 // protocolNames maps the common IANA protocol numbers to their conventional
-// names; anything else renders as its number.
+// names; anything else renders as its number. A conventional name the registry
+// assigns to a different number is not one of them: "ipip" names 4 on Linux
+// and is the registry's keyword for 94, so a filter written from the registry
+// would select traffic that is not what it asked for.
 var protocolNames = map[uint8]string{
 	1:   "icmp",
+	2:   "igmp",
+	4:   "ipv4",
 	6:   "tcp",
 	17:  "udp",
+	41:  "ipv6",
 	47:  "gre",
 	50:  "esp",
 	51:  "ah",
 	58:  "icmpv6",
+	88:  "eigrp",
 	89:  "ospf",
+	103: "pim",
+	112: "vrrp",
 	132: "sctp",
 }
 
@@ -369,4 +470,75 @@ func protocolName(protocol uint8) string {
 		return name
 	}
 	return strconv.Itoa(int(protocol))
+}
+
+// tcpFlagBits names each control bit from the low bit up, which is the order
+// tcpdump prints them in and the reverse of the header's own drawing.
+var tcpFlagBits = [8]struct {
+	mask uint8
+	name string
+}{
+	{0x01, "fin"},
+	{0x02, "syn"},
+	{0x04, "rst"},
+	{0x08, "psh"},
+	{0x10, "ack"},
+	{0x20, "urg"},
+	{0x40, "ece"},
+	{0x80, "cwr"},
+}
+
+// tcpFlagNames renders the bits a flow ORed together.
+//
+// The bits are rendered rather than the byte because the byte is not what an
+// operator reads: 2 and 18 are a scan and a handshake, and nothing about the
+// numbers says so. Only set bits appear, so the label is short and the
+// distinct values are the handful a network actually produces.
+func tcpFlagNames(flags uint8) string {
+	// A segment setting no bit is a NULL scan, which the table admits, and an
+	// empty label value reads as an absent label wherever it is rendered.
+	if flags == 0 {
+		return "none"
+	}
+
+	var b strings.Builder
+	for _, f := range tcpFlagBits {
+		if flags&f.mask == 0 {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(f.name)
+	}
+	return b.String()
+}
+
+// dscpNames holds every code point the IANA registry names.
+//
+// An unnamed point is not thereby a local convention. Only pool 2, the xxxx11
+// points, is reserved for experimental or local use; elsewhere an unnamed
+// point is unassigned standards space, where a name invented here would
+// collide with a later registration. The unnamed traffic a campus actually
+// carries is neither: 2, 4 and 5 are what a stack still marking the byte the
+// way RFC 791 read it produces, and they mean maximize throughput, minimize
+// delay, and both delay and reliability. Nothing on the wire separates that
+// reading from a DiffServ one, so the number stands rather than a guess.
+var dscpNames = map[uint8]string{
+	0: "cs0", 8: "cs1", 16: "cs2", 24: "cs3",
+	32: "cs4", 40: "cs5", 48: "cs6", 56: "cs7",
+	10: "af11", 12: "af12", 14: "af13",
+	18: "af21", 20: "af22", 22: "af23",
+	26: "af31", 28: "af32", 30: "af33",
+	34: "af41", 36: "af42", 38: "af43",
+	1: "le", 44: "voice-admit", 45: "nqb", 46: "ef",
+}
+
+// dscpName renders the code point as the class it names, the number
+// otherwise, which is the shape protocolName already uses.
+func dscpName(dscp uint8) string {
+	if name, ok := dscpNames[dscp]; ok {
+		return name
+	}
+	return strconv.Itoa(int(dscp))
 }

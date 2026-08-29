@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/umatare5/xflow-exporter/internal/config"
+	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
 // maxTemplatesPerDomain bounds one observation domain against a device, or an
@@ -53,9 +54,19 @@ type template struct {
 // domainKey scopes templates as RFC 7011 requires: one exporter address and
 // one Observation Domain ID together. Either alone lets two domains reusing
 // one template ID corrupt each other's records.
+//
+// The protocol joins them because that pair is not enough here. Three
+// decoders share this store, each numbering templates from 256 in a space of
+// its own, and a v9 Source ID, an IPFIX Observation Domain ID and an sFlow
+// sub-agent id are unrelated numbers that collide freely. A device exporting
+// v9 and IPFIX at once sends both from one address, so without this a data
+// set decodes against whichever protocol announced the id last -- silently,
+// since the record walks to a length the fields agree on and reaches the
+// aggregator as a measurement.
 type domainKey struct {
 	exporter netip.Addr
 	odid     uint32
+	proto    flow.Version
 }
 
 // domainState carries one observation domain's templates and the counters
@@ -332,10 +343,13 @@ func (d *domainState) counts(now time.Time, ttl time.Duration) (data, options in
 	return data, options
 }
 
-// DomainSnapshot is one observation domain's state at one instant.
+// DomainSnapshot is one observation domain's state at one instant. Version
+// travels with the pair because three decoders number their domains
+// independently, so an exporter and an Observation Domain ID do not name one.
 type DomainSnapshot struct {
 	Exporter         netip.Addr
 	ODID             uint32
+	Version          flow.Version
 	Templates        int
 	OptionsTemplates int
 	SequenceMissed   uint64
@@ -355,6 +369,7 @@ func (s *templateStore) snapshot() []DomainSnapshot {
 		snapshots = append(snapshots, DomainSnapshot{
 			Exporter:         key.exporter,
 			ODID:             key.odid,
+			Version:          key.proto,
 			Templates:        data,
 			OptionsTemplates: options,
 			SequenceMissed:   d.sequenceMissed.Load(),

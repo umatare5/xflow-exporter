@@ -6,6 +6,7 @@ package decoder
 
 import (
 	"encoding/binary"
+	"math"
 	"net/netip"
 
 	"github.com/umatare5/xflow-exporter/internal/flow"
@@ -60,7 +61,7 @@ func (d *Decoder) decodeSFlowV5(
 		return dst, malformed("sflow datagram of %d bytes ends inside its header", len(payload))
 	}
 
-	domain := d.templates.domain(domainKey{exporter: exporter, odid: subAgentID})
+	domain := d.templates.domain(domainKey{exporter: exporter, odid: subAgentID, proto: flow.VersionSFlowV5})
 	if domain == nil {
 		issue(ReasonDomainLimit)
 		return dst, nil
@@ -227,6 +228,22 @@ func readSFlowRawHeader(record []byte, r *flow.Record) bool {
 	return readEthernetFrame(header, r)
 }
 
+// sampledFieldsFit reports whether the words a sampled record narrows can be
+// held by what they narrow to. XDR gives each of them a 32-bit word because it
+// has no smaller unsigned type, not because the field is that wide, so a value
+// past its own range is a nonconformant export rather than a wide spelling of
+// one. Truncating it would publish a protocol, a port, a class or a
+// control-bit profile no device sent, and the record's byte count is no more
+// trustworthy than the rest of it -- so the whole record is refused, which the
+// caller counts.
+func sampledFieldsFit(protocol, srcPort, dstPort, tcpFlags, tos uint32) bool {
+	return protocol <= math.MaxUint8 &&
+		srcPort <= math.MaxUint16 &&
+		dstPort <= math.MaxUint16 &&
+		tcpFlags <= math.MaxUint8 &&
+		tos <= math.MaxUint8
+}
+
 // readSFlowSampledIPv4 decodes the pre-parsed IPv4 record some devices send
 // instead of a raw header.
 func readSFlowSampledIPv4(record []byte, r *flow.Record) bool {
@@ -243,13 +260,18 @@ func readSFlowSampledIPv4(record []byte, r *flow.Record) bool {
 	if !okSrc || !okDst || !ok {
 		return false
 	}
+	if !sampledFieldsFit(protocol, srcPort, dstPort, tcpFlags, tos) {
+		return false
+	}
 
 	r.Bytes = uint64(length)
-	r.Protocol = uint8(protocol) //nolint:gosec // The wire field is an IP protocol number.
-	r.SrcPort = uint16(srcPort)  //nolint:gosec // The wire field is a port.
-	r.DstPort = uint16(dstPort)  //nolint:gosec // The wire field is a port.
-	r.TCPFlags = uint8(tcpFlags) //nolint:gosec // The wire field is the TCP flag byte.
-	r.TOS = uint8(tos)           //nolint:gosec // The wire field is the TOS byte.
+	r.Protocol = uint8(protocol) //nolint:gosec // sampledFieldsFit bounded this above; gosec does not follow the call.
+	r.SrcPort = uint16(srcPort)  //nolint:gosec // sampledFieldsFit bounded this above; gosec does not follow the call.
+	r.DstPort = uint16(dstPort)  //nolint:gosec // sampledFieldsFit bounded this above; gosec does not follow the call.
+	r.TCPFlags = uint8(tcpFlags) //nolint:gosec // sampledFieldsFit bounded this above; gosec does not follow the call.
+	r.TCPFlagsReported = true
+	r.TOS = uint8(tos) //nolint:gosec // sampledFieldsFit bounded this above; gosec does not follow the call.
+	r.TOSReported = true
 	r.SrcAddr = netip.AddrFrom4([4]byte(src))
 	r.DstAddr = netip.AddrFrom4([4]byte(dstAddr))
 	return true
@@ -270,13 +292,18 @@ func readSFlowSampledIPv6(record []byte, r *flow.Record) bool {
 	if !okSrc || !okDst || !ok {
 		return false
 	}
+	if !sampledFieldsFit(protocol, srcPort, dstPort, tcpFlags, priority) {
+		return false
+	}
 
 	r.Bytes = uint64(length)
-	r.Protocol = uint8(protocol) //nolint:gosec // The wire field is an IP protocol number.
-	r.SrcPort = uint16(srcPort)  //nolint:gosec // The wire field is a port.
-	r.DstPort = uint16(dstPort)  //nolint:gosec // The wire field is a port.
-	r.TCPFlags = uint8(tcpFlags) //nolint:gosec // The wire field is the TCP flag byte.
-	r.TOS = uint8(priority)      //nolint:gosec // The wire field is the traffic class.
+	r.Protocol = uint8(protocol) //nolint:gosec // sampledFieldsFit bounded this above; gosec does not follow the call.
+	r.SrcPort = uint16(srcPort)  //nolint:gosec // sampledFieldsFit bounded this above; gosec does not follow the call.
+	r.DstPort = uint16(dstPort)  //nolint:gosec // sampledFieldsFit bounded this above; gosec does not follow the call.
+	r.TCPFlags = uint8(tcpFlags) //nolint:gosec // sampledFieldsFit bounded this above; gosec does not follow the call.
+	r.TCPFlagsReported = true
+	r.TOS = uint8(priority) //nolint:gosec // sampledFieldsFit bounded this above; gosec does not follow the call.
+	r.TOSReported = true
 	r.SrcAddr = addrFrom16([16]byte(src))
 	r.DstAddr = addrFrom16([16]byte(dstAddr))
 	return true

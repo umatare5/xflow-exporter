@@ -75,6 +75,8 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		Hosts:        cfg.Collectors.Hosts,
 		Services:     cfg.Collectors.Services,
 		Destinations: cfg.Collectors.Destinations,
+		TCPFlags:     cfg.Collectors.TCPFlags,
+		DSCP:         cfg.Collectors.DSCP,
 		ASNs:         cfg.Collectors.ASNs,
 		Applications: cfg.Collectors.Applications,
 		Countries:    cfg.Collectors.Countries,
@@ -88,10 +90,6 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	collectorMgr.RegisterDecoderCollector(dec)
 
 	var agg *aggregator.Aggregator
-	if modules.Any() {
-		agg = aggregator.New(cfg.Aggregation, modules)
-		collectorMgr.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation)
-	}
 
 	var dist *collector.Distributions
 	if cfg.Collectors.Distributions {
@@ -103,13 +101,25 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	// database that cannot be opened fails startup: an exporter that quietly
 	// enriched nothing would be indistinguishable from one whose database
 	// knew nothing.
-	chain, threat, err := buildEnrichmentChain(cfg.Enrichment)
+	chain, threat, asn, err := buildEnrichmentChain(cfg.Enrichment)
 	if err != nil {
 		return err
 	}
 	if chain.Enabled() {
 		collectorMgr.RegisterEnrichmentCollector(chain, threat)
 		defer chain.Close()
+	}
+
+	// Registered after the chain, which is what can name an autonomous
+	// system. Without an ASN database the naming series is absent rather
+	// than empty.
+	var asnNames func(uint32) (string, bool)
+	if asn != nil {
+		asnNames = asn.Organization
+	}
+	if modules.Any() {
+		agg = aggregator.New(cfg.Aggregation, modules)
+		collectorMgr.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation, asnNames)
 	}
 
 	// The receiver stops when this context ends, which Run ties to the
@@ -190,37 +200,39 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 // buildEnrichmentChain assembles the enabled enrichment sources in the order
 // they are applied. Order matters where two sources fill one dimension: the
 // first to know wins, and every source leaves a device reading alone.
-func buildEnrichmentChain(cfg config.Enrichment) (*enrich.Chain, *enrich.Threat, error) {
+func buildEnrichmentChain(cfg config.Enrichment) (*enrich.Chain, *enrich.Threat, *enrich.ASN, error) {
 	var enrichers []enrich.Enricher
 	var threat *enrich.Threat
+	var asn *enrich.ASN
 
 	if cfg.Services {
 		enrichers = append(enrichers, enrich.NewServices())
 	}
 	if cfg.ASNDatabase != "" {
-		asn, err := enrich.NewASN(cfg.ASNDatabase)
+		opened, err := enrich.NewASN(cfg.ASNDatabase)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
+		asn = opened
 		enrichers = append(enrichers, asn)
 	}
 	if cfg.CountryDatabase != "" {
 		country, err := enrich.NewCountry(cfg.CountryDatabase)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		enrichers = append(enrichers, country)
 	}
 	if len(cfg.ThreatFiles) > 0 {
 		loaded, err := enrich.NewThreat(cfg.ThreatFiles)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		threat = loaded
 		enrichers = append(enrichers, threat)
 	}
 
-	return enrich.NewChain(enrichers...), threat, nil
+	return enrich.NewChain(enrichers...), threat, asn, nil
 }
 
 // sweepDomains drops idle observation domains until ctx ends. The interval is
@@ -245,6 +257,11 @@ func sweepDomains(ctx context.Context, dec *decoder.Decoder, ttl time.Duration) 
 			if evicted := dec.SweepDomains(); evicted > 0 {
 				slog.Debug("Swept idle observation domains", "evicted", evicted)
 			}
+			// Only once the exporter budget is reached, so a device that has
+			// simply gone quiet keeps the freshness series that says so.
+			if evicted := dec.SweepExporters(); evicted > 0 {
+				slog.Debug("Swept idle exporters", "evicted", evicted)
+			}
 		}
 	}
 }
@@ -259,12 +276,19 @@ func (lm *LifecycleManager) watchHangup(ctx context.Context) func() {
 	hangup := make(chan os.Signal, 1)
 	signal.Notify(hangup, syscall.SIGHUP)
 
+	// stop releases the watcher without waiting on ctx. The caller defers
+	// this alongside the cancel that ends ctx, and defers run last in first:
+	// waiting on ctx here would wait for a cancel still queued behind it, so
+	// a server that fails to listen would hang rather than report why.
 	done := make(chan struct{})
+	stop := make(chan struct{})
 	go func() {
 		defer close(done)
 		for {
 			select {
 			case <-ctx.Done():
+				return
+			case <-stop:
 				return
 			case <-hangup:
 				if err := lm.reloader.Reload(); err != nil {
@@ -278,6 +302,7 @@ func (lm *LifecycleManager) watchHangup(ctx context.Context) func() {
 
 	return func() {
 		signal.Stop(hangup)
+		close(stop)
 		<-done
 	}
 }

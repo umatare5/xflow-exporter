@@ -24,6 +24,13 @@ const (
 	fieldDataLinkFrameSection  = 315
 )
 
+// The code point IE 195 carries occupies the TOS byte less its two ECN bits,
+// and spans six bits: a wider value is not a code point.
+const (
+	ecnBits = 2
+	maxDSCP = 0x3F
+)
+
 // Vendor information elements mapped beyond the IANA set.
 const (
 	// Cisco AVC exports the application identifier as IANA IE 95; the name
@@ -206,10 +213,28 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 	case fieldSrcTOS:
 		if v, ok := beUint8(value); ok {
 			r.TOS = v
+			r.TOSReported = true
+		}
+	case fieldDSCP:
+		// The element holds the code point right-aligned where the record
+		// holds the whole TOS byte. IE 5 outranks it in a template carrying
+		// both, that element being the byte itself including the ECN bits.
+		if v, ok := beUint8(value); ok && v <= maxDSCP && !r.TOSReported {
+			r.TOS = v << ecnBits
+			r.TOSReported = true
 		}
 	case fieldTCPFlags:
-		if v, ok := beUint8(value); ok {
-			r.TCPFlags = v
+		// The element is unsigned16 and the octet form is reduced-size
+		// encoding of it, so an exporter that declines to reduce is
+		// conformant. RFC 9565 puts the control bits in the low octet; above
+		// them sit the data offset, which it says to ignore, and four bits a
+		// collector reading the reduced form is told to assume nothing about.
+		// Masking is what that reduced form does, so it is the reading both
+		// encodings agree on -- and refusing the value would drop the eight
+		// bits reported alongside.
+		if v, ok := beUint16(value); ok {
+			r.TCPFlags = uint8(v & math.MaxUint8)
+			r.TCPFlagsReported = true
 		}
 	case fieldL4SrcPort:
 		if v, ok := beUint16(value); ok {

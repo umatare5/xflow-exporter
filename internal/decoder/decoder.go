@@ -118,6 +118,18 @@ func (d *Decoder) SweepDomains() int {
 	return d.templates.sweep()
 }
 
+// SweepExporters drops the devices silent past the template TTL, but only
+// once the exporter budget is reached.
+func (d *Decoder) SweepExporters() int {
+	return d.stats.sweepIdle(d.now().Add(-d.templates.ttl).UnixNano())
+}
+
+// ExportersRefused reports how many datagrams the exporter budget left
+// unattributed, each one a device holding no counters of its own.
+func (d *Decoder) ExportersRefused() uint64 {
+	return d.stats.refusedCount()
+}
+
 // DomainsRefused reports how many domains the per-exporter budget turned away.
 func (d *Decoder) DomainsRefused() uint64 {
 	return d.templates.refused()
@@ -153,18 +165,18 @@ func (d *Decoder) Stats() *Stats {
 func (d *Decoder) Decode(exporter netip.Addr, payload []byte, dst []flow.Record) ([]flow.Record, error) {
 	version, err := sniffVersion(payload)
 	if err != nil {
-		d.stats.exporter(exporter).countError(flow.VersionUnknown, err.Reason())
+		d.stats.countError(exporter, flow.VersionUnknown, err.Reason(), d.now())
 		return dst, err
 	}
 
 	before := len(dst)
 	dst, err = d.decodeVersion(version, exporter, payload, dst)
 	if err != nil {
-		d.stats.exporter(exporter).countError(version, err.Reason())
+		d.stats.countError(exporter, version, err.Reason(), d.now())
 		return dst[:before], err
 	}
 
-	d.stats.exporter(exporter).countFlows(version, len(dst)-before, d.now())
+	d.stats.countFlows(exporter, version, len(dst)-before, d.now())
 	return dst, nil
 }
 
@@ -179,17 +191,17 @@ func (d *Decoder) decodeVersion(
 		return decodeNetFlowV8(exporter, payload, dst)
 	case flow.VersionNetFlowV9:
 		issue := func(reason string) {
-			d.stats.exporter(exporter).countError(flow.VersionNetFlowV9, reason)
+			d.stats.countError(exporter, flow.VersionNetFlowV9, reason, d.now())
 		}
 		return d.decodeNetFlowV9(exporter, payload, dst, issue)
 	case flow.VersionIPFIX:
 		issue := func(reason string) {
-			d.stats.exporter(exporter).countError(flow.VersionIPFIX, reason)
+			d.stats.countError(exporter, flow.VersionIPFIX, reason, d.now())
 		}
 		return d.decodeIPFIX(exporter, payload, dst, issue)
 	case flow.VersionSFlowV5:
 		issue := func(reason string) {
-			d.stats.exporter(exporter).countError(flow.VersionSFlowV5, reason)
+			d.stats.countError(exporter, flow.VersionSFlowV5, reason, d.now())
 		}
 		return d.decodeSFlowV5(exporter, payload, dst, issue)
 	case flow.VersionUnknown:

@@ -22,9 +22,13 @@ const (
 	ethernetHdrLen = 14
 	vlanTagLen     = 4
 	ipv4MinHdrLen  = 20
-	ipv6HdrLen     = 40
-	transportPorts = 4
-	tcpFlagsOffset = 13
+	// ipv4FragmentOffsetMask selects the offset out of the flags-and-offset
+	// word, the three flag bits above it saying nothing about where a fragment
+	// sits.
+	ipv4FragmentOffsetMask = 0x1FFF
+	ipv6HdrLen             = 40
+	transportPorts         = 4
+	tcpFlagsOffset         = 13
 )
 
 // readIPPacket walks a sampled section that starts at the IP header, the
@@ -84,9 +88,18 @@ func readIPv4Header(packet []byte, r *flow.Record) {
 	}
 
 	r.TOS = packet[1]
+	r.TOSReported = true
 	r.Protocol = packet[9]
 	r.SrcAddr = netip.AddrFrom4([4]byte(packet[12:16]))
 	r.DstAddr = netip.AddrFrom4([4]byte(packet[16:20]))
+
+	// Only the first fragment carries the transport header. Past it the bytes
+	// here are application payload, and a walk would report ports and control
+	// bits the wire never described -- a flags profile of none among them,
+	// which is what a scan reads as.
+	if binary.BigEndian.Uint16(packet[6:8])&ipv4FragmentOffsetMask != 0 {
+		return
+	}
 
 	readTransport(packet[headerLen:], r)
 }
@@ -99,6 +112,7 @@ func readIPv6Header(packet []byte, r *flow.Record) {
 	}
 
 	r.TOS = packet[0]<<4 | packet[1]>>4
+	r.TOSReported = true
 	r.Protocol = packet[6]
 	r.SrcAddr = addrFrom16([16]byte(packet[8:24]))
 	r.DstAddr = addrFrom16([16]byte(packet[24:40]))
@@ -118,6 +132,7 @@ func readTransport(segment []byte, r *flow.Record) {
 		r.DstPort = binary.BigEndian.Uint16(segment[2:4])
 		if len(segment) > tcpFlagsOffset {
 			r.TCPFlags = segment[tcpFlagsOffset]
+			r.TCPFlagsReported = true
 		}
 	case protocolUDP:
 		if len(segment) < transportPorts {

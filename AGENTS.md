@@ -66,8 +66,20 @@ fabricated zero from a measured one.
 
 NetFlow v9 and IPFIX templates are valid only within the transport session and
 observation domain that announced them. Every template lookup is keyed by the
-exporter source address and the Observation Domain ID (Source ID) together —
-keying by either alone corrupts records when two domains reuse one template ID.
+exporter source address, the protocol and the Observation Domain ID (Source ID)
+together — keying by any subset corrupts records when two domains reuse one
+template ID.
+
+The protocol belongs in that key because RFC 7011's pair does not identify a
+domain here. Three decoders share one store, each numbering templates from 256
+in a space of its own, so a v9 Source ID, an IPFIX Observation Domain ID and an
+sFlow sub-agent id collide freely — and a device exporting two protocols at
+once sends both from one address.
+
+Anything that counts or publishes a domain carries the protocol too. Dropping
+it on the way out gives two domains one label set, and a registry refuses to
+gather a duplicate: every series in the process is lost, not just the
+domain's.
 
 ### Sampling
 

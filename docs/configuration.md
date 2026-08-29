@@ -12,7 +12,7 @@ USAGE:
    xflow-exporter [global options]
 
 VERSION:
-   0.4.0
+   0.5.0
 
 GLOBAL OPTIONS:
    --dry-run                    Validate configuration without starting the server
@@ -32,9 +32,11 @@ GLOBAL OPTIONS:
    --collector.countries      Enable country pair metrics, which need --enrich.country-database
    --collector.destinations   Enable destination address with protocol and port metrics
    --collector.distributions  Enable flow size and duration native histograms
+   --collector.dscp           Enable DSCP class metrics, for devices that export the TOS byte
    --collector.exporters      Enable per-device traffic metrics
    --collector.hosts          Enable source-destination address pair metrics
    --collector.services       Enable address pair with protocol and port metrics
+   --collector.tcp-flags      Enable TCP control-bit profile metrics
    --collector.threats        Enable flagged address metrics, which need --enrich.threat-file
 
    # Enrichment Options

@@ -166,35 +166,51 @@ func TestCountry_FillsBothSides(t *testing.T) {
 	}
 }
 
-// TestCountry_OneSidePlacedIsStillAFill covers a flow leaving a private
-// network: the internal side belongs to no country and stays absent.
-func TestCountry_OneSidePlacedIsStillAFill(t *testing.T) {
+// TestCountry_PrivateIsAnAnswerNotAGap covers a flow leaving a private
+// network. The internal side belongs to no country, which is a fact about the
+// address rather than a database that fell short, and the two must not read
+// alike: the lookup is never reached for it.
+func TestCountry_PrivateIsAnAnswerNotAGap(t *testing.T) {
 	t.Parallel()
 
-	c := newCountryWithLookup(countryTable(map[netip.Addr]string{publicDst: "US"}))
+	asked := 0
+	lookup := func(addr netip.Addr) (string, bool) {
+		asked++
+		return countryTable(map[netip.Addr]string{publicDst: "US"})(addr)
+	}
+	c := newCountryWithLookup(lookup)
 
 	r := flow.Record{SrcAddr: privateSrc, DstAddr: publicDst}
 	c.Enrich(&r)
 
-	if r.SrcCountry != "" {
-		t.Errorf("SrcCountry = %q, want a private address placed nowhere", r.SrcCountry)
+	if r.SrcCountry != CountryPrivate {
+		t.Errorf("SrcCountry = %q, want %q", r.SrcCountry, CountryPrivate)
 	}
 	if r.DstCountry != "US" {
 		t.Errorf("DstCountry = %q, want US", r.DstCountry)
+	}
+	if asked != 1 {
+		t.Errorf("the database was asked %d times, want 1: a private address has no lookup", asked)
 	}
 	if got := c.Snapshot(); got.Filled != 1 {
 		t.Errorf("Snapshot() = %+v, want one filled", got)
 	}
 }
 
-func TestCountry_NeitherSidePlacedIsUnknown(t *testing.T) {
+// TestCountry_UnplaceableGlobalIsUnknown pins the other half. A routable
+// address the database carries no entry for stays absent, so a gap in a
+// database never reads as somebody's LAN.
+func TestCountry_UnplaceableGlobalIsUnknown(t *testing.T) {
 	t.Parallel()
 
 	c := newCountryWithLookup(countryTable(nil))
 
-	r := flow.Record{SrcAddr: privateSrc, DstAddr: privateSrc}
+	r := flow.Record{SrcAddr: publicDst, DstAddr: publicDst}
 	c.Enrich(&r)
 
+	if r.SrcCountry != "" || r.DstCountry != "" {
+		t.Errorf("countries = %q/%q, want both absent", r.SrcCountry, r.DstCountry)
+	}
 	if got := c.Snapshot(); got.Unknown != 1 || got.Filled != 0 {
 		t.Errorf("Snapshot() = %+v, want one unknown", got)
 	}
@@ -378,4 +394,94 @@ func TestMMDB_LookupAfterCloseIsAMiss(t *testing.T) {
 	if r.SrcAS != 0 || r.DstAS != 0 {
 		t.Errorf("record = %d -> %d, want both absent", r.SrcAS, r.DstAS)
 	}
+}
+
+// TestASN_NoteHoldsWhatTheDatabaseNames pins the two rules the names map
+// keeps: an empty name is not a name, and the map is bounded because a
+// database names every autonomous system there is while a sender chooses
+// which of them this process is asked about.
+func TestASN_NoteHoldsWhatTheDatabaseNames(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an empty name neither records nor clears", func(t *testing.T) {
+		t.Parallel()
+
+		a := &ASN{}
+		a.note(64500, "Example Networks")
+		a.note(64500, "")
+		a.note(64501, "")
+
+		if org, ok := a.Organization(64500); !ok || org != "Example Networks" {
+			t.Errorf("Organization(64500) = %q, %v; want the name held", org, ok)
+		}
+		if _, ok := a.Organization(64501); ok {
+			t.Error("Organization(64501) reported a name, want none from an empty string")
+		}
+	})
+
+	t.Run("a refreshed database respells", func(t *testing.T) {
+		t.Parallel()
+
+		a := &ASN{}
+		a.note(64500, "Example Networks")
+		a.note(64500, "Example Networks Ltd")
+
+		if org, _ := a.Organization(64500); org != "Example Networks Ltd" {
+			t.Errorf("Organization(64500) = %q, want the respelling", org)
+		}
+	})
+
+	t.Run("the names held are bounded", func(t *testing.T) {
+		t.Parallel()
+
+		a := &ASN{}
+		for i := range maxASNNames + 100 {
+			a.note(uint32(i)+1, "org")
+		}
+
+		a.namesMu.RLock()
+		held := len(a.names)
+		a.namesMu.RUnlock()
+		if held != maxASNNames {
+			t.Errorf("held %d names, want the bound of %d", held, maxASNNames)
+		}
+
+		// A name already held is still refreshed past the bound.
+		a.note(1, "respelled")
+		if org, _ := a.Organization(1); org != "respelled" {
+			t.Errorf("Organization(1) = %q, want the respelling of a name already held", org)
+		}
+	})
+}
+
+// TestASN_LookupNamesWhatItResolves covers the seam a fixture cannot reach.
+// newASNWithLookup exists because MaxMind's schema is a contract no locally
+// built database could validate, which leaves the line that records a name
+// off every other test's path -- so this one names the file it needs and
+// skips where the operator has not pointed it at one.
+func TestASN_LookupNamesWhatItResolves(t *testing.T) {
+	t.Parallel()
+
+	path := os.Getenv("XFLOW_TEST_ASN_DATABASE")
+	if path == "" {
+		t.Skip("set XFLOW_TEST_ASN_DATABASE to a MaxMind-format ASN database")
+	}
+
+	a, err := NewASN(path)
+	if err != nil {
+		t.Fatalf("NewASN() error = %v", err)
+	}
+	defer a.Close()
+
+	addr := netip.MustParseAddr("1.1.1.1")
+	as, ok := a.lookup(addr)
+	if !ok {
+		t.Fatalf("lookup(%v) resolved nothing, want an AS", addr)
+	}
+
+	org, named := a.Organization(as)
+	if !named || org == "" {
+		t.Errorf("Organization(%d) = %q, %v; want the name the lookup recorded", as, org, named)
+	}
+	t.Logf("%v resolved to AS%d %q", addr, as, org)
 }

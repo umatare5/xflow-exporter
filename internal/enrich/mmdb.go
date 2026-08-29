@@ -6,6 +6,7 @@ package enrich
 import (
 	"fmt"
 	"net/netip"
+	"sync"
 	"sync/atomic"
 
 	"github.com/oschwald/maxminddb-golang/v2"
@@ -68,9 +69,22 @@ func (s *mmdbSource) close() error {
 
 // asnRecord is the shape the ASN databases publish. The field names are what
 // both MaxMind GeoLite2-ASN and the DB-IP equivalent record.
+//
+// The organization is a display string rather than an identifier: one release
+// spells a company one way and the next respells it. It never keys a counter
+// for that reason, and travels on its own series where a respelling churns
+// the name and leaves the traffic continuous.
 type asnRecord struct {
-	Number uint32 `maxminddb:"autonomous_system_number"`
+	Number       uint32 `maxminddb:"autonomous_system_number"`
+	Organization string `maxminddb:"autonomous_system_organization"`
 }
+
+// maxASNNames bounds the names held. A database names every autonomous system
+// on the internet, and a sender choosing its own source addresses decides
+// which of them this process is asked about; the names a link actually needs
+// are the handful its own traffic resolves. Past the bound an AS goes unnamed,
+// which the joined series shows by having no name to join to.
+const maxASNNames = 65536
 
 // countryRecord is the shape the country and city databases publish. The ISO
 // code is what this exporter labels with: a country name is a display string
@@ -93,6 +107,47 @@ type ASN struct {
 	counters
 	mmdb   mmdbSource
 	lookup func(netip.Addr) (uint32, bool)
+
+	// namesMu guards the names the decode workers fill and a scrape reads.
+	namesMu sync.RWMutex
+	names   map[uint32]string
+}
+
+// note records what the database calls one autonomous system. An empty name
+// is not one, and does not clear the name held: a refreshed file that carries
+// none for an AS it places is the partial refresh a failed reload already
+// answers by leaving the previous database serving.
+func (a *ASN) note(as uint32, org string) {
+	if org == "" {
+		return
+	}
+
+	a.namesMu.RLock()
+	unchanged := a.names[as] == org
+	a.namesMu.RUnlock()
+	if unchanged {
+		return
+	}
+
+	a.namesMu.Lock()
+	defer a.namesMu.Unlock()
+	if a.names == nil {
+		a.names = make(map[uint32]string)
+	}
+	if _, held := a.names[as]; !held && len(a.names) >= maxASNNames {
+		return
+	}
+	a.names[as] = org
+}
+
+// Organization reports what the database calls one autonomous system, and
+// false where no lookup has resolved it.
+func (a *ASN) Organization(as uint32) (string, bool) {
+	a.namesMu.RLock()
+	defer a.namesMu.RUnlock()
+
+	org, ok := a.names[as]
+	return org, ok
 }
 
 // NewASN opens the ASN database at path.
@@ -181,6 +236,7 @@ func (a *ASN) lookupDB(addr netip.Addr) (uint32, bool) {
 	if record.Number == 0 {
 		return 0, false
 	}
+	a.note(record.Number, record.Organization)
 	return record.Number, true
 }
 
@@ -229,18 +285,28 @@ func (c *Country) Close() error {
 	return c.mmdb.close()
 }
 
+// CountryPrivate is what a private address resolves to. It is not an ISO
+// code and cannot collide with one, which are two upper-case letters.
+//
+// It exists because "the database could not place this" and "this address
+// belongs to no country" are different answers that read the same. A LAN is
+// the second, and it is a fact about the address rather than a gap in a
+// database: no lookup can improve on it, and folding it in with the first
+// leaves an operator unable to tell their own network from a database miss.
+const CountryPrivate = "private"
+
 // Enrich fills both sides' country codes. No flow protocol exports a country,
 // so nothing here is ever skipped for a device reading.
 func (c *Country) Enrich(r *flow.Record) {
 	filled := false
 	if r.SrcAddr.IsValid() {
-		if code, ok := c.lookup(r.SrcAddr); ok {
+		if code, ok := countryOf(r.SrcAddr, c.lookup); ok {
 			r.SrcCountry = code
 			filled = true
 		}
 	}
 	if r.DstAddr.IsValid() {
-		if code, ok := c.lookup(r.DstAddr); ok {
+		if code, ok := countryOf(r.DstAddr, c.lookup); ok {
 			r.DstCountry = code
 			filled = true
 		}
@@ -253,9 +319,23 @@ func (c *Country) Enrich(r *flow.Record) {
 	c.unknown.Add(1)
 }
 
+// countryOf answers for an address the database cannot be asked about, and
+// defers to it otherwise.
+//
+// Private means what netip means by it -- RFC 1918 and the IPv6 unique local
+// range -- and nothing wider. Shared address space, loopback and link-local
+// have no country either, but they are not private, and naming them so would
+// be the guess this exists to avoid.
+func countryOf(addr netip.Addr, lookup func(netip.Addr) (string, bool)) (string, bool) {
+	if addr.IsPrivate() {
+		return CountryPrivate, true
+	}
+	return lookup(addr)
+}
+
 // lookupDB resolves one address to its ISO code, reporting false where the
-// database carries none. A private or reserved address resolves to nothing,
-// which is correct: it belongs to no country.
+// database carries none. A reserved address resolves to nothing, which is
+// correct: it belongs to no country.
 func (c *Country) lookupDB(addr netip.Addr) (string, bool) {
 	db := c.mmdb.reader()
 	if db == nil {

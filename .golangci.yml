@@ -23,6 +23,7 @@ linters:
   enable:
     # Core correctness & security
     - govet
+    - exhaustive
     - staticcheck
     - errcheck
     - ineffassign
@@ -203,7 +204,6 @@ linters:
           - errcheck     # Allow ignoring errors in tests
           - goconst      # Allow constant duplication in tests
           - gosec        # Allow test helpers to use weak crypto, etc.
-          - govet        # Keep vetting in tests
           - ineffassign  # Allow ineffectual assignments in tests
           - mnd          # Allow magic numbers in tests
           - perfsprint   # Allow fmt.Errorf in tests

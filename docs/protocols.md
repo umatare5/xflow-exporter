@@ -92,8 +92,6 @@ A 24-byte header followed by 1 to 30 fixed records. Trailing bytes past the clai
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
-| Bytes | Record field### Record layout
-
 | Bytes | Record field            | Notes                                 |
 | :---- | :---------------------- | :------------------------------------ |
 | 0–7   | `srcaddr` / `dstaddr`   | Four bytes each                       |
@@ -223,7 +221,7 @@ Method 8, full flow, is the shape the Catalyst family shares: addresses first, n
 
 ## NetFlow v9 and IPFIX
 
-Templates are cached per exporter address and Observation Domain ID together, as RFC 7011 requires. Two domains reusing one template ID therefore never corrupt each other.
+Templates are cached per exporter address and Observation Domain ID together, as RFC 7011 requires, and per protocol besides. The pair RFC 7011 names is not enough here: a v9 Source ID, an IPFIX Observation Domain ID and an sFlow sub-agent id are unrelated numbers over one range, and 0 is the default all three take, so a device exporting two protocols at once from one address has them collide out of the box. The 256 floor RFC 7011 sets is on template ids, not on these. With the protocol in the key, two domains reusing one template ID never corrupt each other.
 
 - A template declaring a zero-width fixed field, or more than `--parser.max-fields-per-template` fields, is refused as `invalid_template`.
 - A template unrefreshed for `--parser.template-ttl` expires, and `missing_template` is expected after a restart until each device re-announces.
@@ -276,7 +274,7 @@ The header itself is fixed.
 | 4–7   | System Uptime   | Milliseconds since the device booted            |
 | 8–11  | UNIX Seconds    | Export instant, seconds since the epoch         |
 | 12–15 | Sequence Number | Export packets sent, not flows                  |
-| 16–19 | Source ID       | The Observation Domain ID half of the cache key |
+| 16–19 | Source ID       | The Observation Domain ID part of the cache key |
 
 > [!Note]
 > The v9 sequence number counts export packets, a change from the "total flows" the v5 and v8 headers carried. IPFIX changes it again, to data records.
@@ -421,7 +419,7 @@ A 16-byte message header, then Sets that frame exactly as v9 FlowSets do.
 | 2–3   | Length                | The whole message, this header included |
 | 4–7   | Export Time           | Export instant, seconds since the epoch |
 | 8–11  | Sequence Number       | Data records sent, not messages         |
-| 12–15 | Observation Domain ID | The other half of the cache key         |
+| 12–15 | Observation Domain ID | The domain part of the cache key        |
 
 ### IPFIX against NetFlow v9
 

@@ -11,18 +11,22 @@ const (
 	labelType     = "type"     // Kind a gauge is keyed by
 
 	// Aggregation table labels.
-	labelAggregation = "aggregation" // Aggregation table name
-	labelSrc         = "src"         // Source address
-	labelDst         = "dst"         // Destination address
-	labelProto       = "proto"       // IP protocol name or number
-	labelPort        = "port"        // Destination port, the service side
-	labelSrcASN      = "src_asn"     // Source AS number
-	labelDstASN      = "dst_asn"     // Destination AS number
-	labelApplication = "application" // Resolved application name or engine:selector
-	labelAddress     = "address"     // A single address a series is keyed by
-	labelDirection   = "direction"   // Side of the flow an address was seen on
-	labelSrcCountry  = "src_country" // ISO country code of the source address
-	labelDstCountry  = "dst_country" // ISO country code of the destination address
+	labelAggregation = "aggregation"  // Aggregation table name
+	labelSrc         = "src"          // Source address
+	labelDst         = "dst"          // Destination address
+	labelProto       = "proto"        // IP protocol name or number
+	labelPort        = "port"         // Destination port, the service side
+	labelFlags       = "flags"        // TCP control bits a flow ORed together
+	labelDSCP        = "dscp"         // Differentiated-services code point name or number
+	labelSrcASN      = "src_asn"      // Source AS number
+	labelDstASN      = "dst_asn"      // Destination AS number
+	labelASN         = "asn"          // One AS number, on the series naming it
+	labelOrg         = "organization" // What a database calls that AS
+	labelApplication = "application"  // Resolved application name or engine:selector
+	labelAddress     = "address"      // A single address a series is keyed by
+	labelDirection   = "direction"    // Side of the flow an address was seen on
+	labelSrcCountry  = "src_country"  // ISO country code of the source address
+	labelDstCountry  = "dst_country"  // ISO country code of the destination address
 
 	// Enrichment labels.
 	labelEnricher = "enricher" // Enrichment source a lookup went through

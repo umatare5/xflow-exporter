@@ -1,11 +1,15 @@
 package collector
 
 import (
+	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 
 	"github.com/umatare5/xflow-exporter/internal/aggregator"
 	"github.com/umatare5/xflow-exporter/internal/config"
@@ -45,7 +49,7 @@ func TestFlowCollector_PublishesExportersAndHosts(t *testing.T) {
 		flowRecord("10.0.0.1", "10.0.0.2", 500),
 	})
 
-	c := NewFlowCollector(agg, modules, aggConfig())
+	c := NewFlowCollector(agg, modules, aggConfig(), nil)
 
 	expected := `
 # HELP xflow_exporter_bytes_total Sampling-corrected bytes per exporter and version, other carries the entry-bound fold
@@ -81,7 +85,7 @@ func TestFlowCollector_TopKWithholdsTheLiveTail(t *testing.T) {
 		flowRecord("10.0.0.4", "10.0.0.9", 50),
 	})
 
-	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg)
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil)
 
 	expected := `
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
@@ -111,7 +115,7 @@ func TestFlowCollector_MinBytesWithholdsMice(t *testing.T) {
 		flowRecord("10.0.0.2", "10.0.0.9", 999),
 	})
 
-	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg)
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil)
 
 	expected := `
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
@@ -137,7 +141,7 @@ func TestFlowCollector_ServiceAndASNAndApplicationLabels(t *testing.T) {
 	r.AppName = "https"
 	agg.Ingest([]flow.Record{r})
 
-	c := NewFlowCollector(agg, modules, aggConfig())
+	c := NewFlowCollector(agg, modules, aggConfig(), nil)
 
 	expected := `
 # HELP xflow_application_bytes_total Sampling-corrected bytes per application, other carries the entry-bound fold
@@ -166,7 +170,7 @@ func TestFlowCollector_HealthSeries(t *testing.T) {
 	agg := aggregator.New(aggConfig(), aggregator.Modules{Hosts: true})
 	agg.Ingest([]flow.Record{flowRecord("10.0.0.1", "10.0.0.2", 10)})
 
-	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, aggConfig())
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, aggConfig(), nil)
 
 	expected := `
 # HELP xflow_aggregation_entries Entries held per aggregation table
@@ -194,13 +198,19 @@ func TestProtocolName(t *testing.T) {
 		want     string
 	}{
 		{1, "icmp"},
+		{2, "igmp"},
+		{4, "ipv4"},
 		{6, "tcp"},
 		{17, "udp"},
+		{41, "ipv6"},
 		{47, "gre"},
 		{50, "esp"},
 		{51, "ah"},
 		{58, "icmpv6"},
+		{88, "eigrp"},
 		{89, "ospf"},
+		{103, "pim"},
+		{112, "vrrp"},
 		{132, "sctp"},
 		{200, "200"},
 	}
@@ -264,7 +274,7 @@ func TestFlowCollector_CountryPairs(t *testing.T) {
 
 	agg.Ingest([]flow.Record{placed, partial, unplaced})
 
-	c := NewFlowCollector(agg, modules, aggConfig())
+	c := NewFlowCollector(agg, modules, aggConfig(), nil)
 
 	expected := `
 # HELP xflow_country_pair_bytes_total Sampling-corrected bytes per country pair, other carries the entry-bound fold
@@ -294,7 +304,7 @@ func TestFlowCollector_DestinationLabels(t *testing.T) {
 		flowRecord("10.0.0.9", "10.0.0.2", 300),
 	})
 
-	c := NewFlowCollector(agg, modules, aggConfig())
+	c := NewFlowCollector(agg, modules, aggConfig(), nil)
 
 	expected := `
 # HELP xflow_destination_bytes_total Sampling-corrected bytes per destination service, other carries the entry-bound fold
@@ -304,6 +314,235 @@ xflow_destination_bytes_total{dst="other",exporter="other",port="other",proto="o
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_destination_bytes_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+func TestTCPFlagNames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		flags uint8
+		want  string
+	}{
+		{flags: 0x02, want: "syn"},
+		{flags: 0x12, want: "syn,ack"},
+		{flags: 0x18, want: "psh,ack"},
+		{flags: 0x11, want: "fin,ack"},
+		{flags: 0x04, want: "rst"},
+		{flags: 0x1B, want: "fin,syn,psh,ack"},
+		{flags: 0xC0, want: "ece,cwr"},
+		{flags: 0x00, want: "none"},
+	}
+
+	for _, tt := range tests {
+		if got := tcpFlagNames(tt.flags); got != tt.want {
+			t.Errorf("tcpFlagNames(%#x) = %q, want %q", tt.flags, got, tt.want)
+		}
+	}
+}
+
+func TestDSCPName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		dscp uint8
+		want string
+	}{
+		{dscp: 0, want: "cs0"},
+		{dscp: 46, want: "ef"},
+		{dscp: 34, want: "af41"},
+		{dscp: 24, want: "cs3"},
+		{dscp: 44, want: "voice-admit"},
+		{dscp: 1, want: "le"},
+		{dscp: 45, want: "nqb"},
+		// 2, 4 and 5 are the markings a stack reading the byte as RFC 791 did
+		// still sets, and 7 and 63 are pool 2. The registry names none of
+		// them, so none acquires a name invented here.
+		{dscp: 2, want: "2"},
+		{dscp: 4, want: "4"},
+		{dscp: 5, want: "5"},
+		{dscp: 7, want: "7"},
+		{dscp: 63, want: "63"},
+	}
+
+	for _, tt := range tests {
+		if got := dscpName(tt.dscp); got != tt.want {
+			t.Errorf("dscpName(%d) = %q, want %q", tt.dscp, got, tt.want)
+		}
+	}
+}
+
+// TestFlowCollector_TCPFlagsAndDSCPLabels pins both label sets. The flags
+// render as bits rather than as the byte, since 2 and 18 are a scan and a
+// handshake and the numbers say so to nobody.
+func TestFlowCollector_TCPFlagsAndDSCPLabels(t *testing.T) {
+	t.Parallel()
+
+	modules := config.Collectors{TCPFlags: true, DSCP: true}
+	agg := aggregator.New(aggConfig(), aggregator.Modules{TCPFlags: true, DSCP: true})
+
+	r := flowRecord("10.0.0.1", "10.0.0.2", 700)
+	r.TCPFlags, r.TCPFlagsReported = 0x12, true
+	r.TOS, r.TOSReported = 0xB8, true
+	agg.Ingest([]flow.Record{r})
+
+	c := NewFlowCollector(agg, modules, aggConfig(), nil)
+
+	expected := `
+# HELP xflow_dscp_bytes_total Sampling-corrected bytes per DSCP class, other carries the entry-bound fold
+# TYPE xflow_dscp_bytes_total counter
+xflow_dscp_bytes_total{dscp="ef",exporter="192.0.2.1"} 700
+xflow_dscp_bytes_total{dscp="other",exporter="other"} 0
+# HELP xflow_tcp_flags_bytes_total Sampling-corrected bytes per TCP control-bit profile, other carries the entry-bound fold
+# TYPE xflow_tcp_flags_bytes_total counter
+xflow_tcp_flags_bytes_total{exporter="192.0.2.1",flags="syn,ack"} 700
+xflow_tcp_flags_bytes_total{exporter="other",flags="other"} 0
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_tcp_flags_bytes_total", "xflow_dscp_bytes_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// TestFlowCollector_TopKIsStableAcrossScrapes is the regression test for a
+// series set that churned with nothing being ingested. Byte counts tie
+// readily -- under sampling every single-packet minimum-size flow corrects to
+// the same figure -- and a tie group straddling the Top-K cut admitted a
+// different subset of itself on every scrape, so a long-term store billed
+// series the exporter had not published twice in a row.
+func TestFlowCollector_TopKIsStableAcrossScrapes(t *testing.T) {
+	t.Parallel()
+
+	const (
+		topK  = 8
+		tied  = 20
+		bytes = 1280
+	)
+
+	cfg := aggConfig()
+	cfg.TopK = topK
+	cfg.MinBytes = 0
+
+	agg := aggregator.New(cfg, aggregator.Modules{Hosts: true})
+	records := make([]flow.Record, 0, tied)
+	for i := range tied {
+		records = append(records, flowRecord("10.0.0.1", fmt.Sprintf("10.1.0.%d", i+1), bytes))
+	}
+	agg.Ingest(records)
+
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil)
+
+	first := publishedHostPairs(t, c)
+	if len(first) != topK {
+		t.Fatalf("published %d series, want %d so the cut falls inside the tie group", len(first), topK)
+	}
+
+	for scrape := range 5 {
+		got := publishedHostPairs(t, c)
+		if !slices.Equal(first, got) {
+			t.Errorf("scrape %d published %v, want %v unchanged with nothing ingested", scrape+2, got, first)
+		}
+	}
+}
+
+// publishedHostPairs collects the host-pair byte series and returns their
+// destination labels in order, the fold series excluded.
+func publishedHostPairs(t *testing.T, c prometheus.Collector) []string {
+	t.Helper()
+
+	ch := make(chan prometheus.Metric, 1024)
+	go func() {
+		c.Collect(ch)
+		close(ch)
+	}()
+
+	var dsts []string
+	for m := range ch {
+		var pb dto.Metric
+		if err := m.Write(&pb); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		if !strings.Contains(m.Desc().String(), "xflow_host_pair_bytes_total") {
+			continue
+		}
+		for _, l := range pb.GetLabel() {
+			if l.GetName() == "dst" && l.GetValue() != "other" {
+				dsts = append(dsts, l.GetValue())
+			}
+		}
+	}
+	slices.Sort(dsts)
+	return dsts
+}
+
+// TestFlowCollector_ASNNamesRideTheirOwnSeries pins where the organization
+// goes. A database respelling a company must not break the counters it
+// touches, and the pair table is Top-K bounded while a database names every
+// AS there is -- so the name is published for the numbers the table holds and
+// nowhere else.
+func TestFlowCollector_ASNNamesRideTheirOwnSeries(t *testing.T) {
+	t.Parallel()
+
+	agg := aggregator.New(aggConfig(), aggregator.Modules{ASNs: true})
+	r := flowRecord("10.0.0.1", "10.0.0.2", 400)
+	r.SrcAS, r.DstAS = 64500, 64501
+	agg.Ingest([]flow.Record{r})
+
+	names := func(as uint32) (string, bool) {
+		if as == 64500 {
+			return "Example Networks", true
+		}
+		return "", false
+	}
+	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), names)
+
+	expected := `
+# HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table holds
+# TYPE xflow_asn_info gauge
+xflow_asn_info{asn="64500",organization="Example Networks"} 1
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "xflow_asn_info"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// TestFlowCollector_ASNNamesAbsentWithoutADatabase pins the other half: with
+// no database to ask, the naming series is absent rather than empty.
+func TestFlowCollector_ASNNamesAbsentWithoutADatabase(t *testing.T) {
+	t.Parallel()
+
+	agg := aggregator.New(aggConfig(), aggregator.Modules{ASNs: true})
+	r := flowRecord("10.0.0.1", "10.0.0.2", 400)
+	r.SrcAS, r.DstAS = 64500, 64501
+	agg.Ingest([]flow.Record{r})
+
+	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), nil)
+	if got := testutil.CollectAndCount(c, "xflow_asn_info"); got != 0 {
+		t.Errorf("xflow_asn_info series = %d, want none without a database", got)
+	}
+}
+
+// TestFlowCollector_ASNNamesSkipZero pins that the reserved number is never
+// named. AS 0 means no AS, and a database asked about it would be answering
+// about nothing.
+func TestFlowCollector_ASNNamesSkipZero(t *testing.T) {
+	t.Parallel()
+
+	agg := aggregator.New(aggConfig(), aggregator.Modules{ASNs: true})
+	r := flowRecord("10.0.0.1", "10.0.0.2", 400)
+	r.SrcAS, r.DstAS = 0, 64500
+	agg.Ingest([]flow.Record{r})
+
+	names := func(uint32) (string, bool) { return "Example Networks", true }
+	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), names)
+
+	expected := `
+# HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table holds
+# TYPE xflow_asn_info gauge
+xflow_asn_info{asn="64500",organization="Example Networks"} 1
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "xflow_asn_info"); err != nil {
 		t.Errorf("CollectAndCompare() mismatch: %v", err)
 	}
 }

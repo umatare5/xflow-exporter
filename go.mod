@@ -2,6 +2,8 @@ module github.com/umatare5/xflow-exporter
 
 go 1.27
 
+toolchain go1.27.0
+
 require (
 	github.com/golang/snappy v1.0.0
 	github.com/oschwald/maxminddb-golang/v2 v2.5.0

@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"encoding/binary"
 	"net/netip"
 	"strings"
 	"testing"
@@ -46,8 +47,8 @@ func TestDecoderCollector_Describe(t *testing.T) {
 	for range ch {
 		count++
 	}
-	if count != 9 {
-		t.Errorf("Describe() emitted %d descriptors, want 9", count)
+	if count != 10 {
+		t.Errorf("Describe() emitted %d descriptors, want 10", count)
 	}
 }
 
@@ -59,13 +60,14 @@ func TestDecoderCollector_EmptyUntilTraffic(t *testing.T) {
 	// Only the refusal counters, which are seeded so a first refusal reads
 	// as a rise rather than as a new series. Nothing is published per
 	// exporter until a datagram names one.
-	if got := testutil.CollectAndCount(c); got != 3 {
+	if got := testutil.CollectAndCount(c); got != 4 {
 		t.Errorf("CollectAndCount() = %d series before any datagram, want only the seeded counters", got)
 	}
 	for _, name := range []string{
 		"xflow_domains_refused_total",
 		"xflow_vendor_strings_refused_total",
 		"xflow_applications_refused_total",
+		"xflow_exporters_refused_total",
 	} {
 		if got := testutil.CollectAndCount(c, name); got != 1 {
 			t.Errorf("%s series = %d, want 1 seeded", name, got)
@@ -137,13 +139,13 @@ func TestDecoderCollector_ReportsDomainState(t *testing.T) {
 	c := NewDecoderCollector(d)
 
 	expected := `
-# HELP xflow_sequence_missed_total Export packets the sequence numbers say were lost, per observation domain
+# HELP xflow_sequence_missed_total Export packets the sequence numbers say were lost, per protocol and observation domain
 # TYPE xflow_sequence_missed_total counter
-xflow_sequence_missed_total{exporter="192.0.2.20",odid="256"} 0
-# HELP xflow_templates Unexpired templates held per exporter, observation domain and kind
+xflow_sequence_missed_total{exporter="192.0.2.20",odid="256",version="netflow_v9"} 0
+# HELP xflow_templates Unexpired templates held per exporter, protocol, observation domain and kind
 # TYPE xflow_templates gauge
-xflow_templates{exporter="192.0.2.20",odid="256",type="options_template"} 0
-xflow_templates{exporter="192.0.2.20",odid="256",type="template"} 1
+xflow_templates{exporter="192.0.2.20",odid="256",type="options_template",version="netflow_v9"} 0
+xflow_templates{exporter="192.0.2.20",odid="256",type="template",version="netflow_v9"} 1
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_templates", "xflow_sequence_missed_total"); err != nil {
@@ -153,6 +155,64 @@ xflow_templates{exporter="192.0.2.20",odid="256",type="template"} 1
 	// No options arrived, so no sampling rate series exists.
 	if got := testutil.CollectAndCount(c, "xflow_sampling_rate"); got != 0 {
 		t.Errorf("sampling rate series = %d, want 0 until a rate arrives", got)
+	}
+}
+
+// v9DomainOnly is a v9 header naming an observation domain and carrying no
+// flowset, which is enough to open the domain.
+func v9DomainOnly(odid uint32) []byte {
+	b := []byte{0x00, 0x09, 0x00, 0x00}
+	b = binary.BigEndian.AppendUint32(b, 1000)
+	b = binary.BigEndian.AppendUint32(b, 1)
+	b = binary.BigEndian.AppendUint32(b, 1)
+	return binary.BigEndian.AppendUint32(b, odid)
+}
+
+// sflowDomainOnly is an sFlow v5 datagram naming a sub-agent and carrying no
+// sample, which is likewise enough to open a domain.
+func sflowDomainOnly(subAgent uint32) []byte {
+	b := binary.BigEndian.AppendUint32(nil, 5)
+	b = binary.BigEndian.AppendUint32(b, 1)
+	b = append(b, 192, 0, 2, 20)
+	b = binary.BigEndian.AppendUint32(b, subAgent)
+	b = binary.BigEndian.AppendUint32(b, 1)
+	b = binary.BigEndian.AppendUint32(b, 1000)
+	return binary.BigEndian.AppendUint32(b, 0)
+}
+
+// TestDecoderCollector_TwoProtocolsUnderOneIdentifierStillGather is the
+// regression test for a scrape that returned 500 for every series in the
+// registry. The template store keys domains by protocol, which two datagrams
+// naming the same number open separately, and the domain series carried only
+// the exporter and the identifier -- so the registry saw one label set twice
+// and refused to gather anything at all, this exporter's own health series
+// included. A device speaking v9 with Source ID 0 and sFlow from sub-agent 0
+// reaches it on defaults.
+func TestDecoderCollector_TwoProtocolsUnderOneIdentifierStillGather(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	exporter := netip.MustParseAddr("192.0.2.20")
+
+	if _, err := d.Decode(exporter, v9DomainOnly(1), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want the v9 datagram accepted", err)
+	}
+	if _, err := d.Decode(exporter, sflowDomainOnly(1), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want the sFlow datagram accepted", err)
+	}
+	if got := len(d.Domains()); got != 2 {
+		t.Fatalf("Domains() = %d, want 2 so the collision is under test", got)
+	}
+
+	reg := prometheus.NewPedanticRegistry()
+	reg.MustRegister(NewDecoderCollector(d))
+
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather() error = %v, want every series to gather", err)
+	}
+	if len(families) == 0 {
+		t.Fatal("Gather() returned no families")
 	}
 }
 
@@ -236,7 +296,7 @@ xflow_applications_refused_total 0
 
 // stubDecoderSource reports a distinct count from each refusal accessor.
 type stubDecoderSource struct {
-	domains, strings, applications uint64
+	domains, strings, applications, exporters uint64
 }
 
 func (s stubDecoderSource) Stats() *decoder.Stats             { return &decoder.Stats{} }
@@ -244,15 +304,17 @@ func (s stubDecoderSource) Domains() []decoder.DomainSnapshot { return nil }
 func (s stubDecoderSource) DomainsRefused() uint64            { return s.domains }
 func (s stubDecoderSource) VendorStringsRefused() uint64      { return s.strings }
 func (s stubDecoderSource) ApplicationsRefused() uint64       { return s.applications }
+func (s stubDecoderSource) ExportersRefused() uint64          { return s.exporters }
 
 // TestDecoderCollector_RefusalCountersDoNotCross pins each refusal counter to
 // its own accessor. The three publish lines are adjacent and alike, and the
 // causes they report are not: a domain budget, an export field too narrow for
-// its string, and an application budget each call for a different answer.
+// its string, an application budget and an exporter budget each call for a
+// different answer.
 func TestDecoderCollector_RefusalCountersDoNotCross(t *testing.T) {
 	t.Parallel()
 
-	c := NewDecoderCollector(stubDecoderSource{domains: 3, strings: 5, applications: 7})
+	c := NewDecoderCollector(stubDecoderSource{domains: 3, strings: 5, applications: 7, exporters: 11})
 
 	expected := `
 # HELP xflow_domains_refused_total Observation domains refused since process start, the exporter being at its domain budget
@@ -264,10 +326,13 @@ xflow_vendor_strings_refused_total 5
 # HELP xflow_applications_refused_total Application announcements refused since process start, the exporter being at its application budget
 # TYPE xflow_applications_refused_total counter
 xflow_applications_refused_total 7
+# HELP xflow_exporters_refused_total Datagrams left unattributed since process start, the process being at its exporter budget
+# TYPE xflow_exporters_refused_total counter
+xflow_exporters_refused_total 11
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_domains_refused_total", "xflow_vendor_strings_refused_total",
-		"xflow_applications_refused_total"); err != nil {
+		"xflow_applications_refused_total", "xflow_exporters_refused_total"); err != nil {
 		t.Errorf("CollectAndCompare() mismatch: %v", err)
 	}
 }

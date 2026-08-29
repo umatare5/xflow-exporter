@@ -852,3 +852,122 @@ func TestDecodeIPFIX_HonoursOptionsTemplateWithdrawal(t *testing.T) {
 		})
 	}
 }
+
+// TestDecodeIPFIX_TCPControlBitsAtTwoOctets covers the element's native
+// width. RFC 9565 makes tcpControlBits unsigned16 and puts the control bits
+// in its low octet, the one-octet form being reduced-size encoding of the
+// same element. An exporter that declines to reduce is conformant, and the
+// bits above the low octet are the ones a collector is told to ignore.
+func TestDecodeIPFIX_TCPControlBitsAtTwoOctets(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		wire uint16
+		want uint8
+	}{
+		{"control bits alone", 0x0012, 0x12},
+		{"the data offset above them", 0x5012, 0x12},
+		{"a bit above them the reduced form cannot carry", 0x0112, 0x12},
+		{"no bit set", 0x0000, 0x00},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+
+			template := ipfixTemplateSet(
+				ipfixSpec(fieldProtocol, 1, 0),
+				ipfixSpec(fieldTCPFlags, 2, 0),
+			)
+			record := be16([]byte{protocolTCP}, tt.wire)
+
+			records, err := d.Decode(testExporter, ipfixMessage(0, template,
+				flowSet(fixtureIPFIXTemplateID, record),
+			), nil)
+			if err != nil || len(records) != 1 {
+				t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
+			}
+
+			if got := records[0].TCPFlags; got != tt.want {
+				t.Errorf("TCPFlags = %#02x, want %#02x", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDecodeIPFIX_DiffServCodePoint covers the element a record built on
+// `match ipv4 dscp` exports in place of the TOS byte. IE 195 carries the six
+// code-point bits right-aligned, where flow.Record holds the whole byte, so
+// reading it without the shift would publish a class the wire never named.
+func TestDecodeIPFIX_DiffServCodePoint(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		specs        [][]byte
+		record       []byte
+		wantTOS      uint8
+		wantReported bool
+	}{
+		{
+			name:         "the code point alone",
+			specs:        [][]byte{ipfixSpec(fieldDSCP, 1, 0)},
+			record:       []byte{46},
+			wantTOS:      0xB8,
+			wantReported: true,
+		},
+		{
+			name:         "best effort is a value",
+			specs:        [][]byte{ipfixSpec(fieldDSCP, 1, 0)},
+			record:       []byte{0},
+			wantTOS:      0x00,
+			wantReported: true,
+		},
+		{
+			name:         "a value wider than a code point is refused",
+			specs:        [][]byte{ipfixSpec(fieldDSCP, 1, 0)},
+			record:       []byte{64},
+			wantTOS:      0x00,
+			wantReported: false,
+		},
+		{
+			name:         "the TOS byte outranks it, declared first",
+			specs:        [][]byte{ipfixSpec(fieldSrcTOS, 1, 0), ipfixSpec(fieldDSCP, 1, 0)},
+			record:       []byte{0x2E, 46},
+			wantTOS:      0x2E,
+			wantReported: true,
+		},
+		{
+			name:         "the TOS byte outranks it, declared second",
+			specs:        [][]byte{ipfixSpec(fieldDSCP, 1, 0), ipfixSpec(fieldSrcTOS, 1, 0)},
+			record:       []byte{46, 0x2E},
+			wantTOS:      0x2E,
+			wantReported: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			records, err := d.Decode(testExporter, ipfixMessage(0,
+				ipfixTemplateSet(tt.specs...),
+				flowSet(fixtureIPFIXTemplateID, tt.record),
+			), nil)
+			if err != nil || len(records) != 1 {
+				t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
+			}
+
+			if got := records[0].TOS; got != tt.wantTOS {
+				t.Errorf("TOS = %#02x, want %#02x", got, tt.wantTOS)
+			}
+			if got := records[0].TOSReported; got != tt.wantReported {
+				t.Errorf("TOSReported = %v, want %v", got, tt.wantReported)
+			}
+		})
+	}
+}

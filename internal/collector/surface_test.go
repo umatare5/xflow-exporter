@@ -105,6 +105,7 @@ func gatherFamilies(t *testing.T, appName string) []*dto.MetricFamily {
 	cfg := testConfig()
 	cfg.Collectors = config.Collectors{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
+		TCPFlags: true, DSCP: true,
 		ASNs: true, Applications: true, Countries: true, Threats: true,
 	}
 	cfg.Aggregation = config.Aggregation{
@@ -119,6 +120,7 @@ func gatherFamilies(t *testing.T, appName string) []*dto.MetricFamily {
 
 	agg := aggregator.New(cfg.Aggregation, aggregator.Modules{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
+		TCPFlags: true, DSCP: true,
 		ASNs: true, Applications: true, Countries: true, Threats: true,
 	})
 	// The families past the application one in Collect order are what an
@@ -138,7 +140,12 @@ func gatherFamilies(t *testing.T, appName string) []*dto.MetricFamily {
 	neighbor.AppName = neighborApplication
 	neighbor.DstPort = 22
 	agg.Ingest([]flow.Record{r, neighbor})
-	c.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation)
+	c.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation, func(as uint32) (string, bool) {
+		if as == 64500 {
+			return "Example Networks", true
+		}
+		return "", false
+	})
 
 	families, err := c.Registry().Gather()
 	if err != nil {
@@ -156,6 +163,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	cfg := testConfig()
 	cfg.Collectors = config.Collectors{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
+		TCPFlags: true, DSCP: true,
 		ASNs: true, Applications: true, Countries: true, Threats: true,
 		Distributions: true,
 	}
@@ -194,6 +202,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 
 	agg := aggregator.New(cfg.Aggregation, aggregator.Modules{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
+		TCPFlags: true, DSCP: true,
 		ASNs: true, Applications: true, Countries: true, Threats: true,
 	})
 	// Every dimension filled, so no module lints on an empty table.
@@ -207,7 +216,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	r.Start = time.Unix(1_756_300_000, 0)
 	r.End = r.Start.Add(15 * time.Second)
 	agg.Ingest([]flow.Record{r})
-	c.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation)
+	c.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation, nil)
 
 	dist := c.RegisterDistributions()
 	dist.Observe([]flow.Record{r})
@@ -230,7 +239,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	// options template announcing a sampler, and the remote write instant
 	// needs a client that has written, whose counters the package keeps
 	// unexported. Changing the surface is meant to change this number.
-	const wantFamilies = 52
+	const wantFamilies = 59
 	if len(families) != wantFamilies {
 		t.Fatalf("gathered %d families, want %d: the lint below covers only what is registered",
 			len(families), wantFamilies)

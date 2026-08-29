@@ -15,6 +15,19 @@ import (
 // per-version counter arrays below.
 const versionCount = int(flow.VersionSFlowV5) + 1
 
+// maxExporters bounds the devices this process holds counters for. UDP has no
+// handshake, so the source address is whatever the sender wrote, and the first
+// error path of Decode reaches this map before anything has been validated.
+//
+// Every other budget in this package bounds a wire field inside a device
+// already admitted; this one bounds the fleet, so it sits above the largest
+// fleet one collector plausibly serves rather than at the memory it costs. A
+// campus or a provider edge is hundreds to low thousands of devices, and an
+// sFlow host agent per node makes the largest case thousands more. It is the
+// figure maxInternedStrings uses, the other table here that is filled from the
+// wire and belongs to the process rather than to a device.
+const maxExporters = 65536
+
 // ExporterStats carries one exporting device's counters. Workers write them
 // lock-free; a scrape reads them through Snapshot.
 type ExporterStats struct {
@@ -27,6 +40,13 @@ type ExporterStats struct {
 	// lastFlowUnixNano is when the last datagram decoded successfully, which
 	// is the freshness signal a silent device is detected by.
 	lastFlowUnixNano atomic.Int64
+	// lastSeenUnixNano is when a datagram last named this device at all,
+	// which the idle sweep reads. It is not lastFlowUnixNano: a device whose
+	// every export is malformed is present, and its error counters are what
+	// says so. Nor could the sweep use decode success as its test -- sixteen
+	// bytes of well-formed IPFIX header decode, so that predicate is
+	// forgeable by anyone who can send a datagram.
+	lastSeenUnixNano atomic.Int64
 }
 
 // countFlows accounts one successfully decoded datagram.
@@ -62,6 +82,16 @@ func (e *ExporterStats) counter(version flow.Version, reason string) *atomic.Uin
 type Stats struct {
 	mu        sync.RWMutex
 	exporters map[netip.Addr]*ExporterStats
+
+	// live mirrors len(exporters), written under the same lock. A datagram
+	// from an address the budget refuses reads this instead of taking the
+	// write lock that every worker and every scrape contend for; the count
+	// under the lock stays the authority, so the bound holds either way.
+	live atomic.Int64
+
+	// refused counts the datagrams whose device the budget turned away, so
+	// the devices left unaccounted are visible rather than silent.
+	refused atomic.Uint64
 }
 
 // newStats creates empty decode statistics.
@@ -69,23 +99,84 @@ func newStats() *Stats {
 	return &Stats{exporters: make(map[netip.Addr]*ExporterStats)}
 }
 
-// exporter returns the counter set of one device, creating it on first use.
-func (s *Stats) exporter(addr netip.Addr) *ExporterStats {
+// exporter returns the counter set of one device, creating it on first use
+// and reporting nil once the process is at its exporter budget.
+func (s *Stats) exporter(addr netip.Addr, at time.Time) *ExporterStats {
+	now := at.UnixNano()
+
 	s.mu.RLock()
 	es, ok := s.exporters[addr]
 	s.mu.RUnlock()
 	if ok {
+		es.lastSeenUnixNano.Store(now)
 		return es
+	}
+	if s.live.Load() >= maxExporters {
+		s.refused.Add(1)
+		return nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if es, ok := s.exporters[addr]; ok {
+		es.lastSeenUnixNano.Store(now)
 		return es
 	}
+	if len(s.exporters) >= maxExporters {
+		s.refused.Add(1)
+		return nil
+	}
+
 	es = &ExporterStats{}
+	es.lastSeenUnixNano.Store(now)
 	s.exporters[addr] = es
+	s.live.Store(int64(len(s.exporters)))
 	return es
+}
+
+// countError accounts one rejected datagram against its device, or against
+// the budget where the device has none.
+func (s *Stats) countError(addr netip.Addr, version flow.Version, reason string, at time.Time) {
+	if es := s.exporter(addr, at); es != nil {
+		es.countError(version, reason)
+	}
+}
+
+// countFlows accounts one decoded datagram against its device, or against the
+// budget where the device has none.
+func (s *Stats) countFlows(addr netip.Addr, version flow.Version, records int, at time.Time) {
+	if es := s.exporter(addr, at); es != nil {
+		es.countFlows(version, records, at)
+	}
+}
+
+// refusedCount reports how many datagrams the budget left unattributed.
+func (s *Stats) refusedCount() uint64 {
+	return s.refused.Load()
+}
+
+// sweepIdle drops the devices silent since before cutoff, but only once the
+// budget is reached. Below it nothing is ever evicted: a device that has gone
+// quiet is exactly what the freshness series exists to show, and a sweep that
+// removed it would resolve the alarm by deleting the evidence.
+func (s *Stats) sweepIdle(cutoff int64) int {
+	if s.live.Load() < maxExporters {
+		return 0
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	evicted := 0
+	for addr, es := range s.exporters {
+		if es.lastSeenUnixNano.Load() >= cutoff {
+			continue
+		}
+		delete(s.exporters, addr)
+		evicted++
+	}
+	s.live.Store(int64(len(s.exporters)))
+	return evicted
 }
 
 // ErrorSnapshot is one error counter at one instant.

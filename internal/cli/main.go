@@ -209,6 +209,18 @@ func registerCollectorFlags() []cli.Flag {
 			HideDefault: true,
 		},
 		&cli.BoolFlag{
+			Name:        "collector.tcp-flags",
+			Usage:       "Enable TCP control-bit profile metrics",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
+			Name:        "collector.dscp",
+			Usage:       "Enable DSCP class metrics, for devices that export the TOS byte",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
 			Name:        "collector.asns",
 			Usage:       "Enable AS pair metrics from device-exported AS numbers",
 			Category:    "# Collector Options",

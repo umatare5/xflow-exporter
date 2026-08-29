@@ -139,6 +139,8 @@ type Collectors struct {
 	Hosts         bool `json:"hosts"`
 	Services      bool `json:"services"`
 	Destinations  bool `json:"destinations"`
+	TCPFlags      bool `json:"tcp_flags"`
+	DSCP          bool `json:"dscp"`
 	ASNs          bool `json:"asns"`
 	Applications  bool `json:"applications"`
 	Countries     bool `json:"countries"`
@@ -223,6 +225,8 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			Hosts:         cmd.Bool("collector.hosts"),
 			Services:      cmd.Bool("collector.services"),
 			Destinations:  cmd.Bool("collector.destinations"),
+			TCPFlags:      cmd.Bool("collector.tcp-flags"),
+			DSCP:          cmd.Bool("collector.dscp"),
 			ASNs:          cmd.Bool("collector.asns"),
 			Applications:  cmd.Bool("collector.applications"),
 			Countries:     cmd.Bool("collector.countries"),
@@ -261,6 +265,10 @@ func (c *Config) Validate() error {
 		condition bool
 		message   string
 	}{
+		{
+			!namesAnInterface(c.Web.ListenAddress),
+			"invalid listen address: " + c.Web.ListenAddress + " (must be an IP address or empty)",
+		},
 		{
 			c.Web.ListenPort < 1 || c.Web.ListenPort > 65535,
 			fmt.Sprintf("invalid listen port: %d (must be 1-65535)", c.Web.ListenPort),
@@ -551,6 +559,19 @@ func validateReceiverAddress(address string) error {
 	}
 
 	return nil
+}
+
+// namesAnInterface reports whether a listen address names one. The port is a
+// flag of its own here, so a value carrying one joins to host:port:port and
+// binds nothing; the rule is otherwise the one validateReceiverAddress gives,
+// an empty host binding every interface and anything else having to be an IP
+// rather than a name a resolver would have to answer for at startup.
+func namesAnInterface(host string) bool {
+	if host == "" {
+		return true
+	}
+	_, err := netip.ParseAddr(host)
+	return err == nil
 }
 
 // isValidLogLevel checks if the log level is valid.
