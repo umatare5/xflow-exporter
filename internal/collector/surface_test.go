@@ -216,7 +216,10 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	r.Start = time.Unix(1_756_300_000, 0)
 	r.End = r.Start.Add(15 * time.Second)
 	agg.Ingest([]flow.Record{r})
-	c.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation, nil)
+	// A naming function, so the ASN naming family is gathered rather than
+	// absent and its label values reach the lint below.
+	c.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation,
+		func(uint32) (string, bool) { return "Example Networks", true })
 
 	dist := c.RegisterDistributions()
 	dist.Observe([]flow.Record{r})
@@ -239,7 +242,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	// options template announcing a sampler, and the remote write instant
 	// needs a client that has written, whose counters the package keeps
 	// unexported. Changing the surface is meant to change this number.
-	const wantFamilies = 59
+	const wantFamilies = 60
 	if len(families) != wantFamilies {
 		t.Fatalf("gathered %d families, want %d: the lint below covers only what is registered",
 			len(families), wantFamilies)

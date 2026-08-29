@@ -66,7 +66,7 @@ const (
 	// past the bound folds into the table's other bucket.
 	DefaultAggregationMaxEntries = 100000
 	// DefaultAggregationTopK bounds how many entries each table publishes as
-	// their own series; the rest fold into the other bucket at scrape time.
+	// their own series; the rest are withheld rather than folded.
 	DefaultAggregationTopK = 1000
 	// DefaultAggregationMinBytes of zero publishes every entry the Top-K
 	// bound admits regardless of size.
@@ -549,23 +549,21 @@ func validateReceiverAddress(address string) error {
 		return fmt.Errorf("invalid receiver address %q: port must be 1-65535", address)
 	}
 
-	// An empty host binds every interface. A non-empty one must be an IP
-	// address: resolving names at validation time would make startup depend on
-	// a resolver, and a listener wants an interface rather than a peer.
-	if host != "" {
-		if _, err := netip.ParseAddr(host); err != nil {
-			return fmt.Errorf("invalid receiver address %q: host must be an IP address or empty", address)
-		}
+	if !namesAnInterface(host) {
+		return fmt.Errorf("invalid receiver address %q: host must be an IP address or empty", address)
 	}
 
 	return nil
 }
 
-// namesAnInterface reports whether a listen address names one. The port is a
-// flag of its own here, so a value carrying one joins to host:port:port and
-// binds nothing; the rule is otherwise the one validateReceiverAddress gives,
-// an empty host binding every interface and anything else having to be an IP
-// rather than a name a resolver would have to answer for at startup.
+// namesAnInterface reports whether a listen address names one. An empty host
+// binds every interface; anything else has to be an IP address, since
+// resolving a name at validation time would make startup depend on a resolver
+// and a listener wants an interface rather than a peer.
+//
+// The web listen address takes its port from a flag of its own, so a value
+// carrying one joins to host:port:port and binds nothing. That is the whole of
+// what it needs beyond this.
 func namesAnInterface(host string) bool {
 	if host == "" {
 		return true
@@ -574,13 +572,11 @@ func namesAnInterface(host string) bool {
 	return err == nil
 }
 
-// isValidLogLevel checks if the log level is valid.
 func isValidLogLevel(level string) bool {
 	validLevels := []string{"debug", "info", "warn", "error"}
 	return slices.Contains(validLevels, strings.ToLower(level))
 }
 
-// isValidLogFormat checks if the log format is valid.
 func isValidLogFormat(format string) bool {
 	validFormats := []string{"json", "text"}
 	return slices.Contains(validFormats, strings.ToLower(format))

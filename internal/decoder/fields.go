@@ -1,7 +1,7 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file maps information elements into flow.Record. NetFlow v9 field
 // types and IPFIX IANA information elements share one numbering, which is
 // what lets both protocols share this layer.
+
 package decoder
 
 import (
@@ -31,11 +31,11 @@ const (
 	maxDSCP = 0x3F
 )
 
-// Vendor information elements mapped beyond the IANA set.
+// Application elements: the IANA identifier and one vendor's private type.
 const (
-	// Cisco AVC exports the application identifier as IANA IE 95; the name
-	// and category arrive through the application-table options this file's
-	// options reader captures.
+	// Cisco AVC exports the application identifier as IANA IE 95. The name
+	// and category arrive through the application-table options records,
+	// which optionsState captures.
 	fieldApplicationID = 95
 
 	// PAN-OS exports its application name inside NetFlow v9 records using a
@@ -159,9 +159,9 @@ func (p addrPair) carries() bool {
 // walkers the sFlow decoder uses — NetFlow-Lite is packet sampling in a
 // NetFlow envelope, so the two share one parse.
 //
-// Fields the device parsed itself win: the section fills only what is still
-// absent, and a record carrying both addresses and a section keeps the
-// device's own classification.
+// The section is walked only where the record carries neither address, so the
+// device's own parse wins whole rather than field by field: the walk supplies
+// the addresses, protocol, TOS, ports and flags together or not at all.
 func resolvePacketSection(r *flow.Record, state *fieldState) {
 	if len(state.frameSection) == 0 && len(state.ipSection) == 0 {
 		return

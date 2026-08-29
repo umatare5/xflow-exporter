@@ -277,10 +277,10 @@ func TestDecoderCollector_ReportsRefusedVendorStrings(t *testing.T) {
 	c := NewDecoderCollector(d)
 
 	expected := `
-# HELP xflow_domains_refused_total Observation domains refused since process start, the exporter being at its domain budget
+# HELP xflow_domains_refused_total Datagrams discarded since process start, the exporter being at its observation domain budget
 # TYPE xflow_domains_refused_total counter
 xflow_domains_refused_total 0
-# HELP xflow_vendor_strings_refused_total Vendor strings refused since process start, leaving the application numbered, port-named or absent
+# HELP xflow_vendor_strings_refused_total Vendor string fields refused since process start, counted per occurrence rather than per string
 # TYPE xflow_vendor_strings_refused_total counter
 xflow_vendor_strings_refused_total 2
 # HELP xflow_applications_refused_total Application announcements refused since process start, the exporter being at its application budget
@@ -317,10 +317,10 @@ func TestDecoderCollector_RefusalCountersDoNotCross(t *testing.T) {
 	c := NewDecoderCollector(stubDecoderSource{domains: 3, strings: 5, applications: 7, exporters: 11})
 
 	expected := `
-# HELP xflow_domains_refused_total Observation domains refused since process start, the exporter being at its domain budget
+# HELP xflow_domains_refused_total Datagrams discarded since process start, the exporter being at its observation domain budget
 # TYPE xflow_domains_refused_total counter
 xflow_domains_refused_total 3
-# HELP xflow_vendor_strings_refused_total Vendor strings refused since process start, leaving the application numbered, port-named or absent
+# HELP xflow_vendor_strings_refused_total Vendor string fields refused since process start, counted per occurrence rather than per string
 # TYPE xflow_vendor_strings_refused_total counter
 xflow_vendor_strings_refused_total 5
 # HELP xflow_applications_refused_total Application announcements refused since process start, the exporter being at its application budget

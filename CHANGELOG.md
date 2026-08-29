@@ -4,6 +4,10 @@ Notable changes to the metric surface, one section per release, listing the pull
 
 A minor release may rename or remove a metric. Every collector module flag is off by default, so a release that adds one adds no series until you set it.
 
+## [v0.6.0]
+
+- [#8](https://github.com/umatare5/xflow-exporter/pull/8) — Close the counting defects and rewrite the reference pages
+
 ## [v0.5.0]
 
 - [#6](https://github.com/umatare5/xflow-exporter/pull/6) — Publish the remaining dimensions and bound the last wire map
@@ -25,6 +29,7 @@ A minor release may rename or remove a metric. Every collector module flag is of
 - [#1](https://github.com/umatare5/xflow-exporter/pull/1) — Start the exporter with its flags, HTTP surface and UDP receiver
 - [#2](https://github.com/umatare5/xflow-exporter/pull/2) — Add the release workflow the tag and the artifacts come from
 
+[v0.6.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.6.0
 [v0.5.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.5.0
 [v0.4.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.4.0
 [v0.3.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.3.0

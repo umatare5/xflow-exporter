@@ -1,6 +1,6 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file parses NetFlow v9 (RFC 3954), the template-driven format
 // Flexible NetFlow and J-Flow v9 speak.
+
 package decoder
 
 import (

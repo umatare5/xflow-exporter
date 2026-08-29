@@ -1,4 +1,5 @@
-// Package collector provides registry management and collector registration.
+// Package collector provides the prometheus.Collector implementations and
+// registry management.
 package collector
 
 import (
@@ -30,7 +31,8 @@ func (c *Collector) Registry() *prometheus.Registry {
 	return c.registry
 }
 
-// Setup configures and registers all collectors based on configuration.
+// Setup registers what the configuration alone determines. Every collector
+// over a runtime source is registered by the caller once that source exists.
 func (c *Collector) Setup(version string) {
 	c.RegisterBuildInfo(version)
 	c.RegisterSystemCollectors()

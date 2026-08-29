@@ -1,6 +1,5 @@
-// Package enrich fills flow record dimensions the exporting device did not
-// carry, from sources local to this exporter.
 // This file flags addresses listed in files held on local disk.
+
 package enrich
 
 import (
@@ -47,8 +46,6 @@ type Threat struct {
 	counters
 	paths []string
 
-	// set is swapped atomically, so a reload never blocks a lookup and a
-	// failed one leaves the previous snapshot serving.
 	set atomic.Pointer[threatSet]
 
 	reloads  atomic.Uint64

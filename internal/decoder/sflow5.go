@@ -1,7 +1,7 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file parses sFlow v5 flow samples. sFlow ships sampled packet headers
-// rather than flow state, so each sample decodes into one single-packet
-// record and the aggregator scales it by the sample's own rate.
+// rather than flow state, so each readable flow record decodes into one
+// single-packet record and the aggregator scales it by the sample's own rate.
+
 package decoder
 
 import (

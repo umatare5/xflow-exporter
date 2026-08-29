@@ -1,5 +1,5 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file holds the counters the workers write and a scrape reads.
+
 package decoder
 
 import (
@@ -28,13 +28,13 @@ const versionCount = int(flow.VersionSFlowV5) + 1
 // wire and belongs to the process rather than to a device.
 const maxExporters = 65536
 
-// ExporterStats carries one exporting device's counters. Workers write them
-// lock-free; a scrape reads them through Snapshot.
+// ExporterStats carries one exporting device's counters. The flow counts and
+// the instants are written lock-free; an error counter takes errorsMu to reach
+// its map. A scrape reads them all through Snapshot.
 type ExporterStats struct {
 	flows [versionCount]atomic.Uint64
 	// errors is keyed by reason within version. Reasons are a closed set, so
-	// the inner map is built once per version on first use, under the same
-	// lock as the exporter map.
+	// the inner map is built once per version on first use, under errorsMu.
 	errorsMu sync.Mutex
 	errors   [versionCount]map[string]*atomic.Uint64
 	// lastFlowUnixNano is when the last datagram decoded successfully, which
@@ -49,14 +49,22 @@ type ExporterStats struct {
 	lastSeenUnixNano atomic.Int64
 }
 
-// countFlows accounts one successfully decoded datagram.
+// countFlows accounts one successfully decoded datagram. A nil receiver is a
+// device the exporter budget refused, which holds no counters to add to.
 func (e *ExporterStats) countFlows(version flow.Version, records int, at time.Time) {
+	if e == nil {
+		return
+	}
 	e.flows[version].Add(uint64(records)) //nolint:gosec // A record count is never negative.
 	e.lastFlowUnixNano.Store(at.UnixNano())
 }
 
-// countError accounts one rejected datagram.
+// countError accounts one rejected flowset, sample or datagram. A nil
+// receiver is a device the exporter budget refused.
 func (e *ExporterStats) countError(version flow.Version, reason string) {
+	if e == nil {
+		return
+	}
 	e.counter(version, reason).Add(1)
 }
 
@@ -90,7 +98,9 @@ type Stats struct {
 	live atomic.Int64
 
 	// refused counts the datagrams whose device the budget turned away, so
-	// the devices left unaccounted are visible rather than silent.
+	// the devices left unaccounted are visible rather than silent. Decode
+	// resolves each datagram's device once, which is what keeps this a
+	// datagram count rather than a count of accounting calls.
 	refused atomic.Uint64
 }
 
@@ -100,7 +110,8 @@ func newStats() *Stats {
 }
 
 // exporter returns the counter set of one device, creating it on first use
-// and reporting nil once the process is at its exporter budget.
+// and reporting nil once the process is at its exporter budget. The refusal
+// is counted here, so Decode calls this once per datagram.
 func (s *Stats) exporter(addr netip.Addr, at time.Time) *ExporterStats {
 	now := at.UnixNano()
 
@@ -132,22 +143,6 @@ func (s *Stats) exporter(addr netip.Addr, at time.Time) *ExporterStats {
 	s.exporters[addr] = es
 	s.live.Store(int64(len(s.exporters)))
 	return es
-}
-
-// countError accounts one rejected datagram against its device, or against
-// the budget where the device has none.
-func (s *Stats) countError(addr netip.Addr, version flow.Version, reason string, at time.Time) {
-	if es := s.exporter(addr, at); es != nil {
-		es.countError(version, reason)
-	}
-}
-
-// countFlows accounts one decoded datagram against its device, or against the
-// budget where the device has none.
-func (s *Stats) countFlows(addr netip.Addr, version flow.Version, records int, at time.Time) {
-	if es := s.exporter(addr, at); es != nil {
-		es.countFlows(version, records, at)
-	}
 }
 
 // refusedCount reports how many datagrams the budget left unattributed.

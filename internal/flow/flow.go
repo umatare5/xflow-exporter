@@ -44,7 +44,8 @@ func (v Version) String() string {
 
 // Record is one flow reading normalized from any supported protocol. A field
 // the protocol or the record did not carry stays at its zero value, and the
-// Has* methods below distinguish the zeros where zero is also a legal reading.
+// *Reported flags and Duration's second result distinguish that absence from
+// a zero the device measured.
 type Record struct {
 	// Exporter is the device the datagram came from, unmapped.
 	Exporter netip.Addr
@@ -77,7 +78,8 @@ type Record struct {
 	Bytes   uint64
 	Packets uint64
 	// Flows is how many flows this record aggregates: 1 for a per-flow
-	// protocol, the device's own count for a NetFlow v8 aggregate.
+	// protocol, the device's own count for a NetFlow v8 aggregate that
+	// carries one -- the Catalyst methods 6-8 do not, and read as 1.
 	Flows uint64
 
 	SrcAS uint32
@@ -89,17 +91,21 @@ type Record struct {
 	DstMask uint8
 
 	// Start and End are absolute flow times, zero where the record carried
-	// none. A v5/v9 record dates them relative to the device's uptime, and the
-	// decoder anchors them to the export timestamp.
+	// none. A v5, v8 or v9 record dates them relative to the device's uptime,
+	// and the decoder anchors them to the export timestamp.
 	Start time.Time
 	End   time.Time
 
-	// SamplingRate is the rate the record itself carried (v5 header, sFlow
-	// sample). Zero means the record carried none, not an unsampled export.
+	// SamplingRate is the rate in force for the record: carried by the export
+	// itself on v5 and sFlow, stamped from the observation domain's options
+	// declaration on v9 and IPFIX. Zero means neither declared one, not an
+	// unsampled export.
 	SamplingRate uint32
 
-	// AppID is the applicationId (IE 95) as exported: an 8-bit classification
-	// engine and a 24-bit selector. Zero means the record carried none.
+	// AppID is the applicationId (IE 95) as exported. RFC 6759 sizes the
+	// selector by engine; the value is read as the 4-octet Cisco layout, an
+	// 8-bit engine over a 24-bit selector, which is the split published
+	// downstream. Zero means the record carried none.
 	AppID uint32
 	// AppName and AppCategory are resolved from the device's own application
 	// table options, or carried inline where the vendor exports strings.

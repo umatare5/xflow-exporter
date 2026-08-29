@@ -1,6 +1,6 @@
-// Package cli handles the execution of the CLI application.
 package cli
 
+// version is the string the linker stamps at build time.
 var version = "dev"
 
 func getVersion() string {

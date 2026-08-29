@@ -63,7 +63,6 @@ func TestSetup(t *testing.T) {
 				t.Fatal("Setup() returned nil logger")
 			}
 
-			// Test that logger can be used without panic
 			logger.Info("test message")
 			logger.Debug("debug message")
 			logger.Warn("warning message")
@@ -92,7 +91,6 @@ func TestSetupWithValidFormats(t *testing.T) {
 				t.Errorf("Setup() with format %q returned nil logger", format)
 			}
 
-			// Test logger functionality
 			logger.Info("test message", "format", format)
 		})
 	}
@@ -118,7 +116,6 @@ func TestSetupWithValidLevels(t *testing.T) {
 				t.Errorf("Setup() with level %q returned nil logger", level)
 			}
 
-			// Test logger functionality
 			logger.Info("test message", "level", level)
 		})
 	}
@@ -160,7 +157,6 @@ func TestSetupHandlerTypes(t *testing.T) {
 				t.Fatal("Setup() returned nil logger")
 			}
 
-			// Verify logger works by logging at different levels
 			logger.Debug("debug message")
 			logger.Info("info message")
 			logger.Warn("warn message")
@@ -229,9 +225,7 @@ func TestSetupLogLevels(t *testing.T) {
 				t.Fatal("Setup() returned nil logger")
 			}
 
-			// Test that logger is created successfully
-			// Note: Direct level comparison is not possible with the current API
-			// but we can verify the logger works at different levels
+			// slog exposes no level accessor, so the log call is the check.
 			logger.Log(context.TODO(), tt.expected, "test message")
 		})
 	}
@@ -277,7 +271,6 @@ func TestSetupCaseSensitivity(t *testing.T) {
 				t.Fatal("Setup() returned nil logger")
 			}
 
-			// Verify logger works regardless of case
 			logger.Info("test message", "case", tt.name)
 		})
 	}

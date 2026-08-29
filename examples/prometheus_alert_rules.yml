@@ -113,9 +113,10 @@ groups:
         annotations:
           summary: "xflow-exporter refused an application name it cannot show"
           description: >-
-            A device exported a string that is not valid UTF-8, an
-            application name cut through a multi-byte character by a
-            fixed-width field being the usual cause. The name is dropped,
+            A device exported a string this exporter cannot publish: one that
+            is not valid UTF-8, an application name cut through a multi-byte
+            character by a fixed-width field being the usual cause, or one
+            longer than the 255-byte bound. The name is dropped,
             not the record: one carrying an application id keeps the numbered
             form, 13:453 and the like, --enrich.services can still name one
             from its port, and only a record with neither publishes no

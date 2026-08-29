@@ -1,7 +1,7 @@
-// Package collector provides collectors for xflow-exporter.
 // This file holds the receiver self-monitoring collector. Without it a wedged
 // receiver produces a successful scrape carrying no receiver series, which no
 // alert can detect.
+
 package collector
 
 import (

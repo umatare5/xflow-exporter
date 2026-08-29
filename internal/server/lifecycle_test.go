@@ -51,9 +51,6 @@ func TestNewLifecycleManager(t *testing.T) {
 			if mgr == nil {
 				t.Fatal("NewLifecycleManager() returned nil")
 			}
-
-			// Test that the manager can be created without errors
-			// Since fields are unexported, we can only test the public API
 		})
 	}
 }
@@ -64,7 +61,7 @@ func TestLifecycleManager_RunWithImmediateCancel(t *testing.T) {
 	cfg := &config.Config{
 		Web: config.Web{
 			ListenAddress: "127.0.0.1",
-			ListenPort:    0, // Use port 0 to get an available port
+			ListenPort:    0,
 			TelemetryPath: config.DefaultTelemetryPath,
 		},
 	}
@@ -72,11 +69,9 @@ func TestLifecycleManager_RunWithImmediateCancel(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	mgr := server.NewLifecycleManager(registry, cfg, nil)
 
-	// Create a context that's immediately canceled
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
+	cancel()
 
-	// Run should return without error due to immediate cancellation
 	err := mgr.Run(ctx)
 	if err != nil {
 		t.Errorf("LifecycleManager.Run() with canceled context returned error: %v", err)
@@ -89,7 +84,7 @@ func TestLifecycleManager_RunWithTimeout(t *testing.T) {
 	cfg := &config.Config{
 		Web: config.Web{
 			ListenAddress: "127.0.0.1",
-			ListenPort:    0, // Use port 0 to get an available port
+			ListenPort:    0,
 			TelemetryPath: config.DefaultTelemetryPath,
 		},
 	}
@@ -97,11 +92,9 @@ func TestLifecycleManager_RunWithTimeout(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	mgr := server.NewLifecycleManager(registry, cfg, nil)
 
-	// Create a context with short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	// Run should return without error due to timeout
 	err := mgr.Run(ctx)
 	if err != nil {
 		t.Errorf("LifecycleManager.Run() with timeout returned error: %v", err)
@@ -114,13 +107,13 @@ func TestStartAndServe_WithImmediateCancel(t *testing.T) {
 	cfg := &config.Config{
 		Web: config.Web{
 			ListenAddress: "127.0.0.1",
-			ListenPort:    0, // Use port 0 to get an available port
+			ListenPort:    0,
 			TelemetryPath: config.DefaultTelemetryPath,
 		},
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
+	cancel()
 
 	if err := server.StartAndServe(ctx, cfg, "test-version"); err != nil {
 		t.Errorf("StartAndServe() with canceled context returned error: %v", err)

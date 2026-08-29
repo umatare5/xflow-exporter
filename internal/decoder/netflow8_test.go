@@ -33,7 +33,7 @@ func fixtureBootTime() time.Time {
 }
 
 // The uptime instants every scheme record below carries at the flow-tools
-// offsets, one second apart so a swapped read reports another instant.
+// offsets, ten seconds apart so a swapped read reports another instant.
 const (
 	fixtureV8FirstMs = 10_000
 	fixtureV8LastMs  = 20_000

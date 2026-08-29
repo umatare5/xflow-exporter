@@ -122,7 +122,6 @@ func TestServer_MetricsEndpoint(t *testing.T) {
 		t.Errorf("/metrics status = %v, want %v", w.Code, http.StatusOK)
 	}
 
-	// Check for Prometheus metrics format headers
 	contentType := w.Header().Get("Content-Type")
 	if contentType == "" {
 		t.Error("/metrics missing Content-Type header")
@@ -201,13 +200,10 @@ func TestServer_NotFoundEndpoint(t *testing.T) {
 
 	srv.Handler.ServeHTTP(w, req)
 
-	// Note: Since "/" handler acts as catch-all, non-existent paths return 200
-	// This is expected behavior with the current server implementation
 	if w.Code != http.StatusOK {
 		t.Errorf("/nonexistent status = %v, want %v", w.Code, http.StatusOK)
 	}
 
-	// Verify that the root page content is served for non-existent paths
 	body := w.Body.String()
 	if !strings.Contains(body, "xflow-exporter") {
 		t.Error("/nonexistent should serve root page content")
@@ -231,7 +227,6 @@ func TestServer_HTTPMethods(t *testing.T) {
 
 			srv.Handler.ServeHTTP(w, req)
 
-			// Health endpoint should accept all HTTP methods
 			if w.Code != http.StatusOK {
 				t.Errorf("/healthz %s status = %v, want %v", method, w.Code, http.StatusOK)
 			}

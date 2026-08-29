@@ -1,6 +1,6 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file parses NetFlow v5, the fixed-format original that J-Flow v5
 // shares byte for byte.
+
 package decoder
 
 import (

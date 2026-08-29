@@ -2,16 +2,19 @@
 
 Every listener accepts every protocol below, identified per datagram. Transport is plaintext UDP.
 
-| Protocol                                                | Status    |
-| :------------------------------------------------------ | :-------- |
-| [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported |
-| [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported |
-| [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported |
-| [NetFlow-Lite](#netflow-lite) (packet sections)         | Supported |
-| [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported |
-| [sFlow v5](#sflow-v5)                                   | Supported |
+| Protocol                                                | Status    | Verified on       |
+| :------------------------------------------------------ | :-------- | :---------------- |
+| [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Awaiting a device |
+| [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Awaiting a device |
+| [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Catalyst 2960-CX  |
+| [NetFlow-Lite](#netflow-lite) (packet sections)         | Supported | Catalyst 2960-CX  |
+| [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Awaiting a device |
+| [sFlow v5](#sflow-v5)                                   | Supported | Awaiting a device |
 
-> [!Note]
+> [!NOTE]
+> **Verified on** names the device whose own export this decoder was read against. Synthetic datagrams and unit tests do not count, so a protocol awaiting a device is implemented and covered by fixtures but never measured. The Catalyst 2960-CX is a `C2960CX-UNIVERSALK9-M` 15.2(7)E3 running NetFlow-Lite, which exports NetFlow v9 — under a custom record carrying a parsed 5-tuple, so the packet-section path within NetFlow-Lite is itself still awaiting a device.
+
+> [!NOTE]
 > DTLS is not supported. No shipping network OS exports flows over DTLS, and Go has no production DTLS 1.3 implementation yet.
 
 ## Version identification
@@ -107,8 +110,6 @@ A 24-byte header followed by 1 to 30 fixed records. Trailing bytes past the clai
 | 44–45 | `src_mask` / `dst_mask` | Prefix lengths in bits                |
 | 46–47 | `pad2`                  | Padding                               |
 
-The `first` and `last` instants are device uptime, so the boot instant is reconstructed from `unix_secs` less `SysUptime` and the pair is anchored against it.
-
 ## NetFlow v8
 
 Router-aggregated exports, all fourteen methods of aggregation export version 2. A v8 record carries only its method's dimensions — the rest stay absent rather than zero.
@@ -163,7 +164,7 @@ The v5 header through byte 21, then the aggregation selector. The record length 
 | 13     | ToS and prefix                | 40           |
 | 14     | ToS, prefix and port          | 40           |
 
-Methods 1–5 and 9–14 open with the `dFlows`/`dPkts`/`dOctets` triple and place the flow instants at bytes 12 and 16. The Catalyst methods 6–8 lead with their address fields instead, carry no flow count of their own, and push the instants to 12, 16 and 20 respectively. Field offsets follow the flow-tools reference structures, mirrored in [netflow8.go](../internal/decoder/netflow8.go).
+Methods 1–5 and 9–14 open with the `dFlows`/`dPkts`/`dOctets` triple and place the flow instants at bytes 12 and 16. The Catalyst methods 6–8 lead with their address fields instead and carry no flow count of their own; method 6 keeps the instants at the common 12 and 16, methods 7 and 8 push them to 16/20 and 20/24.
 
 ### Record layout
 
@@ -223,8 +224,8 @@ Method 8, full flow, is the shape the Catalyst family shares: addresses first, n
 
 Templates are cached per exporter address and Observation Domain ID together, as RFC 7011 requires, and per protocol besides. The pair RFC 7011 names is not enough here: a v9 Source ID, an IPFIX Observation Domain ID and an sFlow sub-agent id are unrelated numbers over one range, and 0 is the default all three take, so a device exporting two protocols at once from one address has them collide out of the box. The 256 floor RFC 7011 sets is on template ids, not on these. With the protocol in the key, two domains reusing one template ID never corrupt each other.
 
-- A template declaring a zero-width fixed field, or more than `--parser.max-fields-per-template` fields, is refused as `invalid_template`.
-- A template unrefreshed for `--parser.template-ttl` expires, and `missing_template` is expected after a restart until each device re-announces.
+- A template declaring a zero-width fixed field, more than `--parser.max-fields-per-template` fields, or specifiers that overrun their set is refused as `invalid_template`.
+- A template unrefreshed for `--parser.template-ttl` expires — an orphaned template may describe a schema the device has replaced — and `missing_template` is expected after a restart until each device re-announces.
 - IPFIX adds enterprise information elements, bounds-checked variable-length fields, and template withdrawals.
 
 ### NetFlow v9 packet layout
@@ -275,9 +276,6 @@ The header itself is fixed.
 | 8–11  | UNIX Seconds    | Export instant, seconds since the epoch         |
 | 12–15 | Sequence Number | Export packets sent, not flows                  |
 | 16–19 | Source ID       | The Observation Domain ID part of the cache key |
-
-> [!Note]
-> The v9 sequence number counts export packets, a change from the "total flows" the v5 and v8 headers carried. IPFIX changes it again, to data records.
 
 ### FlowSets
 
@@ -370,12 +368,12 @@ An options template record replaces the Field Count with two byte lengths: Optio
 | `0x0004`    | NetFlow Cache | One cache             |
 | `0x0005`    | Template      | One template          |
 
-> [!Note]
+> [!NOTE]
 > A zero-length scope field occurs in the wild as a bare system scope, so it is accepted. A zero-length option field is still refused as `invalid_template`.
 
 ### Field types
 
-Field types are 16-bit and vendor-assigned. Cisco defines 1–104 consistently across every platform it ships, reserves 105–127, and refers 128–32768 to the IANA IPFIX registry. Counters are declared as a variable width `N`, so `IN_BYTES` is a 32-bit counter on an access router and a 64-bit one on a core router without any format change.
+Field types are 16-bit and vendor-assigned. Cisco defines 1–104 consistently across every platform it ships, reserves 105–127, and refers 128–32767 to the IANA IPFIX registry. Counters are declared as a variable width `N`, so `IN_BYTES` is a 32-bit counter on an access router and a 64-bit one on a core router without any format change.
 
 | Type    | Name                                                | Length       |
 | :------ | :-------------------------------------------------- | :----------- |
@@ -393,7 +391,7 @@ Field types are 16-bit and vendor-assigned. Cisco defines 1–104 consistently a
 | 34, 50  | `SAMPLING_INTERVAL`, `FLOW_SAMPLER_RANDOM_INTERVAL` | 4 each       |
 | 150–153 | `flowStart`/`flowEnd`, seconds and milliseconds     | 4, 8         |
 
-The uptime-relative pair 21 and 22 is what classic NetFlow exports; Flexible NetFlow templates may carry the absolute clocks 150–153 instead, and both are read. [fields.go](../internal/decoder/fields.go) is authoritative for the full set consumed, and every other type is skipped over by its declared length.
+The uptime-relative pair 21 and 22 is what classic NetFlow exports; Flexible NetFlow templates may carry the absolute clocks 150–153 instead, and both are read. [`fields.go`](../internal/decoder/fields.go) is authoritative for the full set consumed, and every other type is skipped over by its declared length.
 
 ### IPFIX packet layout
 
@@ -427,7 +425,7 @@ A 16-byte message header, then Sets that frame exactly as v9 FlowSets do.
 | :---------------- | :----------------------- | :---------------------------- |
 | Template set ID   | 0                        | 2                             |
 | Options set ID    | 1                        | 3                             |
-| Reserved set IDs  | 2–255                    | 4–255                         |
+| Reserved set IDs  | 2–255                    | 0–1 and 4–255                 |
 | Message length    | Absent, count of records | Bytes 2–3                     |
 | Sequence counts   | Export packets           | Data records                  |
 | Options head      | Two byte lengths         | Field count, scope count      |
@@ -452,10 +450,10 @@ The enterprise bit is what makes an IPFIX field specifier variable in size.
 
 ## NetFlow-Lite
 
-Catalyst 2960-X/XR, 2960-CX, 3560-CX and 4948E ship one sampled packet section per v9 or IPFIX record. Sections decode through the same header walk the sFlow decoder uses.
+Catalyst 2960-X/XR, 2960-CX, 3560-CX and 4948E are documented as shipping one sampled packet section per v9 or IPFIX record. Sections decode through the same header walk the sFlow decoder uses.
 
-- Elements: the deprecated v9 field 104 (`layer2packetSectionData`, the measured device behaviour), and IPFIX `dataLinkFrameSection` (315), `ipHeaderPacketSection` (313), `dataLinkFrameSize` (312).
-- Fields the device parsed itself win over the section, and one record reads as one sampled packet.
+- Elements: the deprecated v9 field 104 (`layer2packetSectionData`), and IPFIX `dataLinkFrameSection` (315), `ipHeaderPacketSection` (313), `dataLinkFrameSize` (312).
+- The section is walked only where the record carries neither address, so the device's own parse wins; the walk then supplies the addresses, protocol, TOS, ports and flags. One record reads as one sampled packet.
 - The 309/310 `samplingSize`/`samplingPopulation` options pair feeds the sampling correction.
 
 | Element                   | ID  | Carries                                     |
@@ -465,13 +463,18 @@ Catalyst 2960-X/XR, 2960-CX, 3560-CX and 4948E ship one sampled packet section p
 | `ipHeaderPacketSection`   | 313 | A section that starts at the IP header      |
 | `dataLinkFrameSize`       | 312 | The original frame length, before slicing   |
 
-The white paper's own table gives no length for 104, nor for the offset and size elements 102 and 103 beside it. The measured device behaviour is what this exporter parses.
+A fixed-width v9 section is zero-padded, so a frame cut before its transport header reads zero ports — and a flags profile of `none` from the padded flags byte — the one ambiguity a padded section cannot escape.
+
+The white paper's own table gives no length for 104, nor for the offset and size elements 102 and 103 beside it, so the section is taken at whatever width the template declares for the field.
+
+> [!IMPORTANT]
+> No device available here exports a section, so this path is covered by fixtures alone — the table at the top of this page carries what each decoder has met.
 
 ## sFlow v5
 
 Flow samples, compact and expanded, decode from the raw Ethernet header — through stacked VLAN tags to IPv4/IPv6 and the TCP/UDP ports — and from the pre-parsed sampled IPv4/IPv6 records. A sampled header cut short keeps the layers that decoded.
 
-> [!Note]
+> [!NOTE]
 > Counter samples are out of scope: they carry interface statistics, not traffic.
 
 ### Datagram layout
@@ -560,7 +563,7 @@ The records follow, each a type, a length and its body, framed exactly as the sa
 | 4      | Sampled IPv6      | Decoded, pre-parsed              |
 | ≥ 1001 | Extended data     | Skipped, it annotates the sample |
 
-A raw packet header record is a header protocol, the original frame length, the stripped byte count, the header length, and then the header itself. Only protocol `1`, Ethernet, is read, and the frame length rather than the captured length is what the byte counter takes.
+A raw packet header record is a header protocol, the original frame length, the stripped byte count, the header length, and then the header itself. Only protocol `1`, Ethernet, is read — any other header protocol is refused and counted `malformed` — and the frame length rather than the captured length is what the byte counter takes.
 
 ```text
  0                   1                   2                   3
@@ -591,11 +594,11 @@ Options templates feed the packet sampling rate, preferred in this order: the PS
 | 50       | Random-sampler interval     | Third      |
 | 34       | Legacy sampling interval    | Last       |
 
-Cisco AVC application tables resolve each record's `applicationId` (IE 95) into the name and category the device itself declared. PAN-OS App-ID strings ride v9 records through the same string interner, so one name allocates once rather than per flow. The User-ID beside them is not read: a user identity is high-cardinality and personally identifying, so no series would be allowed to carry it.
+Cisco AVC application tables resolve each record's `applicationId` (IE 95) into the name and category the device itself declared. A vendor that instead embeds the name in the record rides the same string interner, so one name allocates once rather than per flow. A user identity carried beside it is not read: it is high-cardinality and personally identifying, so no series would be allowed to carry it.
 
-- IE 95 is 8 bits of engine ID followed by the classification, and IE 96 carries the name an options record binds to it.
+- IE 95 is 8 bits of engine ID followed by the selector, and IE 96 carries the name an options record binds to it.
 - The category arrives under Cisco's private enterprise number 9 as element 12232, so it is IPFIX-only. It is decoded and held per exporter, and no series carries it: a category label would read `unknown` on every device that exports no AVC.
-- PAN-OS carries its application name in v9 field 56701, outside the IANA range and vendor-assigned.
+- A v9 field of 56701 is read as an embedded application name, that number being outside the IANA range and vendor-assigned.
 
 ## References
 
@@ -618,7 +621,7 @@ Four of these need a caveat before they are read as normative.
 - **RFC 5655 is the IPFIX _file_ format,** the on-disk serialization of a message stream. The wire protocol this exporter decodes is RFC 7011, which obsoleted RFC 5101; RFC 7012 carries the information model.
 - **RFC 3176 is sFlow v4,** Informational and never endorsed by the IETF. sFlow v5 is not an RFC at all — it is the sflow.org specification, and v5 is what this exporter decodes.
 - **The Cisco white paper covers v9 alone,** despite the version 5, 8 and 9 title it is usually cited under. It is the format of record for the v9 header, FlowSets and field-type numbers, and for nothing earlier.
-- **NetFlow v8 has no public format document.** The aggregation record layouts above come from the flow-tools reference structures, which is what [netflow8.go](../internal/decoder/netflow8.go) mirrors.
+- **NetFlow v8 has no public format document.** The aggregation record layouts above come from the flow-tools reference structures, which is what [`netflow8.go`](../internal/decoder/netflow8.go) mirrors.
 
 J-Flow v5 is the Cisco v5 record byte for byte, and Juniper documents the field list without offsets. J-Flow v9 is NetFlow v9 with one Juniper reading: the Source ID names the exporting PIC by its IFD SNMP index, where Cisco splits the same word into engine type and engine ID.
 

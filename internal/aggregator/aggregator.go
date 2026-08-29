@@ -142,8 +142,9 @@ type Aggregator struct {
 	exporters *table[ExporterKey]
 	hosts     *table[HostKey]
 	services  *table[ServiceKey]
-	// destinations holds the same records as services keyed without the
-	// source, so it is enabled and swept independently of it.
+	// destinations is the aggregation services becomes without the source,
+	// so it also admits a record whose source never resolved. It is enabled
+	// and swept independently of services.
 	destinations *table[DestinationKey]
 	tcpFlags     *table[TCPFlagsKey]
 	dscp         *table[DSCPKey]

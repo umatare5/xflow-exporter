@@ -27,7 +27,7 @@ help:
 	@echo ""
 	@echo "Requirements:"
 	@echo "  - gotestsum: go install gotest.tools/gotestsum@latest"
-	@echo "  - golangci-lint: https://golangci-lint.run/usage/install/"
+	@echo "  - golangci-lint: https://golangci-lint.run/docs/welcome/install/local/"
 
 build: $(BINARY_PATH)
 

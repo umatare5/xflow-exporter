@@ -1,4 +1,5 @@
-// Package server provides HTTP server lifecycle management for Prometheus exporters.
+// This file holds startup wiring, signal handling and graceful shutdown.
+
 package server
 
 import (
@@ -53,7 +54,7 @@ func NewLifecycleManager(registry *prometheus.Registry, cfg *config.Config, relo
 }
 
 // StartAndServe creates the receiver and the collectors, sets up the server,
-// and starts serving. It handles the complete lifecycle from setup to shutdown.
+// and starts serving.
 func StartAndServe(ctx context.Context, cfg *config.Config, version string) error {
 	slog.Info("Starting xflow-exporter",
 		"version", version,
@@ -83,7 +84,6 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		Threats:      cfg.Collectors.Threats,
 	}
 
-	// Create and setup collector manager
 	collectorMgr := collector.NewCollector(cfg)
 	collectorMgr.Setup(version)
 	collectorMgr.RegisterReceiverCollector(recv)
@@ -150,8 +150,8 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		sweepDomains(ctx, dec, cfg.Parser.TemplateTTL)
 	}()
 
-	// Decode workers consume the queue. Records are decoded and accounted,
-	// then discarded until the aggregator lands.
+	// Decode workers consume the queue. Each record is enriched, then fed to
+	// the aggregation tables and the distributions.
 	workers := cfg.Receiver.Workers
 	if workers == 0 {
 		workers = runtime.GOMAXPROCS(0)
@@ -165,8 +165,6 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		}()
 	}
 
-	// The remote write client reads the same registry a scrape reads, so
-	// shipping changes no series and no value.
 	remoteDone := make(chan struct{})
 	if cfg.RemoteWrite.Enabled() {
 		writer, werr := remotewrite.New(cfg.RemoteWrite, collectorMgr.Registry())
@@ -184,7 +182,6 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		close(remoteDone)
 	}
 
-	// Create and run server lifecycle manager
 	serverMgr := NewLifecycleManager(collectorMgr.Registry(), cfg, chain)
 	err = serverMgr.Run(ctx)
 
@@ -257,8 +254,6 @@ func sweepDomains(ctx context.Context, dec *decoder.Decoder, ttl time.Duration) 
 			if evicted := dec.SweepDomains(); evicted > 0 {
 				slog.Debug("Swept idle observation domains", "evicted", evicted)
 			}
-			// Only once the exporter budget is reached, so a device that has
-			// simply gone quiet keeps the freshness series that says so.
 			if evicted := dec.SweepExporters(); evicted > 0 {
 				slog.Debug("Swept idle exporters", "evicted", evicted)
 			}
@@ -339,7 +334,6 @@ func decodeLoop(
 // Run starts the HTTP server and handles graceful shutdown.
 // It blocks until the server is shut down or an error occurs.
 func (lm *LifecycleManager) Run(ctx context.Context) error {
-	// Setup graceful shutdown context
 	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -349,7 +343,6 @@ func (lm *LifecycleManager) Run(ctx context.Context) error {
 	stopHangup := lm.watchHangup(ctx)
 	defer stopHangup()
 
-	// Start server in goroutine
 	errCh := make(chan error, 1)
 	go func() {
 		slog.Info("HTTP server listening", "addr", lm.server.Addr)
@@ -358,7 +351,6 @@ func (lm *LifecycleManager) Run(ctx context.Context) error {
 		}
 	}()
 
-	// Wait for shutdown signal or server error
 	select {
 	case <-ctx.Done():
 		slog.Info("Shutdown signal received")
@@ -366,7 +358,6 @@ func (lm *LifecycleManager) Run(ctx context.Context) error {
 		return err
 	}
 
-	// Graceful shutdown with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 

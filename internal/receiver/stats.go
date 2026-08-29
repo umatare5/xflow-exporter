@@ -1,5 +1,5 @@
-// Package receiver provides the UDP listeners flow datagrams arrive on.
 // This file holds the counters the read loops write and a scrape reads.
+
 package receiver
 
 import (

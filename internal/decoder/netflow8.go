@@ -1,6 +1,6 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file parses NetFlow v8, the router-aggregated legacy format J-Flow v8
 // shares. Field layouts follow the flow-tools reference implementation.
+
 package decoder
 
 import (
@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	// netflowV8HeaderLen is fixed by the format: the v5 header plus the
-	// aggregation method, its export version, and four reserved bytes.
+	// netflowV8HeaderLen is fixed by the format: the v5 header with its
+	// sampling halfword replaced by the aggregation method and that method's
+	// export version, plus four reserved bytes.
 	netflowV8HeaderLen = 28
 	// netflowV8AggVersion is the only aggregation export version ever
 	// shipped; flow-tools rejects everything else and so does this parser.
@@ -101,9 +102,10 @@ func decodeNetFlowV8(exporter netip.Addr, payload []byte, dst []flow.Record) ([]
 	return dst, nil
 }
 
-// anchorV8Times converts the record's uptime-relative instants. The Catalyst
-// methods 6-8 place First and Last after their leading address fields; every
-// other method keeps them at the flow-tools common offsets 12 and 16.
+// anchorV8Times converts the record's uptime-relative instants. What precedes
+// them is 12 bytes on every method but the Catalyst pair 7 and 8, which carry
+// a second address and, on 8, both ports before the counters -- so only those
+// two move First and Last off the flow-tools common offsets 12 and 16.
 func anchorV8Times(record []byte, dst *flow.Record, bootTime time.Time, aggregation uint8) {
 	firstAt, lastAt := 12, 16
 	switch aggregation {

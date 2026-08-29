@@ -15,8 +15,15 @@
 - `cmd/` — Entry point (`main.go`), which calls `internal/cli` for app setup
 - `internal/cli/` — CLI flag definitions and app wiring (urfave/cli/v3)
 - `internal/config/` — flag/env parsing, defaults (`0.0.0.0:10052`), and validation
-- `internal/server/` — HTTP server (`/metrics`, `/healthz`, `/`), graceful shutdown
+- `internal/receiver/` — UDP listeners and the datagram queue the decoders read
+- `internal/decoder/` — NetFlow v5/v8/v9, IPFIX and sFlow v5 parsers, and the template store
+- `internal/flow/` — the normalized record every decoder produces
+- `internal/enrich/` — fills dimensions the device did not export, from local sources
+- `internal/aggregator/` — bounded in-memory tables the collectors read at scrape time
 - `internal/collector/` — `prometheus.Collector` implementations and registry management
+- `internal/remotewrite/` — ships the registry to a Remote Write 2.0 endpoint
+- `internal/pool/` — generic object pool used on the receive path
+- `internal/server/` — HTTP server (`/metrics`, `/healthz`, `/-/reload`, `/`), graceful shutdown
 - `internal/log/` — `log/slog` setup and structured logging helpers
 
 ## Setup and Commands
@@ -26,7 +33,7 @@ Install required tools (one-time):
 - `go install gotest.tools/gotestsum@latest`
 - `golangci-lint` - See <https://golangci-lint.run/docs/welcome/install/local/>
 - `goreleaser` release builds (see [.goreleaser.yml](.goreleaser.yml))
-- `pre-commit install` wires `golangci-lint`, `gofmt`, `markdownlint-cli2`, `gitleaks` (see [.pre-commit-config.yaml](.pre-commit-config.yaml))
+- `pre-commit install` wires `golangci-lint` with the formatters from [.golangci.yml](.golangci.yml), `markdownlint-cli2` and `gitleaks` (see [.pre-commit-config.yaml](.pre-commit-config.yaml))
 
 Make targets ([Makefile](Makefile)):
 
@@ -39,7 +46,7 @@ Make targets ([Makefile](Makefile)):
 
 ## Code Style
 
-- `gofmt` and `golangci-lint` are enforced by the pre-commit hook (see [.pre-commit-config.yaml](.pre-commit-config.yaml)).
+- Linting and formatting are enforced by `golangci-lint` in the pre-commit hook (see [.golangci.yml](.golangci.yml)).
 - Comments record only what the code cannot say, and never address the reader.
 
 ## Testing Instructions

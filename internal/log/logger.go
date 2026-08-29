@@ -29,7 +29,6 @@ func Setup(cfg config.Log) *slog.Logger {
 	return slog.New(handler)
 }
 
-// parseLogLevel converts string log level to slog.Level.
 func parseLogLevel(level string) slog.Level {
 	switch strings.ToLower(level) {
 	case "debug":

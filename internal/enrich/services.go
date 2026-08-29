@@ -1,6 +1,5 @@
-// Package enrich fills flow record dimensions the exporting device did not
-// carry, from sources local to this exporter.
 // This file names an application from the transport port.
+
 package enrich
 
 import (

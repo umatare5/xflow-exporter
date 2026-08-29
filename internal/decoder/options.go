@@ -1,6 +1,6 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file consumes options records: the sampling configuration and the
 // Cisco AVC application tables both protocols announce through them.
+
 package decoder
 
 import (

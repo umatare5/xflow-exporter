@@ -23,16 +23,11 @@ scrape_configs:
     #                            so a body of several thousand samples becomes
     #                            a handful. Each family arrives whole, its
     #                            entry-bound fold included.
-    #   metric_relabel_configs   the scrape happens in full and the drop is
-    #                            applied on arrival, so the wire and the
-    #                            exporter's scrape cost are unchanged. What it
-    #                            buys is selection by label, which name[] has
-    #                            no way to express.
-    #   sample_limit             a circuit breaker, not a limiter. Exceeding it
-    #                            fails the whole scrape and the target reads
-    #                            up == 0; nothing is stored, so it protects the
-    #                            store by losing the window rather than by
-    #                            trimming it.
+    #   metric_relabel_configs   drops after the full scrape: selection by
+    #                            label, which name[] cannot express.
+    #   sample_limit             fails the whole scrape when exceeded, and the
+    #                            target reads up == 0: a circuit breaker, not
+    #                            a trim.
     #
     # The address-keyed families are where cardinality accumulates:
     # xflow_host_pair_*, xflow_service_*, xflow_destination_* and xflow_threat_*

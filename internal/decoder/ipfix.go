@@ -1,5 +1,5 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file parses IPFIX (RFC 7011), NetFlow v10 in the version field.
+
 package decoder
 
 import (
@@ -12,8 +12,8 @@ import (
 
 const (
 	ipfixHeaderLen = 16
-	// IPFIX set ids: 2 announces templates, 3 options templates, 4-255 are
-	// reserved, and data sets start at minDataSetID like v9.
+	// IPFIX set ids: 2 announces templates, 3 options templates, and data
+	// sets start at minDataSetID like v9; 0-1 are unused and 4-255 reserved.
 	ipfixTemplateSetID        = 2
 	ipfixOptionsTemplateSetID = 3
 	// variableFieldLength marks an IPFIX variable-length field, whose actual
