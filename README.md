@@ -79,9 +79,15 @@ Each data collector is enabled per module:
 | `--collector.asns`          | Traffic per AS pair from device-exported numbers |
 | `--collector.applications`  | Traffic per AVC / App-ID / applicationId name    |
 | `--collector.countries`     | Traffic per country pair, needs a country database   |
+| `--collector.threats`       | Traffic per flagged address, needs an API key    |
 | `--collector.distributions` | Flow size and duration native histograms         |
 
-Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from its port, and `--enrich.asn-database` and `--enrich.country-database` read MaxMind-format files held locally. See [docs/README.md](docs/README.md#enrichment).
+Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from its port, and `--enrich.asn-database` and `--enrich.country-database` read MaxMind-format files held locally, and `--enrich.threat-api-key` flags addresses against AbuseIPDB. See [docs/README.md](docs/README.md#enrichment).
+
+> [!CAUTION]
+> The reputation source is the only part of this exporter that talks to a third party. It sends **public** addresses to AbuseIPDB and never the ones your network assigns itself.
+
+`--remote-write.url` ships the same registry to a Remote Write 2.0 endpoint for the deployments a scrape cannot reach, alongside or instead of `/metrics`.
 
 The operational knobs live under `--receiver.*`, `--parser.*` and `--aggregation.*`. On Linux the read loops use `recvmmsg` batching — other platforms read one datagram per call.
 
@@ -105,6 +111,7 @@ This exporter aggregates flows into six modules, documented in [docs/collectors.
 | `asns`          | `xflow_asn_pair_bytes_total`     | `exporter,src_asn,dst_asn`         |
 | `applications`  | `xflow_application_bytes_total`  | `exporter,application`             |
 | `countries`     | `xflow_country_pair_bytes_total` | `exporter,src_country,dst_country` |
+| `threats`       | `xflow_threat_bytes_total`       | `exporter,address,direction`       |
 | `distributions` | `xflow_flow_bytes`               | `exporter` — native histogram      |
 
 See [docs/README.md](docs/README.md) for the absence, folding, eviction and sampling-correction semantics every module shares.

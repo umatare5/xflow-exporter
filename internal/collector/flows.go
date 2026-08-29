@@ -26,6 +26,7 @@ type FlowSource interface {
 	ASNs() ([]aggregator.EntrySnapshot[aggregator.ASNKey], aggregator.Totals)
 	Applications() ([]aggregator.EntrySnapshot[aggregator.AppKey], aggregator.Totals)
 	Countries() ([]aggregator.EntrySnapshot[aggregator.CountryKey], aggregator.Totals)
+	Threats() ([]aggregator.EntrySnapshot[aggregator.ThreatKey], aggregator.Totals)
 	Health() []aggregator.TableHealth
 }
 
@@ -76,6 +77,7 @@ type FlowCollector struct {
 	asns         familyDescs
 	applications familyDescs
 	countries    familyDescs
+	threats      familyDescs
 
 	entriesDesc   *prometheus.Desc
 	evictionsDesc *prometheus.Desc
@@ -130,6 +132,10 @@ func NewFlowCollector(src FlowSource, modules config.Collectors, agg config.Aggr
 		c.countries = newFamilyDescs("xflow_country_pair", "country pair",
 			[]string{labelExporter, labelSrcCountry, labelDstCountry})
 	}
+	if modules.Threats {
+		c.threats = newFamilyDescs("xflow_threat", "flagged address",
+			[]string{labelExporter, labelAddress, labelDirection})
+	}
 
 	return c
 }
@@ -153,6 +159,9 @@ func (c *FlowCollector) Describe(ch chan<- *prometheus.Desc) {
 	}
 	if c.modules.Countries {
 		c.countries.describe(ch)
+	}
+	if c.modules.Threats {
+		c.threats.describe(ch)
 	}
 	ch <- c.entriesDesc
 	ch <- c.evictionsDesc
@@ -178,6 +187,9 @@ func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 	if c.modules.Countries {
 		collectFamily(c, ch, &c.countries, c.src.Countries, countryLabels)
+	}
+	if c.modules.Threats {
+		collectFamily(c, ch, &c.threats, c.src.Threats, threatLabels)
 	}
 
 	c.collectHealth(ch)
@@ -283,6 +295,11 @@ func appLabels(k aggregator.AppKey) []string {
 // tell from a label that was never set.
 func countryLabels(k aggregator.CountryKey) []string {
 	return []string{k.Exporter.String(), countryLabel(k.Src), countryLabel(k.Dst)}
+}
+
+// threatLabels renders one flagged address and the side it was seen on.
+func threatLabels(k aggregator.ThreatKey) []string {
+	return []string{k.Exporter.String(), k.Address.String(), k.Direction}
 }
 
 // countryLabel spells one side of a pair.

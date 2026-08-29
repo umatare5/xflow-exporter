@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"net/url"
 	"path"
 	"slices"
 	"strconv"
@@ -51,6 +52,25 @@ const (
 	// silence means the template is orphaned.
 	DefaultParserTemplateTTL = 30 * time.Minute
 
+	// DefaultThreatThreshold is the abuse confidence at or above which an
+	// address is flagged. AbuseIPDB scores 0 to 100.
+	DefaultThreatThreshold = 50
+	// DefaultThreatCacheTTL is how long a verdict is reused. A reputation
+	// changes over days, not seconds, and the cache is what keeps the
+	// request rate off the flow rate.
+	DefaultThreatCacheTTL = 6 * time.Hour
+	// DefaultThreatCacheSize bounds the verdicts held.
+	DefaultThreatCacheSize = 65536
+	// DefaultThreatTimeout bounds one lookup.
+	DefaultThreatTimeout = 5 * time.Second
+
+	// DefaultRemoteWriteInterval is how often the registry is shipped. It
+	// matches a conventional scrape interval, the remote endpoint seeing the
+	// same resolution a scrape would have given it.
+	DefaultRemoteWriteInterval = 60 * time.Second
+	// DefaultRemoteWriteTimeout bounds one write.
+	DefaultRemoteWriteTimeout = 30 * time.Second
+
 	// DefaultAggregationEntryTTL is how long an idle aggregation entry stays
 	// before eviction removes it, and its series with it.
 	DefaultAggregationEntryTTL = 15 * time.Minute
@@ -78,6 +98,7 @@ type Config struct {
 	Aggregation       Aggregation       `json:"aggregation"`
 	Collectors        Collectors        `json:"collectors"`
 	Enrichment        Enrichment        `json:"enrichment"`
+	RemoteWrite       RemoteWrite       `json:"remote_write"`
 	Log               Log               `json:"log"`
 	InternalCollector InternalCollector `json:"internal_collector"`
 	DryRun            bool              `json:"dry_run"`
@@ -124,6 +145,7 @@ type Collectors struct {
 	ASNs          bool `json:"asns"`
 	Applications  bool `json:"applications"`
 	Countries     bool `json:"countries"`
+	Threats       bool `json:"threats"`
 	Distributions bool `json:"distributions"`
 }
 
@@ -134,6 +156,34 @@ type Enrichment struct {
 	Services        bool   `json:"services"`
 	ASNDatabase     string `json:"asn_database"`
 	CountryDatabase string `json:"country_database"`
+	Threat          Threat `json:"threat"`
+}
+
+// Threat holds the reputation lookup configuration. The API key is never
+// serialized: it authenticates to a third party.
+type Threat struct {
+	APIKey    string        `json:"-"`
+	Threshold int           `json:"threshold"`
+	CacheTTL  time.Duration `json:"cache_ttl"`
+	CacheSize int           `json:"cache_size"`
+	Timeout   time.Duration `json:"timeout"`
+}
+
+// RemoteWrite holds the Remote Write 2.0 client configuration. It is off
+// until a URL is set, and shipping changes no series a scrape would see: the
+// writer reads the same registry.
+type RemoteWrite struct {
+	URL      string            `json:"url"`
+	Interval time.Duration     `json:"interval"`
+	Timeout  time.Duration     `json:"timeout"`
+	Username string            `json:"username"`
+	Password string            `json:"-"`
+	Headers  map[string]string `json:"headers"`
+}
+
+// Enabled reports whether a remote endpoint is configured.
+func (r RemoteWrite) Enabled() bool {
+	return strings.TrimSpace(r.URL) != ""
 }
 
 // Log holds logging configuration.
@@ -178,6 +228,13 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			Services:        cmd.Bool("enrich.services"),
 			ASNDatabase:     cmd.String("enrich.asn-database"),
 			CountryDatabase: cmd.String("enrich.country-database"),
+			Threat: Threat{
+				APIKey:    cmd.String("enrich.threat-api-key"),
+				Threshold: cmd.Int("enrich.threat-threshold"),
+				CacheTTL:  cmd.Duration("enrich.threat-cache-ttl"),
+				CacheSize: cmd.Int("enrich.threat-cache-size"),
+				Timeout:   cmd.Duration("enrich.threat-timeout"),
+			},
 		},
 		Collectors: Collectors{
 			Exporters:     cmd.Bool("collector.exporters"),
@@ -186,7 +243,16 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			ASNs:          cmd.Bool("collector.asns"),
 			Applications:  cmd.Bool("collector.applications"),
 			Countries:     cmd.Bool("collector.countries"),
+			Threats:       cmd.Bool("collector.threats"),
 			Distributions: cmd.Bool("collector.distributions"),
+		},
+		RemoteWrite: RemoteWrite{
+			URL:      cmd.String("remote-write.url"),
+			Interval: cmd.Duration("remote-write.interval"),
+			Timeout:  cmd.Duration("remote-write.timeout"),
+			Username: cmd.String("remote-write.username"),
+			Password: cmd.String("remote-write.password"),
+			Headers:  parseHeaders(cmd.StringSlice("remote-write.header")),
 		},
 		Log: Log{
 			Level:  cmd.String("log.level"),
@@ -271,7 +337,81 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("aggregation validation failed: %w", err)
 	}
 
+	if err := c.validateRemoteWrite(); err != nil {
+		return fmt.Errorf("remote write validation failed: %w", err)
+	}
+
 	return nil
+}
+
+// validateRemoteWrite validates the remote write client.
+func (c *Config) validateRemoteWrite() error {
+	r := &c.RemoteWrite
+	if !r.Enabled() {
+		return nil
+	}
+
+	parsed, err := url.Parse(r.URL)
+	if err != nil {
+		return fmt.Errorf("invalid remote write URL %q: %w", r.URL, err)
+	}
+
+	validationRules := []struct {
+		condition bool
+		message   string
+	}{
+		{
+			parsed.Scheme != "http" && parsed.Scheme != "https",
+			"remote write URL must be http or https: " + r.URL,
+		},
+		{
+			parsed.Host == "",
+			"remote write URL must carry a host: " + r.URL,
+		},
+		{
+			r.Interval <= 0,
+			fmt.Sprintf("remote write interval must be positive, got: %v", r.Interval),
+		},
+		{
+			r.Timeout <= 0,
+			fmt.Sprintf("remote write timeout must be positive, got: %v", r.Timeout),
+		},
+		{
+			r.Username == "" && r.Password != "",
+			"remote write password is set without a username",
+		},
+	}
+
+	for _, rule := range validationRules {
+		if rule.condition {
+			return errors.New(rule.message)
+		}
+	}
+
+	return nil
+}
+
+// parseHeaders turns the repeatable name=value flag into a map. A malformed
+// entry is dropped rather than failing startup: the flag is additive, and a
+// header nobody asked for is not worth refusing to run over.
+func parseHeaders(entries []string) map[string]string {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	headers := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		name, value, found := strings.Cut(entry, "=")
+		name = strings.TrimSpace(name)
+		if !found || name == "" {
+			continue
+		}
+		headers[name] = strings.TrimSpace(value)
+	}
+	if len(headers) == 0 {
+		return nil
+	}
+	return headers
 }
 
 // validateAggregation validates the aggregation limits.

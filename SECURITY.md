@@ -26,6 +26,13 @@ nft add rule inet filter input udp dport 2055 ip saddr { 10.0.0.0/24, 192.0.2.10
 nft add rule inet filter input udp dport 2055 drop
 ```
 
+## What leaves the host
+
+Nothing, unless `--enrich.threat-api-key` is set. That flag sends the public
+addresses seen in flows to AbuseIPDB to be scored. Addresses the monitored
+network assigns itself are never sent, and every other enrichment source
+reads a file on local disk.
+
 ## Out of scope
 
 A defect in a network device's own flow export implementation belongs to its vendor — report it there, not to this third-party exporter.

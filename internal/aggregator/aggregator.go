@@ -21,11 +21,13 @@ type Modules struct {
 	ASNs         bool
 	Applications bool
 	Countries    bool
+	Threats      bool
 }
 
 // Any reports whether any aggregation is enabled.
 func (m Modules) Any() bool {
-	return m.Exporters || m.Hosts || m.Services || m.ASNs || m.Applications || m.Countries
+	return m.Exporters || m.Hosts || m.Services || m.ASNs ||
+		m.Applications || m.Countries || m.Threats
 }
 
 // Table keys. Label values are derived from these at scrape time.
@@ -69,6 +71,21 @@ type CountryKey struct {
 	Dst      string
 }
 
+// ThreatKey keys the flagged-address aggregation. Only an address a
+// reputation source flagged appears, so the table holds what is worth acting
+// on rather than one entry per address seen.
+type ThreatKey struct {
+	Exporter  netip.Addr
+	Address   netip.Addr
+	Direction string
+}
+
+// The sides a flagged address was seen on.
+const (
+	DirectionSrc = "src"
+	DirectionDst = "dst"
+)
+
 // AppKey keys the application aggregation. Name is the resolved or inline
 // application name, or the numbered identifier where no name is known.
 type AppKey struct {
@@ -87,6 +104,7 @@ type Aggregator struct {
 	asns      *table[ASNKey]
 	apps      *table[AppKey]
 	countries *table[CountryKey]
+	threats   *table[ThreatKey]
 
 	// now is pinned by tests.
 	now func() time.Time
@@ -116,6 +134,9 @@ func New(cfg config.Aggregation, modules Modules) *Aggregator {
 	}
 	if modules.Countries {
 		a.countries = newTable[CountryKey](cfg.MaxEntries)
+	}
+	if modules.Threats {
+		a.threats = newTable[ThreatKey](cfg.MaxEntries)
 	}
 	return a
 }
@@ -180,6 +201,26 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 	// a pair of empty codes is absence rather than a place.
 	if a.countries != nil && (r.SrcCountry != "" || r.DstCountry != "") {
 		a.countries.add(CountryKey{Exporter: r.Exporter, Src: r.SrcCountry, Dst: r.DstCountry},
+			bytes, packets, r.Flows, now)
+	}
+
+	a.ingestThreats(r, bytes, packets, now)
+}
+
+// ingestThreats records the flagged sides of one record. A record with
+// neither side flagged feeds nothing, which is what keeps the table to the
+// addresses worth acting on.
+func (a *Aggregator) ingestThreats(r *flow.Record, bytes, packets uint64, now int64) {
+	if a.threats == nil {
+		return
+	}
+
+	if r.SrcFlagged {
+		a.threats.add(ThreatKey{Exporter: r.Exporter, Address: r.SrcAddr, Direction: DirectionSrc},
+			bytes, packets, r.Flows, now)
+	}
+	if r.DstFlagged {
+		a.threats.add(ThreatKey{Exporter: r.Exporter, Address: r.DstAddr, Direction: DirectionDst},
 			bytes, packets, r.Flows, now)
 	}
 }
@@ -251,7 +292,7 @@ func (t *table[K]) stats() (idle, folds uint64) {
 }
 
 // tableCount is how many aggregations exist, sizing the walk below.
-const tableCount = 6
+const tableCount = 7
 
 // tables returns the enabled tables keyed by their aggregation label value.
 func (a *Aggregator) tables() map[string]sweepable {
@@ -273,6 +314,9 @@ func (a *Aggregator) tables() map[string]sweepable {
 	}
 	if a.countries != nil {
 		tables["countries"] = a.countries
+	}
+	if a.threats != nil {
+		tables["threats"] = a.threats
 	}
 	return tables
 }
@@ -350,4 +394,12 @@ func (a *Aggregator) Countries() ([]EntrySnapshot[CountryKey], Totals) {
 		return nil, Totals{}
 	}
 	return a.countries.snapshot()
+}
+
+// Threats reads the flagged-address table.
+func (a *Aggregator) Threats() ([]EntrySnapshot[ThreatKey], Totals) {
+	if a.threats == nil {
+		return nil, Totals{}
+	}
+	return a.threats.snapshot()
 }

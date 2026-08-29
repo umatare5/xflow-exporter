@@ -23,6 +23,7 @@ import (
 	"github.com/umatare5/xflow-exporter/internal/enrich"
 	"github.com/umatare5/xflow-exporter/internal/flow"
 	"github.com/umatare5/xflow-exporter/internal/receiver"
+	"github.com/umatare5/xflow-exporter/internal/remotewrite"
 )
 
 // LifecycleManager manages HTTP server startup and graceful shutdown.
@@ -67,6 +68,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		ASNs:         cfg.Collectors.ASNs,
 		Applications: cfg.Collectors.Applications,
 		Countries:    cfg.Collectors.Countries,
+		Threats:      cfg.Collectors.Threats,
 	}
 
 	// Create and setup collector manager
@@ -143,6 +145,25 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		}()
 	}
 
+	// The remote write client reads the same registry a scrape reads, so
+	// shipping changes no series and no value.
+	remoteDone := make(chan struct{})
+	if cfg.RemoteWrite.Enabled() {
+		writer, werr := remotewrite.New(cfg.RemoteWrite, collectorMgr.Registry())
+		if werr != nil {
+			close(remoteDone)
+			return werr
+		}
+		collectorMgr.RegisterRemoteWriteCollector(writer)
+
+		go func() {
+			defer close(remoteDone)
+			writer.Run(ctx)
+		}()
+	} else {
+		close(remoteDone)
+	}
+
 	// Create and run server lifecycle manager
 	serverMgr := NewLifecycleManager(collectorMgr.Registry(), cfg)
 	err = serverMgr.Run(ctx)
@@ -152,6 +173,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	decodeWG.Wait()
 	<-aggDone
 	<-domainSweepDone
+	<-remoteDone
 	return err
 }
 
@@ -177,6 +199,19 @@ func buildEnrichmentChain(cfg config.Enrichment) (*enrich.Chain, error) {
 			return nil, err
 		}
 		enrichers = append(enrichers, country)
+	}
+	if cfg.Threat.APIKey != "" {
+		threat, err := enrich.NewThreat(enrich.ThreatConfig{
+			APIKey:    cfg.Threat.APIKey,
+			Threshold: cfg.Threat.Threshold,
+			CacheTTL:  cfg.Threat.CacheTTL,
+			CacheSize: cfg.Threat.CacheSize,
+			Timeout:   cfg.Threat.Timeout,
+		})
+		if err != nil {
+			return nil, err
+		}
+		enrichers = append(enrichers, threat)
 	}
 
 	return enrich.NewChain(enrichers...), nil

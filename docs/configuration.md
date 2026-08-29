@@ -28,14 +28,23 @@ GLOBAL OPTIONS:
 
    --collector.applications   Enable application metrics from AVC, App-ID or applicationId
    --collector.asns           Enable AS pair metrics from device-exported AS numbers
+   --collector.countries      Enable country pair metrics, which need --enrich.country-database
    --collector.distributions  Enable flow size and duration native histograms
    --collector.exporters      Enable per-device traffic metrics
    --collector.hosts          Enable source-destination address pair metrics
    --collector.services       Enable address pair with protocol and port metrics
+   --collector.threats        Enable flagged address metrics, which need --enrich.threat-api-key
 
    # Enrichment Options
 
-   --enrich.services  Name the application from the transport port where the device named none
+   --enrich.asn-database string        Path to a MaxMind-format ASN database, filling the AS numbers a device omits
+   --enrich.country-database string        Path to a MaxMind-format country database, filling the ISO codes for --collector.countries
+   --enrich.services                   Name the application from the transport port where the device named none
+   --enrich.threat-api-key string      AbuseIPDB API key, which sends public addresses to that service when set [$XFLOW_THREAT_API_KEY]
+   --enrich.threat-cache-size int      Reputation verdicts held in memory (default: 65536)
+   --enrich.threat-cache-ttl duration  How long a reputation verdict is reused before it is asked again (default: 6h0m0s)
+   --enrich.threat-threshold int       Abuse confidence at or above which an address is flagged (default: 50)
+   --enrich.threat-timeout duration    Timeout of one reputation lookup (default: 5s)
 
    * Aggregation Options
 
@@ -62,6 +71,15 @@ GLOBAL OPTIONS:
    --receiver.max-packet-size int                           Largest datagram in bytes kept whole, dropping larger ones (default: 9216)
    --receiver.queue-size int                                Datagrams buffered between the read loops and the decoders (default: 8192)
    --receiver.workers int                                   Decode workers consuming the queue (0 sizes to the CPU count) (default: 0)
+
+   * Remote Write Options
+
+   --remote-write.header string [ --remote-write.header string ]  Extra request header as name=value (repeatable)
+   --remote-write.interval duration                               How often the registry is shipped (default: 1m0s)
+   --remote-write.password string                                 Basic auth password for the endpoint [$XFLOW_REMOTE_WRITE_PASSWORD]
+   --remote-write.timeout duration                                Timeout of one write (default: 30s)
+   --remote-write.url string                                      Remote Write 2.0 endpoint to ship metrics to, which enables the client when set
+   --remote-write.username string                                 Basic auth username for the endpoint [$XFLOW_REMOTE_WRITE_USERNAME]
 
 ```
 

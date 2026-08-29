@@ -66,11 +66,53 @@ The sources are these.
 | `--enrich.services`         | The application, from the transport port |
 | `--enrich.asn-database`     | The AS numbers, from a MaxMind-format DB |
 | `--enrich.country-database` | The ISO country codes, from the same     |
+| `--enrich.threat-api-key`   | A flag on addresses AbuseIPDB reports    |
 
 A database path that cannot be opened fails startup rather than enriching
 nothing in silence. Neither database ships with this exporter: point the
-flags at a GeoLite2 or DB-IP file you already hold. Lookups are local, so no
-address leaves the host.
+flags at a GeoLite2 or DB-IP file you already hold. Database lookups are
+local, so no address leaves the host.
+
+The reputation source is the exception, and the only part of this exporter
+that talks to anyone.
+
+- **It sends addresses to AbuseIPDB.** Setting `--enrich.threat-api-key`, or
+  `XFLOW_THREAT_API_KEY`, is what turns that on. Without a key nothing is
+  sent and nothing is flagged.
+- **Only public addresses go out.** Anything the monitored network assigns
+  itself — RFC 1918, loopback, link-local, multicast, unique-local — is never
+  sent: the service holds nothing on it, and shipping it would leak the
+  network's internal structure for no answer in return.
+- **Lookups are asynchronous.** A record is flagged from the cache alone and
+  a miss queues the address, so a third party's latency never reaches the
+  decode path where a slow answer costs datagrams.
+- **Verdicts are cached and bounded**, for `--enrich.threat-cache-ttl` and up
+  to `--enrich.threat-cache-size`. A failed lookup is cached too, so a
+  service that is down costs one request per address per TTL.
+- **An unflagged address is not a clean one.** It is an address no verdict
+  covers yet, which is absence rather than a finding.
+
+### Remote write
+
+`--remote-write.url` ships the exporter's own registry to a Remote Write 2.0
+endpoint, for the deployments a Prometheus scrape cannot reach. It is off
+until a URL is set.
+
+- **A second reader, not a second source** — the writer gathers the same
+  registry a scrape gathers, so enabling it changes no series and no value.
+  Scraping and shipping at once simply delivers the same data twice.
+- **Resolution** — one gather per `--remote-write.interval`, which is what
+  the remote endpoint sees. It plays the part a scrape interval plays.
+- **Native histograms are not shipped.** Remote Write 2.0 carries them as
+  their own message, and reducing one to a single sample would be a value
+  nobody measured. `--collector.distributions` therefore reaches a scrape
+  but not a remote endpoint.
+- **Credentials** — basic auth from `--remote-write.username` and
+  `--remote-write.password`, which also read `XFLOW_REMOTE_WRITE_USERNAME`
+  and `XFLOW_REMOTE_WRITE_PASSWORD`, plus any `--remote-write.header`.
+- **Observability** — `xflow_remote_write_*` reports accepted writes, failed
+  ones, series shipped, and the instant of the last success, which is absent
+  until one succeeds.
 
 ### Bounded state
 

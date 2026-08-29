@@ -82,6 +82,12 @@ func (c *Collector) RegisterEnrichmentCollector(src enrich.Snapshotter) {
 	slog.Debug("Registered enrichment collector")
 }
 
+// RegisterRemoteWriteCollector registers the remote write self-monitoring collector.
+func (c *Collector) RegisterRemoteWriteCollector(src RemoteWriteSource) {
+	c.registry.MustRegister(NewSafeCollector(NewRemoteWriteCollector(src), "RemoteWrite"))
+	slog.Debug("Registered remote write collector")
+}
+
 // RegisterSystemCollectors registers Go and process collectors conditionally.
 func (c *Collector) RegisterSystemCollectors() {
 	if c.cfg.InternalCollector.EnableGoCollector {

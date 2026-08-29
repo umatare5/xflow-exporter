@@ -55,6 +55,7 @@ func registerFlags() []cli.Flag {
 	flags = append(flags, registerAggregationFlags()...)
 	flags = append(flags, registerCollectorFlags()...)
 	flags = append(flags, registerEnrichmentFlags()...)
+	flags = append(flags, registerRemoteWriteFlags()...)
 	flags = append(flags, registerLogFlags()...)
 	flags = append(flags, registerUtilityFlags()...)
 	flags = append(flags, registerInternalCollectorFlags()...)
@@ -215,6 +216,12 @@ func registerCollectorFlags() []cli.Flag {
 			HideDefault: true,
 		},
 		&cli.BoolFlag{
+			Name:        "collector.threats",
+			Usage:       "Enable flagged address metrics, which need --enrich.threat-api-key",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
 			Name:        "collector.distributions",
 			Usage:       "Enable flow size and duration native histograms",
 			Category:    "# Collector Options",
@@ -244,6 +251,88 @@ func registerEnrichmentFlags() []cli.Flag {
 			Name:     "enrich.country-database",
 			Usage:    "Path to a MaxMind-format country database, filling the ISO codes for --collector.countries",
 			Category: "# Enrichment Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
+		},
+		&cli.StringFlag{
+			Name:     "enrich.threat-api-key",
+			Usage:    "AbuseIPDB API key, which sends public addresses to that service when set",
+			Sources:  cli.EnvVars("XFLOW_THREAT_API_KEY"),
+			Category: "# Enrichment Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
+		},
+		&cli.IntFlag{
+			Name:     "enrich.threat-threshold",
+			Usage:    "Abuse confidence at or above which an address is flagged",
+			Value:    config.DefaultThreatThreshold,
+			Category: "# Enrichment Options",
+		},
+		&cli.DurationFlag{
+			Name:     "enrich.threat-cache-ttl",
+			Usage:    "How long a reputation verdict is reused before it is asked again",
+			Value:    config.DefaultThreatCacheTTL,
+			Category: "# Enrichment Options",
+		},
+		&cli.IntFlag{
+			Name:     "enrich.threat-cache-size",
+			Usage:    "Reputation verdicts held in memory",
+			Value:    config.DefaultThreatCacheSize,
+			Category: "# Enrichment Options",
+		},
+		&cli.DurationFlag{
+			Name:     "enrich.threat-timeout",
+			Usage:    "Timeout of one reputation lookup",
+			Value:    config.DefaultThreatTimeout,
+			Category: "# Enrichment Options",
+		},
+	}
+}
+
+// registerRemoteWriteFlags defines the Remote Write 2.0 client.
+func registerRemoteWriteFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:     "remote-write.url",
+			Usage:    "Remote Write 2.0 endpoint to ship metrics to, which enables the client when set",
+			Category: "* Remote Write Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
+		},
+		&cli.DurationFlag{
+			Name:     "remote-write.interval",
+			Usage:    "How often the registry is shipped",
+			Value:    config.DefaultRemoteWriteInterval,
+			Category: "* Remote Write Options",
+		},
+		&cli.DurationFlag{
+			Name:     "remote-write.timeout",
+			Usage:    "Timeout of one write",
+			Value:    config.DefaultRemoteWriteTimeout,
+			Category: "* Remote Write Options",
+		},
+		&cli.StringFlag{
+			Name:     "remote-write.username",
+			Usage:    "Basic auth username for the endpoint",
+			Sources:  cli.EnvVars("XFLOW_REMOTE_WRITE_USERNAME"),
+			Category: "* Remote Write Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
+		},
+		&cli.StringFlag{
+			Name:     "remote-write.password",
+			Usage:    "Basic auth password for the endpoint",
+			Sources:  cli.EnvVars("XFLOW_REMOTE_WRITE_PASSWORD"),
+			Category: "* Remote Write Options",
+		},
+		&cli.StringSliceFlag{
+			Name:     "remote-write.header",
+			Usage:    "Extra request header as name=value (repeatable)",
+			Category: "* Remote Write Options",
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},

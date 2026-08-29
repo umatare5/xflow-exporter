@@ -11,7 +11,7 @@ func TestRegisterFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerFlags()
-	if got, want := len(flags), 30; got != want {
+	if got, want := len(flags), 42; got != want {
 		t.Errorf("registerFlags() returned %d flags, want %d", got, want)
 	}
 }
@@ -96,7 +96,7 @@ func TestRegisterCollectorFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerCollectorFlags()
-	if got, want := len(flags), 7; got != want {
+	if got, want := len(flags), 8; got != want {
 		t.Fatalf("registerCollectorFlags() returned %d flags, want %d", got, want)
 	}
 	for i, flag := range flags {
@@ -111,15 +111,49 @@ func TestRegisterEnrichmentFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerEnrichmentFlags()
-	if got, want := len(flags), 3; got != want {
+	if got, want := len(flags), 8; got != want {
 		t.Fatalf("registerEnrichmentFlags() returned %d flags, want %d", got, want)
 	}
 	if _, ok := flags[0].(*cli.BoolFlag); !ok {
 		t.Errorf("flag[0] is %T, want *cli.BoolFlag", flags[0])
 	}
-	for i, flag := range flags[1:] {
-		if _, ok := flag.(*cli.StringFlag); !ok {
-			t.Errorf("flag[%d] is %T, want *cli.StringFlag", i+1, flag)
+
+	// The API key reads an environment variable, which is how a secret
+	// reaches a container without appearing in its command line.
+	key := flags[3]
+	if got := key.Names(); len(got) == 0 || got[0] != "enrich.threat-api-key" {
+		t.Fatalf("flag[3] names = %v, want the API key", got)
+	}
+	if len(key.(*cli.StringFlag).Sources.EnvKeys()) == 0 {
+		t.Error("the API key flag reads no environment variable, want XFLOW_THREAT_API_KEY")
+	}
+}
+
+// TestRegisterRemoteWriteFlags verifies the Remote Write 2.0 client flags.
+func TestRegisterRemoteWriteFlags(t *testing.T) {
+	t.Parallel()
+
+	flags := registerRemoteWriteFlags()
+	if got, want := len(flags), 6; got != want {
+		t.Fatalf("registerRemoteWriteFlags() returned %d flags, want %d", got, want)
+	}
+
+	// The credentials read environment variables, which is how a secret
+	// reaches a container without appearing in its command line.
+	for _, name := range []string{"remote-write.username", "remote-write.password"} {
+		found := false
+		for _, flag := range flags {
+			str, ok := flag.(*cli.StringFlag)
+			if !ok || str.Name != name {
+				continue
+			}
+			found = true
+			if len(str.Sources.EnvKeys()) == 0 {
+				t.Errorf("%s reads no environment variable, want one", name)
+			}
+		}
+		if !found {
+			t.Errorf("%s is not registered", name)
 		}
 	}
 }

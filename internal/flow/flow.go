@@ -97,6 +97,12 @@ type Record struct {
 	AppName     string
 	AppCategory string
 
+	// SrcFlagged and DstFlagged mark an address a reputation source reported
+	// as abusive. They are false until such a source is enabled and holds a
+	// verdict, which is absence rather than a clean bill of health.
+	SrcFlagged bool
+	DstFlagged bool
+
 	// SrcCountry and DstCountry are ISO codes filled by enrichment. No flow
 	// protocol exports them, so they are empty unless a country database is
 	// enabled and knew the address.
