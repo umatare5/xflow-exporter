@@ -186,6 +186,7 @@ func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
 				w := baseV8Want()
 				w.Flows = 1
 				w.DstAddr, w.OutputIf, w.TOS = dstPrefix, 4, 0xB8
+				w.TOSReported = true
 				return w
 			},
 		},
@@ -210,6 +211,7 @@ func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
 				w.Flows = 1
 				w.DstAddr, w.SrcAddr = dstPrefix, srcPrefix
 				w.OutputIf, w.InputIf, w.TOS = 4, 3, 0xB8
+				w.TOSReported = true
 				return w
 			},
 		},
@@ -237,6 +239,7 @@ func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
 				w.Flows = 1
 				w.DstAddr, w.SrcAddr, w.DstPort, w.SrcPort = dstPrefix, srcPrefix, 443, 51234
 				w.OutputIf, w.InputIf, w.TOS, w.Protocol = 4, 3, 0xB8, 6
+				w.TOSReported = true
 				return w
 			},
 		},
@@ -256,6 +259,7 @@ func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
 			want: func() flow.Record {
 				w := baseV8Want()
 				w.SrcAS, w.DstAS, w.InputIf, w.OutputIf, w.TOS = 64500, 64501, 3, 4, 0xB8
+				w.TOSReported = true
 				return w
 			},
 		},
@@ -276,6 +280,7 @@ func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
 			want: func() flow.Record {
 				w := baseV8Want()
 				w.Protocol, w.TOS, w.SrcPort, w.DstPort = 17, 0xB8, 53000, 53
+				w.TOSReported = true
 				w.InputIf, w.OutputIf = 3, 4
 				return w
 			},
@@ -296,6 +301,7 @@ func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
 			want: func() flow.Record {
 				w := baseV8Want()
 				w.SrcAddr, w.SrcMask, w.TOS, w.SrcAS, w.InputIf = srcPrefix, 16, 0xB8, 64500, 3
+				w.TOSReported = true
 				return w
 			},
 		},
@@ -315,6 +321,7 @@ func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
 			want: func() flow.Record {
 				w := baseV8Want()
 				w.DstAddr, w.DstMask, w.TOS, w.DstAS, w.OutputIf = dstPrefix, 17, 0xB8, 64501, 4
+				w.TOSReported = true
 				return w
 			},
 		},
@@ -338,6 +345,7 @@ func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
 			want: func() flow.Record {
 				w := baseV8Want()
 				w.SrcAddr, w.DstAddr, w.DstMask, w.SrcMask, w.TOS = srcPrefix, dstPrefix, 17, 16, 0xB8
+				w.TOSReported = true
 				w.SrcAS, w.DstAS, w.InputIf, w.OutputIf = 64500, 64501, 3, 4
 				return w
 			},
@@ -364,6 +372,7 @@ func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
 				w := baseV8Want()
 				w.SrcAddr, w.DstAddr, w.DstMask, w.SrcMask = srcPrefix, dstPrefix, 17, 16
 				w.TOS, w.Protocol, w.SrcPort, w.DstPort = 0xB8, 6, 51234, 443
+				w.TOSReported = true
 				w.InputIf, w.OutputIf = 3, 4
 				return w
 			},

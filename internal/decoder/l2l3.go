@@ -84,6 +84,7 @@ func readIPv4Header(packet []byte, r *flow.Record) {
 	}
 
 	r.TOS = packet[1]
+	r.TOSReported = true
 	r.Protocol = packet[9]
 	r.SrcAddr = netip.AddrFrom4([4]byte(packet[12:16]))
 	r.DstAddr = netip.AddrFrom4([4]byte(packet[16:20]))
@@ -99,6 +100,7 @@ func readIPv6Header(packet []byte, r *flow.Record) {
 	}
 
 	r.TOS = packet[0]<<4 | packet[1]>>4
+	r.TOSReported = true
 	r.Protocol = packet[6]
 	r.SrcAddr = addrFrom16([16]byte(packet[8:24]))
 	r.DstAddr = addrFrom16([16]byte(packet[24:40]))

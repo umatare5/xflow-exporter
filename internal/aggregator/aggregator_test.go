@@ -413,3 +413,85 @@ func TestAggregator_DestinationsNeedADestinationAndAProtocol(t *testing.T) {
 		})
 	}
 }
+
+// TestAggregator_TCPFlagsNeedTCPAndABitSet pins the two conditions. A flow
+// that carried no control bit is a device that did not export the field
+// rather than a TCP flow that set none, and a record of another protocol has
+// no control bits to report at all -- neither may share a series with a flow
+// whose bits were measured.
+func TestAggregator_TCPFlagsNeedTCPAndABitSet(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		protocol uint8
+		flags    uint8
+		want     int
+	}{
+		{name: "tcp with bits", protocol: 6, flags: 0x12, want: 1},
+		{name: "tcp with none", protocol: 6, flags: 0, want: 0},
+		{name: "udp", protocol: 17, flags: 0, want: 0},
+		{name: "udp carrying bits", protocol: 17, flags: 0x12, want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			a := New(testConfig(), Modules{TCPFlags: true})
+			r := testRecord()
+			r.Protocol, r.TCPFlags = tt.protocol, tt.flags
+			a.Ingest([]flow.Record{r})
+
+			entries, _ := a.TCPFlags()
+			if len(entries) != tt.want {
+				t.Errorf("TCPFlags() returned %d entries, want %d", len(entries), tt.want)
+			}
+			if tt.want == 1 && entries[0].Key.Flags != tt.flags {
+				t.Errorf("flags = %#x, want %#x", entries[0].Key.Flags, tt.flags)
+			}
+		})
+	}
+}
+
+// TestAggregator_DSCPKeysOnReportedNotOnValue pins what separates this table
+// from every other: zero is a value here. Best-effort traffic marks nothing,
+// so keying admission on the byte would drop the majority of a network and
+// keying it on nothing would invent a class for every device that exports no
+// TOS at all.
+func TestAggregator_DSCPKeysOnReportedNotOnValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		tos      uint8
+		reported bool
+		want     int
+		wantDSCP uint8
+	}{
+		{name: "best effort, reported", tos: 0, reported: true, want: 1, wantDSCP: 0},
+		{name: "expedited forwarding", tos: 0xB8, reported: true, want: 1, wantDSCP: 46},
+		{name: "not reported", tos: 0, reported: false, want: 0},
+		{name: "not reported but non-zero", tos: 0xB8, reported: false, want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			a := New(testConfig(), Modules{DSCP: true})
+			r := testRecord()
+			r.TOS, r.TOSReported = tt.tos, tt.reported
+			a.Ingest([]flow.Record{r})
+
+			entries, _ := a.DSCP()
+			if len(entries) != tt.want {
+				t.Fatalf("DSCP() returned %d entries, want %d", len(entries), tt.want)
+			}
+			if tt.want == 1 && entries[0].Key.DSCP != tt.wantDSCP {
+				t.Errorf("DSCP = %d, want %d: the two low bits are ECN, not a class",
+					entries[0].Key.DSCP, tt.wantDSCP)
+			}
+		})
+	}
+}

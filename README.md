@@ -102,7 +102,7 @@ The exporter serves four endpoints:
 
 ## Metrics
 
-This exporter aggregates flows into nine modules, documented in [docs/collectors.md](docs/collectors.md):
+This exporter aggregates flows into eleven modules, documented in [docs/collectors.md](docs/collectors.md):
 
 | Module          | Metric family (representative)   | Labels                             |
 | :-------------- | :------------------------------- | :--------------------------------- |
@@ -110,6 +110,8 @@ This exporter aggregates flows into nine modules, documented in [docs/collectors
 | `hosts`         | `xflow_host_pair_bytes_total`    | `exporter,src,dst`                 |
 | `services`      | `xflow_service_bytes_total`      | `exporter,src,dst,proto,port`      |
 | `destinations`  | `xflow_destination_bytes_total`  | `exporter,dst,proto,port`          |
+| `tcp_flags`     | `xflow_tcp_flags_bytes_total`    | `exporter,flags`                   |
+| `dscp`          | `xflow_dscp_bytes_total`         | `exporter,dscp`                    |
 | `asns`          | `xflow_asn_pair_bytes_total`     | `exporter,src_asn,dst_asn`         |
 | `applications`  | `xflow_application_bytes_total`  | `exporter,application`             |
 | `countries`     | `xflow_country_pair_bytes_total` | `exporter,src_country,dst_country` |

@@ -77,9 +77,10 @@ func netflowV5Record(
 		SrcPort: binary.BigEndian.Uint16(record[32:34]),
 		DstPort: binary.BigEndian.Uint16(record[34:36]),
 
-		Protocol: record[38],
-		TOS:      record[39],
-		TCPFlags: record[37],
+		Protocol:    record[38],
+		TOS:         record[39],
+		TOSReported: true,
+		TCPFlags:    record[37],
 
 		InputIf:  uint32(binary.BigEndian.Uint16(record[12:14])),
 		OutputIf: uint32(binary.BigEndian.Uint16(record[14:16])),

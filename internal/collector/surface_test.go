@@ -105,6 +105,7 @@ func gatherFamilies(t *testing.T, appName string) []*dto.MetricFamily {
 	cfg := testConfig()
 	cfg.Collectors = config.Collectors{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
+		TCPFlags: true, DSCP: true,
 		ASNs: true, Applications: true, Countries: true, Threats: true,
 	}
 	cfg.Aggregation = config.Aggregation{
@@ -119,6 +120,7 @@ func gatherFamilies(t *testing.T, appName string) []*dto.MetricFamily {
 
 	agg := aggregator.New(cfg.Aggregation, aggregator.Modules{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
+		TCPFlags: true, DSCP: true,
 		ASNs: true, Applications: true, Countries: true, Threats: true,
 	})
 	// The families past the application one in Collect order are what an
@@ -156,6 +158,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	cfg := testConfig()
 	cfg.Collectors = config.Collectors{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
+		TCPFlags: true, DSCP: true,
 		ASNs: true, Applications: true, Countries: true, Threats: true,
 		Distributions: true,
 	}
@@ -194,6 +197,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 
 	agg := aggregator.New(cfg.Aggregation, aggregator.Modules{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
+		TCPFlags: true, DSCP: true,
 		ASNs: true, Applications: true, Countries: true, Threats: true,
 	})
 	// Every dimension filled, so no module lints on an empty table.
@@ -230,7 +234,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	// options template announcing a sampler, and the remote write instant
 	// needs a client that has written, whose counters the package keeps
 	// unexported. Changing the surface is meant to change this number.
-	const wantFamilies = 52
+	const wantFamilies = 58
 	if len(families) != wantFamilies {
 		t.Fatalf("gathered %d families, want %d: the lint below covers only what is registered",
 			len(families), wantFamilies)

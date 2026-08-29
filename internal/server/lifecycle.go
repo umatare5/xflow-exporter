@@ -75,6 +75,8 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		Hosts:        cfg.Collectors.Hosts,
 		Services:     cfg.Collectors.Services,
 		Destinations: cfg.Collectors.Destinations,
+		TCPFlags:     cfg.Collectors.TCPFlags,
+		DSCP:         cfg.Collectors.DSCP,
 		ASNs:         cfg.Collectors.ASNs,
 		Applications: cfg.Collectors.Applications,
 		Countries:    cfg.Collectors.Countries,

@@ -93,6 +93,7 @@ func TestDecodeNetFlowV5_ReadsEveryField(t *testing.T) {
 		DstPort:      443,
 		Protocol:     6,
 		TOS:          0xB8,
+		TOSReported:  true,
 		TCPFlags:     0x1B,
 		InputIf:      3,
 		OutputIf:     4,

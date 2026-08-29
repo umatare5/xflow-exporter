@@ -16,6 +16,8 @@ const (
 	labelDst         = "dst"         // Destination address
 	labelProto       = "proto"       // IP protocol name or number
 	labelPort        = "port"        // Destination port, the service side
+	labelFlags       = "flags"       // TCP control bits a flow ORed together
+	labelDSCP        = "dscp"        // Differentiated-services code point name or number
 	labelSrcASN      = "src_asn"     // Source AS number
 	labelDstASN      = "dst_asn"     // Destination AS number
 	labelApplication = "application" // Resolved application name or engine:selector

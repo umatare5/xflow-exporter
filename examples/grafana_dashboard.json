@@ -170,7 +170,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(time() - xflow_last_flow_timestamp_seconds{exporter=~\"$exporter\"})",
+          "expr": "max(time() - xflow_last_flow_timestamp_seconds{exporter=~\"$exporter\",exporter!=\"other\"})",
           "legendFormat": "silence",
           "instant": true,
           "range": false,
@@ -431,7 +431,7 @@
           },
           "editorMode": "code",
           "expr": "rate(xflow_receiver_dropped_packets_total[$rollup_interval])",
-          "legendFormat": "{{listener}} {{reason}}",
+          "legendFormat": "{{listener}} ({{reason}})",
           "range": true,
           "refId": "A"
         }
@@ -494,8 +494,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(xflow_decode_errors_total{exporter=~\"$exporter\"}[$rollup_interval])",
-          "legendFormat": "{{exporter}} {{version}} {{reason}}",
+          "expr": "rate(xflow_decode_errors_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])",
+          "legendFormat": "{{reason}} — {{exporter}} {{version}}",
           "range": true,
           "refId": "A"
         }
@@ -558,7 +558,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(xflow_sequence_missed_total{exporter=~\"$exporter\"}[$rollup_interval])",
+          "expr": "rate(xflow_sequence_missed_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])",
           "legendFormat": "{{exporter}} odid {{odid}}",
           "range": true,
           "refId": "A"
@@ -622,8 +622,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "xflow_templates{exporter=~\"$exporter\"}",
-          "legendFormat": "{{exporter}} odid {{odid}} {{type}}",
+          "expr": "xflow_templates{exporter=~\"$exporter\",exporter!=\"other\"}",
+          "legendFormat": "{{type}} — odid {{odid}}",
           "range": true,
           "refId": "A"
         }
@@ -699,8 +699,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(xflow_exporter_packets_total{exporter=~\"$exporter\"}[$rollup_interval])",
-          "legendFormat": "{{exporter}} {{version}}",
+          "expr": "rate(xflow_exporter_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])",
+          "legendFormat": "{{exporter}} ({{version}})",
           "range": true,
           "refId": "A"
         }
@@ -763,8 +763,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(xflow_exporter_flows_total{exporter=~\"$exporter\"}[$rollup_interval])",
-          "legendFormat": "{{exporter}} {{version}}",
+          "expr": "rate(xflow_exporter_flows_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])",
+          "legendFormat": "{{exporter}} ({{version}})",
           "range": true,
           "refId": "A"
         }
@@ -827,7 +827,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "xflow_sampling_rate{exporter=~\"$exporter\"}",
+          "expr": "xflow_sampling_rate{exporter=~\"$exporter\",exporter!=\"other\"}",
           "legendFormat": "{{exporter}} odid {{odid}}",
           "range": true,
           "refId": "A"
@@ -891,7 +891,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (exporter) (rate(xflow_exporter_bytes_total{exporter=~\"$exporter\"}[$rollup_interval])) / sum by (exporter) (rate(xflow_exporter_packets_total{exporter=~\"$exporter\"}[$rollup_interval]))",
+          "expr": "sum by (exporter) (rate(xflow_exporter_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])) / sum by (exporter) (rate(xflow_exporter_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))",
           "legendFormat": "{{exporter}}",
           "range": true,
           "refId": "A"
@@ -955,7 +955,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (exporter) (rate(xflow_exporter_packets_total{exporter=~\"$exporter\"}[$rollup_interval])) / sum by (exporter) (rate(xflow_exporter_flows_total{exporter=~\"$exporter\"}[$rollup_interval]))",
+          "expr": "sum by (exporter) (rate(xflow_exporter_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])) / sum by (exporter) (rate(xflow_exporter_flows_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))",
           "legendFormat": "{{exporter}}",
           "range": true,
           "refId": "A"
@@ -1019,7 +1019,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (proto) (rate(xflow_destination_bytes_total{exporter=~\"$exporter\"}[$rollup_interval])) / sum by (proto) (rate(xflow_destination_packets_total{exporter=~\"$exporter\"}[$rollup_interval]))",
+          "expr": "sum by (proto) (rate(xflow_destination_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])) / sum by (proto) (rate(xflow_destination_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))",
           "legendFormat": "{{proto}}",
           "range": true,
           "refId": "A"
@@ -1062,6 +1062,134 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "TCP control-bit profile",
+      "description": "The bits each flow's packets ORed together, by packet rate. A working session ORs its way to ack and psh,ack; a horizontal scan is bare syn repeated against many destinations, and a refused one answers rst. Only TCP records feed this, and only those carrying a bit -- a zero is a device that did not export the field, not a flow that set none.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "id": 18,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "topk(8, sum by (flags) (rate(xflow_tcp_flags_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
+          "legendFormat": "{{flags}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 40,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "gradientMode": "opacity"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "DSCP class",
+      "description": "What the network was asked to do with each packet. cs0 is best-effort and is most of any network; ef is what voice marks; cs6 and cs7 are control traffic. Admission keys on whether the device reported the TOS byte rather than on its value, so a device exporting none feeds nothing here rather than reading as all best-effort.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "id": 19,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "topk(8, sum by (dscp) (rate(xflow_dscp_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
+          "legendFormat": "{{dscp}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 40,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "gradientMode": "opacity"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
       "type": "row",
       "title": "Composition -- ranked by packets, Top-K views rather than totals",
       "collapsed": false,
@@ -1069,9 +1197,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 37
       },
-      "id": 18,
+      "id": 20,
       "panels": []
     },
     {
@@ -1082,12 +1210,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 19,
+      "id": 21,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 31
+        "y": 38
       },
       "targets": [
         {
@@ -1096,7 +1224,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(8, sum by (proto) (rate(xflow_destination_packets_total{exporter=~\"$exporter\"}[$rollup_interval])))",
+          "expr": "topk(8, sum by (proto) (rate(xflow_destination_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
           "legendFormat": "{{proto}}",
           "range": true,
           "refId": "A"
@@ -1146,12 +1274,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 20,
+      "id": 22,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 31
+        "y": 38
       },
       "targets": [
         {
@@ -1160,8 +1288,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(10, sum by (exporter, src_asn, dst_asn) (rate(xflow_asn_pair_packets_total{exporter=~\"$exporter\"}[$rollup_interval])))",
-          "legendFormat": "AS{{src_asn}} -> AS{{dst_asn}}",
+          "expr": "topk(10, sum by (exporter, src_asn, dst_asn) (rate(xflow_asn_pair_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
+          "legendFormat": "AS{{src_asn}} → AS{{dst_asn}}",
           "range": true,
           "refId": "A"
         }
@@ -1210,12 +1338,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 21,
+      "id": 23,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 31
+        "y": 38
       },
       "targets": [
         {
@@ -1224,7 +1352,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(10, sum by (exporter, application) (rate(xflow_application_packets_total{exporter=~\"$exporter\"}[$rollup_interval])))",
+          "expr": "topk(10, sum by (exporter, application) (rate(xflow_application_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
           "legendFormat": "{{application}}",
           "range": true,
           "refId": "A"
@@ -1274,12 +1402,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 22,
+      "id": 24,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 39
+        "y": 46
       },
       "targets": [
         {
@@ -1288,8 +1416,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(10, sum by (exporter, src, dst) (rate(xflow_host_pair_packets_total{exporter=~\"$exporter\"}[$rollup_interval])))",
-          "legendFormat": "{{src}} -> {{dst}}",
+          "expr": "topk(10, sum by (exporter, src, dst) (rate(xflow_host_pair_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
+          "legendFormat": "{{src}} → {{dst}}",
           "range": true,
           "refId": "A"
         }
@@ -1338,12 +1466,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 23,
+      "id": 25,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 39
+        "y": 46
       },
       "targets": [
         {
@@ -1352,7 +1480,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(10, sum by (exporter, dst, proto, port) (rate(xflow_destination_packets_total{exporter=~\"$exporter\"}[$rollup_interval])))",
+          "expr": "topk(10, sum by (exporter, dst, proto, port) (rate(xflow_destination_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
           "legendFormat": "{{dst}}:{{port}}/{{proto}}",
           "range": true,
           "refId": "A"
@@ -1402,12 +1530,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 24,
+      "id": 26,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 39
+        "y": 46
       },
       "targets": [
         {
@@ -1416,8 +1544,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(10, sum by (exporter, src_country, dst_country) (rate(xflow_country_pair_packets_total{exporter=~\"$exporter\"}[$rollup_interval])))",
-          "legendFormat": "{{src_country}} -> {{dst_country}}",
+          "expr": "topk(10, sum by (exporter, src_country, dst_country) (rate(xflow_country_pair_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
+          "legendFormat": "{{src_country}} → {{dst_country}}",
           "range": true,
           "refId": "A"
         }
@@ -1466,12 +1594,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 25,
+      "id": 27,
       "gridPos": {
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 54
       },
       "targets": [
         {
@@ -1480,7 +1608,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(10, sum by (exporter, address, direction) (rate(xflow_threat_packets_total{exporter=~\"$exporter\"}[$rollup_interval])))",
+          "expr": "topk(10, sum by (exporter, address, direction) (rate(xflow_threat_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
           "legendFormat": "{{address}} ({{direction}})",
           "range": true,
           "refId": "A"
@@ -1530,9 +1658,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 60
       },
-      "id": 26,
+      "id": 28,
       "panels": []
     },
     {
@@ -1543,12 +1671,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 27,
+      "id": 29,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 54
+        "y": 61
       },
       "targets": [
         {
@@ -1557,8 +1685,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(xflow_exporter_bytes_total{exporter=~\"$exporter\"}[$rollup_interval]) * 8",
-          "legendFormat": "{{exporter}} {{version}}",
+          "expr": "rate(xflow_exporter_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]) * 8",
+          "legendFormat": "{{exporter}} ({{version}})",
           "range": true,
           "refId": "A"
         }
@@ -1607,12 +1735,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 28,
+      "id": 30,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 54
+        "y": 61
       },
       "targets": [
         {
@@ -1621,8 +1749,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(10, sum by (exporter, src_asn, dst_asn) (rate(xflow_asn_pair_bytes_total{exporter=~\"$exporter\"}[$rollup_interval]))) * 8",
-          "legendFormat": "AS{{src_asn}} -> AS{{dst_asn}}",
+          "expr": "topk(10, sum by (exporter, src_asn, dst_asn) (rate(xflow_asn_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))) * 8",
+          "legendFormat": "AS{{src_asn}} → AS{{dst_asn}}",
           "range": true,
           "refId": "A"
         }
@@ -1671,12 +1799,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 29,
+      "id": 31,
       "gridPos": {
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 61
+        "y": 68
       },
       "targets": [
         {
@@ -1685,7 +1813,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by (exporter) (rate(xflow_flow_bytes{exporter=~\"$exporter\"}[$rollup_interval])))",
+          "expr": "histogram_quantile(0.50, sum by (exporter) (rate(xflow_flow_bytes{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
           "legendFormat": "p50 {{exporter}}",
           "range": true,
           "refId": "A"
@@ -1696,7 +1824,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (exporter) (rate(xflow_flow_bytes{exporter=~\"$exporter\"}[$rollup_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (exporter) (rate(xflow_flow_bytes{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
           "legendFormat": "p95 {{exporter}}",
           "range": true,
           "refId": "B"
@@ -1707,7 +1835,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (exporter) (rate(xflow_flow_bytes{exporter=~\"$exporter\"}[$rollup_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (exporter) (rate(xflow_flow_bytes{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
           "legendFormat": "p99 {{exporter}}",
           "range": true,
           "refId": "C"
@@ -1757,9 +1885,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 67
+        "y": 74
       },
-      "id": 30,
+      "id": 32,
       "panels": []
     },
     {
@@ -1770,12 +1898,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 31,
+      "id": 33,
       "gridPos": {
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 68
+        "y": 75
       },
       "targets": [
         {
@@ -1834,12 +1962,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 32,
+      "id": 34,
       "gridPos": {
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 68
+        "y": 75
       },
       "targets": [
         {
@@ -1898,12 +2026,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 33,
+      "id": 35,
       "gridPos": {
         "h": 6,
         "w": 8,
         "x": 16,
-        "y": 68
+        "y": 75
       },
       "targets": [
         {
@@ -1962,9 +2090,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 74
+        "y": 81
       },
-      "id": 34,
+      "id": 36,
       "panels": []
     },
     {
@@ -1975,12 +2103,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 35,
+      "id": 37,
       "gridPos": {
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 75
+        "y": 82
       },
       "targets": [
         {
@@ -1990,7 +2118,7 @@
           },
           "editorMode": "code",
           "expr": "rate(xflow_enrichment_lookups_total[$rollup_interval])",
-          "legendFormat": "{{enricher}} {{result}}",
+          "legendFormat": "{{enricher}} ({{result}})",
           "range": true,
           "refId": "A"
         }
@@ -2039,12 +2167,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 36,
+      "id": 38,
       "gridPos": {
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 75
+        "y": 82
       },
       "targets": [
         {
@@ -2125,12 +2253,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 37,
+      "id": 39,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 81
+        "y": 88
       },
       "targets": [
         {
@@ -2185,12 +2313,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 38,
+      "id": 40,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 81
+        "y": 88
       },
       "targets": [
         {
@@ -2249,12 +2377,12 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "id": 39,
+      "id": 41,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 81
+        "y": 88
       },
       "targets": [
         {

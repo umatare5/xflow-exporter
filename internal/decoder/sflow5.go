@@ -250,6 +250,7 @@ func readSFlowSampledIPv4(record []byte, r *flow.Record) bool {
 	r.DstPort = uint16(dstPort)  //nolint:gosec // The wire field is a port.
 	r.TCPFlags = uint8(tcpFlags) //nolint:gosec // The wire field is the TCP flag byte.
 	r.TOS = uint8(tos)           //nolint:gosec // The wire field is the TOS byte.
+	r.TOSReported = true
 	r.SrcAddr = netip.AddrFrom4([4]byte(src))
 	r.DstAddr = netip.AddrFrom4([4]byte(dstAddr))
 	return true
@@ -277,6 +278,7 @@ func readSFlowSampledIPv6(record []byte, r *flow.Record) bool {
 	r.DstPort = uint16(dstPort)  //nolint:gosec // The wire field is a port.
 	r.TCPFlags = uint8(tcpFlags) //nolint:gosec // The wire field is the TCP flag byte.
 	r.TOS = uint8(priority)      //nolint:gosec // The wire field is the traffic class.
+	r.TOSReported = true
 	r.SrcAddr = addrFrom16([16]byte(src))
 	r.DstAddr = addrFrom16([16]byte(dstAddr))
 	return true

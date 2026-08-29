@@ -307,3 +307,80 @@ xflow_destination_bytes_total{dst="other",exporter="other",port="other",proto="o
 		t.Errorf("CollectAndCompare() mismatch: %v", err)
 	}
 }
+
+func TestTCPFlagNames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		flags uint8
+		want  string
+	}{
+		{flags: 0x02, want: "syn"},
+		{flags: 0x12, want: "syn,ack"},
+		{flags: 0x18, want: "psh,ack"},
+		{flags: 0x11, want: "fin,ack"},
+		{flags: 0x04, want: "rst"},
+		{flags: 0x1B, want: "fin,syn,psh,ack"},
+		{flags: 0xC0, want: "ece,cwr"},
+	}
+
+	for _, tt := range tests {
+		if got := tcpFlagNames(tt.flags); got != tt.want {
+			t.Errorf("tcpFlagNames(%#x) = %q, want %q", tt.flags, got, tt.want)
+		}
+	}
+}
+
+func TestDSCPName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		dscp uint8
+		want string
+	}{
+		{dscp: 0, want: "cs0"},
+		{dscp: 46, want: "ef"},
+		{dscp: 34, want: "af41"},
+		{dscp: 24, want: "cs3"},
+		{dscp: 7, want: "7"},
+		{dscp: 63, want: "63"},
+	}
+
+	for _, tt := range tests {
+		if got := dscpName(tt.dscp); got != tt.want {
+			t.Errorf("dscpName(%d) = %q, want %q", tt.dscp, got, tt.want)
+		}
+	}
+}
+
+// TestFlowCollector_TCPFlagsAndDSCPLabels pins both label sets. The flags
+// render as bits rather than as the byte, since 2 and 18 are a scan and a
+// handshake and the numbers say so to nobody.
+func TestFlowCollector_TCPFlagsAndDSCPLabels(t *testing.T) {
+	t.Parallel()
+
+	modules := config.Collectors{TCPFlags: true, DSCP: true}
+	agg := aggregator.New(aggConfig(), aggregator.Modules{TCPFlags: true, DSCP: true})
+
+	r := flowRecord("10.0.0.1", "10.0.0.2", 700)
+	r.TCPFlags = 0x12
+	r.TOS, r.TOSReported = 0xB8, true
+	agg.Ingest([]flow.Record{r})
+
+	c := NewFlowCollector(agg, modules, aggConfig())
+
+	expected := `
+# HELP xflow_dscp_bytes_total Sampling-corrected bytes per DSCP class, other carries the entry-bound fold
+# TYPE xflow_dscp_bytes_total counter
+xflow_dscp_bytes_total{dscp="ef",exporter="192.0.2.1"} 700
+xflow_dscp_bytes_total{dscp="other",exporter="other"} 0
+# HELP xflow_tcp_flags_bytes_total Sampling-corrected bytes per TCP control-bit profile, other carries the entry-bound fold
+# TYPE xflow_tcp_flags_bytes_total counter
+xflow_tcp_flags_bytes_total{exporter="192.0.2.1",flags="syn,ack"} 700
+xflow_tcp_flags_bytes_total{exporter="other",flags="other"} 0
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_tcp_flags_bytes_total", "xflow_dscp_bytes_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}

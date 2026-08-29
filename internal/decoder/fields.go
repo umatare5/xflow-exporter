@@ -206,6 +206,7 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 	case fieldSrcTOS:
 		if v, ok := beUint8(value); ok {
 			r.TOS = v
+			r.TOSReported = true
 		}
 	case fieldTCPFlags:
 		if v, ok := beUint8(value); ok {

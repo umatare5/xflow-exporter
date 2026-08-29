@@ -115,6 +115,7 @@ func TestDecodeSFlowV5_RawEthernetTCP(t *testing.T) {
 		DstPort:      443,
 		Protocol:     protocolTCP,
 		TOS:          0xB8,
+		TOSReported:  true,
 		TCPFlags:     0x18,
 		InputIf:      3,
 		OutputIf:     4,

@@ -181,6 +181,7 @@ func readV8DestOnly(record []byte, dst *flow.Record) {
 	dst.Flows = 1
 	dst.OutputIf = uint32(binary.BigEndian.Uint16(record[20:22]))
 	dst.TOS = record[22]
+	dst.TOSReported = true
 }
 
 func readV8SrcDst(record []byte, dst *flow.Record) {
@@ -192,6 +193,7 @@ func readV8SrcDst(record []byte, dst *flow.Record) {
 	dst.OutputIf = uint32(binary.BigEndian.Uint16(record[24:26]))
 	dst.InputIf = uint32(binary.BigEndian.Uint16(record[26:28]))
 	dst.TOS = record[28]
+	dst.TOSReported = true
 }
 
 func readV8FullFlow(record []byte, dst *flow.Record) {
@@ -205,18 +207,21 @@ func readV8FullFlow(record []byte, dst *flow.Record) {
 	dst.OutputIf = uint32(binary.BigEndian.Uint16(record[28:30]))
 	dst.InputIf = uint32(binary.BigEndian.Uint16(record[30:32]))
 	dst.TOS = record[32]
+	dst.TOSReported = true
 	dst.Protocol = record[33]
 }
 
 func readV8TosAS(record []byte, dst *flow.Record) {
 	readV8AS(record, dst)
 	dst.TOS = record[28]
+	dst.TOSReported = true
 }
 
 func readV8TosProtoPort(record []byte, dst *flow.Record) {
 	readV8Common(record, dst)
 	dst.Protocol = record[20]
 	dst.TOS = record[21]
+	dst.TOSReported = true
 	dst.SrcPort = binary.BigEndian.Uint16(record[24:26])
 	dst.DstPort = binary.BigEndian.Uint16(record[26:28])
 	dst.InputIf = uint32(binary.BigEndian.Uint16(record[28:30]))
@@ -228,6 +233,7 @@ func readV8TosSrcPrefix(record []byte, dst *flow.Record) {
 	dst.SrcAddr = netip.AddrFrom4([4]byte(record[20:24]))
 	dst.SrcMask = record[24]
 	dst.TOS = record[25]
+	dst.TOSReported = true
 	dst.SrcAS = uint32(binary.BigEndian.Uint16(record[26:28]))
 	dst.InputIf = uint32(binary.BigEndian.Uint16(record[28:30]))
 }
@@ -237,6 +243,7 @@ func readV8TosDstPrefix(record []byte, dst *flow.Record) {
 	dst.DstAddr = netip.AddrFrom4([4]byte(record[20:24]))
 	dst.DstMask = record[24]
 	dst.TOS = record[25]
+	dst.TOSReported = true
 	dst.DstAS = uint32(binary.BigEndian.Uint16(record[26:28]))
 	dst.OutputIf = uint32(binary.BigEndian.Uint16(record[28:30]))
 }
@@ -248,6 +255,7 @@ func readV8TosPrefix(record []byte, dst *flow.Record) {
 	dst.DstMask = record[28]
 	dst.SrcMask = record[29]
 	dst.TOS = record[30]
+	dst.TOSReported = true
 	dst.SrcAS = uint32(binary.BigEndian.Uint16(record[32:34]))
 	dst.DstAS = uint32(binary.BigEndian.Uint16(record[34:36]))
 	dst.InputIf = uint32(binary.BigEndian.Uint16(record[36:38]))
@@ -261,6 +269,7 @@ func readV8PrefixPort(record []byte, dst *flow.Record) {
 	dst.DstMask = record[28]
 	dst.SrcMask = record[29]
 	dst.TOS = record[30]
+	dst.TOSReported = true
 	dst.Protocol = record[31]
 	dst.SrcPort = binary.BigEndian.Uint16(record[32:34])
 	dst.DstPort = binary.BigEndian.Uint16(record[34:36])

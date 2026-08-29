@@ -58,7 +58,11 @@ type Record struct {
 	// Protocol is the IP protocol number.
 	Protocol uint8
 	TOS      uint8
-	TCPFlags uint8
+	// TOSReported records that a device carried the TOS byte, which its value
+	// cannot: a DSCP of zero is best-effort traffic, not a field left unset,
+	// and the two would otherwise be one series.
+	TOSReported bool
+	TCPFlags    uint8
 
 	InputIf  uint32
 	OutputIf uint32

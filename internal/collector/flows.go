@@ -8,6 +8,7 @@ package collector
 import (
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -24,6 +25,8 @@ type FlowSource interface {
 	Hosts() ([]aggregator.EntrySnapshot[aggregator.HostKey], aggregator.Totals)
 	Services() ([]aggregator.EntrySnapshot[aggregator.ServiceKey], aggregator.Totals)
 	Destinations() ([]aggregator.EntrySnapshot[aggregator.DestinationKey], aggregator.Totals)
+	TCPFlags() ([]aggregator.EntrySnapshot[aggregator.TCPFlagsKey], aggregator.Totals)
+	DSCP() ([]aggregator.EntrySnapshot[aggregator.DSCPKey], aggregator.Totals)
 	ASNs() ([]aggregator.EntrySnapshot[aggregator.ASNKey], aggregator.Totals)
 	Applications() ([]aggregator.EntrySnapshot[aggregator.AppKey], aggregator.Totals)
 	Countries() ([]aggregator.EntrySnapshot[aggregator.CountryKey], aggregator.Totals)
@@ -89,6 +92,8 @@ type FlowCollector struct {
 	hosts        familyDescs
 	services     familyDescs
 	destinations familyDescs
+	tcpFlags     familyDescs
+	dscp         familyDescs
 	asns         familyDescs
 	applications familyDescs
 	countries    familyDescs
@@ -139,6 +144,14 @@ func NewFlowCollector(src FlowSource, modules config.Collectors, agg config.Aggr
 		c.destinations = newFamilyDescs("xflow_destination", "destination service",
 			[]string{labelExporter, labelDst, labelProto, labelPort})
 	}
+	if modules.TCPFlags {
+		c.tcpFlags = newFamilyDescs("xflow_tcp_flags", "TCP control-bit profile",
+			[]string{labelExporter, labelFlags})
+	}
+	if modules.DSCP {
+		c.dscp = newFamilyDescs("xflow_dscp", "DSCP class",
+			[]string{labelExporter, labelDSCP})
+	}
 	if modules.ASNs {
 		c.asns = newFamilyDescs("xflow_asn_pair", "AS pair",
 			[]string{labelExporter, labelSrcASN, labelDstASN})
@@ -172,6 +185,12 @@ func (c *FlowCollector) Describe(ch chan<- *prometheus.Desc) {
 	}
 	if c.modules.Destinations {
 		c.destinations.describe(ch)
+	}
+	if c.modules.TCPFlags {
+		c.tcpFlags.describe(ch)
+	}
+	if c.modules.DSCP {
+		c.dscp.describe(ch)
 	}
 	if c.modules.ASNs {
 		c.asns.describe(ch)
@@ -210,6 +229,12 @@ func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 	if c.modules.Destinations {
 		collectFamily(c, ch, &c.destinations, c.src.Destinations, destinationLabels)
+	}
+	if c.modules.TCPFlags {
+		collectFamily(c, ch, &c.tcpFlags, c.src.TCPFlags, tcpFlagsLabels)
+	}
+	if c.modules.DSCP {
+		collectFamily(c, ch, &c.dscp, c.src.DSCP, dscpLabels)
 	}
 	if c.modules.ASNs {
 		collectFamily(c, ch, &c.asns, c.src.ASNs, asnLabels)
@@ -316,6 +341,14 @@ func destinationLabels(k aggregator.DestinationKey) []string {
 	}
 }
 
+func tcpFlagsLabels(k aggregator.TCPFlagsKey) []string {
+	return []string{k.Exporter.String(), tcpFlagNames(k.Flags)}
+}
+
+func dscpLabels(k aggregator.DSCPKey) []string {
+	return []string{k.Exporter.String(), dscpName(k.DSCP)}
+}
+
 func asnLabels(k aggregator.ASNKey) []string {
 	return []string{
 		k.Exporter.String(),
@@ -369,4 +402,61 @@ func protocolName(protocol uint8) string {
 		return name
 	}
 	return strconv.Itoa(int(protocol))
+}
+
+// tcpFlagBits names each control bit in header order, which is the order
+// every packet tool prints them in.
+var tcpFlagBits = [8]struct {
+	mask uint8
+	name string
+}{
+	{0x01, "fin"},
+	{0x02, "syn"},
+	{0x04, "rst"},
+	{0x08, "psh"},
+	{0x10, "ack"},
+	{0x20, "urg"},
+	{0x40, "ece"},
+	{0x80, "cwr"},
+}
+
+// tcpFlagNames renders the bits a flow ORed together.
+//
+// The bits are rendered rather than the byte because the byte is not what an
+// operator reads: 2 and 18 are a scan and a handshake, and nothing about the
+// numbers says so. Only set bits appear, so the label is short and the
+// distinct values are the handful a network actually produces.
+func tcpFlagNames(flags uint8) string {
+	var b strings.Builder
+	for _, f := range tcpFlagBits {
+		if flags&f.mask == 0 {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(f.name)
+	}
+	return b.String()
+}
+
+// dscpNames maps the code points RFC 2474, 2597 and 3246 assign to a class.
+// A point outside them is a local convention this exporter cannot name.
+var dscpNames = map[uint8]string{
+	0: "cs0", 8: "cs1", 16: "cs2", 24: "cs3",
+	32: "cs4", 40: "cs5", 48: "cs6", 56: "cs7",
+	10: "af11", 12: "af12", 14: "af13",
+	18: "af21", 20: "af22", 22: "af23",
+	26: "af31", 28: "af32", 30: "af33",
+	34: "af41", 36: "af42", 38: "af43",
+	44: "voice-admit", 46: "ef",
+}
+
+// dscpName renders the code point as the class it names, the number
+// otherwise, which is the shape protocolName already uses.
+func dscpName(dscp uint8) string {
+	if name, ok := dscpNames[dscp]; ok {
+		return name
+	}
+	return strconv.Itoa(int(dscp))
 }

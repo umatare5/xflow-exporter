@@ -12,6 +12,8 @@ Each table family carries three metrics sharing one label set: `_bytes_total` an
 | `hosts`         | `xflow_host_pair`    | `exporter,src,dst`                 |
 | `services`      | `xflow_service`      | `exporter,src,dst,proto,port`      |
 | `destinations`  | `xflow_destination`  | `exporter,dst,proto,port`          |
+| `tcp_flags`     | `xflow_tcp_flags`    | `exporter,flags`                   |
+| `dscp`          | `xflow_dscp`         | `exporter,dscp`                    |
 | `asns`          | `xflow_asn_pair`     | `exporter,src_asn,dst_asn`         |
 | `applications`  | `xflow_application`  | `exporter,application`             |
 | `countries`     | `xflow_country_pair` | `exporter,src_country,dst_country` |
@@ -26,6 +28,8 @@ Each table family carries three metrics sharing one label set: `_bytes_total` an
 - `application` — the device-announced AVC name, the inline vendor string, or the `engine:selector` split of `applicationId` when only the number is known. `--enrich.services` fills it from the transport port where none of those exist.
 - `src_country`/`dst_country` — ISO codes from `--enrich.country-database`, `unknown` for a side the database could not place. A record neither side of which resolved feeds no entry.
 - `address`/`direction` — a single address a threat list names and the side it was seen on. Only flagged addresses appear, so the table holds what is worth acting on rather than one entry per address seen.
+- `flags` — the TCP control bits the flow's packets ORed together, rendered as names in header order (`syn`, `syn,ack`, `fin,psh,ack`). Only TCP records feed it, and only those carrying a bit: a TCP flow always sets one, so a zero is a device that did not export the field rather than a flow that set nothing.
+- `dscp` — the top six bits of the TOS byte as the class they name, the number otherwise. The two bits dropped are ECN, which is congestion signaling rather than a class. Admission keys on whether the device reported the byte, not on its value: `cs0` is best-effort traffic and belongs in the table, while a device that exports no TOS at all feeds nothing.
 - `destinations` is `services` without the source, so one entry reads as what a service received rather than who reached it. It is directional: an ingress-only pair of observation points keys the two directions of a conversation separately, so it is not a host total. Query-side folding of `services` matches it only while every source stays inside the Top-K cut, which a service reached by more sources than `--aggregation.top-k` does not.
 - The `exporters` family publishes unfolded: its cardinality is the fleet's, which no Top-K needs to guard.
 

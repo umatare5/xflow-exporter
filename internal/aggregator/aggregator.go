@@ -19,6 +19,8 @@ type Modules struct {
 	Hosts        bool
 	Services     bool
 	Destinations bool
+	TCPFlags     bool
+	DSCP         bool
 	ASNs         bool
 	Applications bool
 	Countries    bool
@@ -28,6 +30,7 @@ type Modules struct {
 // Any reports whether any aggregation is enabled.
 func (m Modules) Any() bool {
 	return m.Exporters || m.Hosts || m.Services || m.Destinations ||
+		m.TCPFlags || m.DSCP ||
 		m.ASNs || m.Applications || m.Countries || m.Threats
 }
 
@@ -54,6 +57,30 @@ type ServiceKey struct {
 	Dst      netip.Addr
 	Protocol uint8
 	Port     uint16
+}
+
+// protocolTCP is the only protocol whose control bits a record can carry.
+const protocolTCP = 6
+
+// TCPFlagsKey keys the control-bit profile. The bits are the OR of what the
+// flow's packets carried, so one entry reads as how a conversation behaved
+// rather than as one packet: a scan is one entry of bare SYN against many
+// destinations, where a working session ORs its way to SYN, ACK, PSH and FIN.
+type TCPFlagsKey struct {
+	Exporter netip.Addr
+	Flags    uint8
+}
+
+// ecnBits is how far the TOS byte is shifted to leave the code point. The two
+// it drops are ECN, which is congestion signaling rather than a class, and
+// folding them in would split every class in four.
+const ecnBits = 2
+
+// DSCPKey keys the differentiated-services code point, the top six bits of
+// the TOS byte.
+type DSCPKey struct {
+	Exporter netip.Addr
+	DSCP     uint8
 }
 
 // DestinationKey keys the aggregation ServiceKey becomes without its source:
@@ -116,6 +143,8 @@ type Aggregator struct {
 	// destinations holds the same records as services keyed without the
 	// source, so it is enabled and swept independently of it.
 	destinations *table[DestinationKey]
+	tcpFlags     *table[TCPFlagsKey]
+	dscp         *table[DSCPKey]
 	asns         *table[ASNKey]
 	apps         *table[AppKey]
 	countries    *table[CountryKey]
@@ -143,6 +172,12 @@ func New(cfg config.Aggregation, modules Modules) *Aggregator {
 	}
 	if modules.Destinations {
 		a.destinations = newTable[DestinationKey](cfg.MaxEntries)
+	}
+	if modules.TCPFlags {
+		a.tcpFlags = newTable[TCPFlagsKey](cfg.MaxEntries)
+	}
+	if modules.DSCP {
+		a.dscp = newTable[DSCPKey](cfg.MaxEntries)
 	}
 	if modules.ASNs {
 		a.asns = newTable[ASNKey](cfg.MaxEntries)
@@ -212,6 +247,21 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 			Protocol: r.Protocol,
 			Port:     r.DstPort,
 		}, bytes, packets, r.Flows, now)
+	}
+
+	// A TCP flow always carries at least one control bit, so a zero here is
+	// a device that did not export the field rather than a flow that set
+	// nothing, and the two must not share a series.
+	if a.tcpFlags != nil && r.Protocol == protocolTCP && r.TCPFlags != 0 {
+		a.tcpFlags.add(TCPFlagsKey{Exporter: r.Exporter, Flags: r.TCPFlags},
+			bytes, packets, r.Flows, now)
+	}
+
+	// Keyed on whether the device reported the byte, not on its value: a
+	// code point of zero is best-effort traffic and belongs in the table.
+	if a.dscp != nil && r.TOSReported {
+		a.dscp.add(DSCPKey{Exporter: r.Exporter, DSCP: r.TOS >> ecnBits},
+			bytes, packets, r.Flows, now)
 	}
 
 	if a.asns != nil && (r.SrcAS != 0 || r.DstAS != 0) {
@@ -321,7 +371,7 @@ func (t *table[K]) stats() (idle, folds uint64) {
 }
 
 // tableCount is how many aggregations exist, sizing the walk below.
-const tableCount = 8
+const tableCount = 10
 
 // tables returns the enabled tables keyed by their aggregation label value.
 func (a *Aggregator) tables() map[string]sweepable {
@@ -337,6 +387,12 @@ func (a *Aggregator) tables() map[string]sweepable {
 	}
 	if a.destinations != nil {
 		tables["destinations"] = a.destinations
+	}
+	if a.tcpFlags != nil {
+		tables["tcp_flags"] = a.tcpFlags
+	}
+	if a.dscp != nil {
+		tables["dscp"] = a.dscp
 	}
 	if a.asns != nil {
 		tables["asns"] = a.asns
@@ -410,6 +466,22 @@ func (a *Aggregator) Destinations() ([]EntrySnapshot[DestinationKey], Totals) {
 		return nil, Totals{}
 	}
 	return a.destinations.snapshot()
+}
+
+// TCPFlags reads the control-bit table.
+func (a *Aggregator) TCPFlags() ([]EntrySnapshot[TCPFlagsKey], Totals) {
+	if a.tcpFlags == nil {
+		return nil, Totals{}
+	}
+	return a.tcpFlags.snapshot()
+}
+
+// DSCP reads the code-point table.
+func (a *Aggregator) DSCP() ([]EntrySnapshot[DSCPKey], Totals) {
+	if a.dscp == nil {
+		return nil, Totals{}
+	}
+	return a.dscp.snapshot()
 }
 
 // ASNs reads the AS-pair table.
