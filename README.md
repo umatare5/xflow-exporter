@@ -20,13 +20,13 @@ This exporter receives traffic flow records from on-premises network devices —
 
 ## Protocol Support
 
-| Protocol                        | Status  |
-| :------------------------------ | :------ |
-| NetFlow v5 (incl. J-Flow v5)    | Planned |
-| NetFlow v8 (incl. J-Flow v8)    | Planned |
-| NetFlow v9 (incl. FNF, J-Flow)  | Planned |
-| IPFIX / NetFlow v10             | Planned |
-| sFlow v5                        | Planned |
+| Protocol                        | Status    |
+| :------------------------------ | :-------- |
+| NetFlow v5 (incl. J-Flow v5)    | Supported |
+| NetFlow v8 (incl. J-Flow v8)    | Planned   |
+| NetFlow v9 (incl. FNF, J-Flow)  | Planned   |
+| IPFIX / NetFlow v10             | Planned   |
+| sFlow v5                        | Planned   |
 
 Transport is plaintext UDP. DTLS is not supported: no shipping network OS exports flows over DTLS, and Go has no production DTLS 1.3 implementation yet.
 
@@ -58,6 +58,7 @@ GLOBAL OPTIONS:
    --receiver.buffer-bytes int                              UDP socket receive buffer size in bytes (0 keeps the OS default) (default: 4194304)
    --receiver.max-packet-size int                           Largest datagram in bytes kept whole; larger ones are dropped (default: 9216)
    --receiver.queue-size int                                Datagrams buffered between the read loops and the decoders (default: 8192)
+   --receiver.workers int                                   Decode workers consuming the queue (0 sizes to the CPU count) (default: 0)
 ```
 
 Every listener accepts every supported protocol, identified per datagram, so one port can carry NetFlow and IPFIX together and an sFlow deployment adds `--receiver.address :6343` rather than a mode switch. On Linux the read loops use `recvmmsg` batching; other platforms read one datagram per call, so performance figures are Linux figures.
@@ -85,10 +86,17 @@ These series describe the exporter itself. They have no module and no collector 
 | `xflow_receiver_dropped_packets_total` | Counter | Drops per `listener` and `reason` before decoding    |
 | `xflow_receiver_queue_length`          | Gauge   | Datagrams waiting between read loops and decoders    |
 | `xflow_receiver_queue_capacity`        | Gauge   | Bound of that queue                                  |
+| `xflow_flows_total`                    | Counter | Records decoded per `exporter` and `version`         |
+| `xflow_decode_errors_total`            | Counter | Rejections per `exporter`, `version` and `reason`    |
+| `xflow_last_flow_timestamp_seconds`    | Gauge   | Unix time of the exporter's last decoded datagram    |
 
-`reason` is `queue_full` for a burst the queue could not absorb and `truncated` for a datagram larger than `--receiver.max-packet-size`. Both series are seeded at 0, so a first drop is a rise on a series that was already there.
+On `xflow_receiver_dropped_packets_total`, `reason` is `queue_full` for a burst the queue could not absorb and `truncated` for a datagram larger than `--receiver.max-packet-size`. Both series are seeded at 0, so a first drop is a rise on a series that was already there.
 
-The parsers and the aggregation metrics land in the upcoming milestones, each behind its own `--collector.*` flag and disabled by default. Until then received datagrams are counted, then discarded.
+On `xflow_decode_errors_total`, `reason` is `unsupported_version` for a datagram no decoder claims and `malformed` for one whose claimed structure does not fit its bytes. Exporter-labeled series appear on a device's first datagram: a push protocol cannot know its senders in advance.
+
+Alert on freshness with `time() - xflow_last_flow_timestamp_seconds`: a device that goes silent stops moving its timestamp while every counter freezes, and nothing else can tell that from a healthy quiet network.
+
+The aggregation metrics land in the upcoming milestones, each behind its own `--collector.*` flag and disabled by default. Until then decoded records are counted, then discarded.
 
 ## Contributing
 

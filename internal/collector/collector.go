@@ -54,6 +54,12 @@ func (c *Collector) RegisterReceiverCollector(src ReceiverSource) {
 	slog.Debug("Registered receiver collector")
 }
 
+// RegisterDecoderCollector registers the decode self-monitoring collector.
+func (c *Collector) RegisterDecoderCollector(src DecoderSource) {
+	c.registry.MustRegister(NewSafeCollector(NewDecoderCollector(src), "Decoder"))
+	slog.Debug("Registered decoder collector")
+}
+
 // RegisterSystemCollectors registers Go and process collectors conditionally.
 func (c *Collector) RegisterSystemCollectors() {
 	if c.cfg.InternalCollector.EnableGoCollector {

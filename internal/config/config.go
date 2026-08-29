@@ -37,6 +37,9 @@ const (
 	// covers a jumbo frame; a larger datagram is counted and dropped rather
 	// than decoded from a truncated buffer.
 	DefaultReceiverMaxPacketSize = 9216
+	// DefaultReceiverWorkers of zero sizes the decode worker pool to
+	// GOMAXPROCS at startup.
+	DefaultReceiverWorkers = 0
 	// HealthPath lives here so Validate can reject a telemetry path that takes it.
 	// The server package already depends on this one, so the reverse would cycle.
 	HealthPath       = "/healthz"
@@ -67,6 +70,7 @@ type Receiver struct {
 	QueueSize     int      `json:"queue_size"`
 	SockBufBytes  int      `json:"sock_buf_bytes"`
 	MaxPacketSize int      `json:"max_packet_size"`
+	Workers       int      `json:"workers"`
 }
 
 // Log holds logging configuration.
@@ -95,6 +99,7 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			QueueSize:     cmd.Int("receiver.queue-size"),
 			SockBufBytes:  cmd.Int("receiver.buffer-bytes"),
 			MaxPacketSize: cmd.Int("receiver.max-packet-size"),
+			Workers:       cmd.Int("receiver.workers"),
 		},
 		Log: Log{
 			Level:  cmd.String("log.level"),
@@ -178,6 +183,7 @@ func (c *Config) Validate() error {
 func (c *Config) validateReceiver() error {
 	const (
 		maxBatchSize = 1024
+		maxWorkers   = 256
 		// minPacketSize is the IPv4 minimum reassembly buffer, below which no
 		// conforming exporter can be expected to fit a message.
 		minPacketSize = 576
@@ -211,6 +217,10 @@ func (c *Config) validateReceiver() error {
 			r.MaxPacketSize < minPacketSize || r.MaxPacketSize > maxPacketSize,
 			fmt.Sprintf("invalid receiver max packet size: %d (must be %d-%d)",
 				r.MaxPacketSize, minPacketSize, maxPacketSize),
+		},
+		{
+			r.Workers < 0 || r.Workers > maxWorkers,
+			fmt.Sprintf("invalid receiver workers: %d (must be 0 for auto, or 1-%d)", r.Workers, maxWorkers),
 		},
 	}
 

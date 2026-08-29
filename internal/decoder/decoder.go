@@ -1,0 +1,156 @@
+// Package decoder turns received datagrams into normalized flow records.
+// This file holds the per-datagram dispatch and the decode accounting.
+package decoder
+
+import (
+	"encoding/binary"
+	"fmt"
+	"net/netip"
+	"time"
+
+	"github.com/umatare5/xflow-exporter/internal/flow"
+)
+
+// Decode error reasons published in the reason label. They are a closed set:
+// a new failure mode gets a constant here rather than a free-form string, so
+// the label stays bounded.
+const (
+	// ReasonUnsupportedVersion marks a datagram no decoder claims.
+	ReasonUnsupportedVersion = "unsupported_version"
+	// ReasonMalformed marks a datagram whose claimed structure does not fit
+	// its bytes.
+	ReasonMalformed = "malformed"
+)
+
+// decodeError carries the reason a datagram was rejected, for the error
+// counter, and the detail, for the debug log.
+type decodeError struct {
+	reason string
+	detail string
+}
+
+// Error implements the error interface.
+func (e *decodeError) Error() string {
+	return e.reason + ": " + e.detail
+}
+
+// Reason returns the reason label value.
+func (e *decodeError) Reason() string {
+	return e.reason
+}
+
+// malformed builds the rejection for a structurally broken datagram.
+func malformed(format string, args ...any) *decodeError {
+	return &decodeError{reason: ReasonMalformed, detail: fmt.Sprintf(format, args...)}
+}
+
+// minVersionBytes is what a version sniff needs.
+const minVersionBytes = 4
+
+// Wire version numbers as they appear in the first header field.
+const (
+	wireNetFlowV5 = 5
+	wireNetFlowV8 = 8
+	wireNetFlowV9 = 9
+	wireIPFIX     = 10
+	wireSFlowV5   = 5
+)
+
+// Decoder dispatches datagrams to the protocol parsers and accounts every
+// outcome. One Decoder serves every worker: the parsers are stateless until
+// the template protocols land, and the statistics are concurrency-safe.
+type Decoder struct {
+	stats *Stats
+	// now is the clock flow timestamps are anchored with; a test pins it.
+	now func() time.Time
+}
+
+// New creates a decoder.
+func New() *Decoder {
+	return &Decoder{
+		stats: newStats(),
+		now:   time.Now,
+	}
+}
+
+// Stats returns the decode statistics for the metrics collector.
+func (d *Decoder) Stats() *Stats {
+	return d.stats
+}
+
+// Decode parses one datagram and appends its flow records to dst, returning
+// the extended slice. The outcome is accounted either way, so the returned
+// error is for the debug log alone.
+func (d *Decoder) Decode(exporter netip.Addr, payload []byte, dst []flow.Record) ([]flow.Record, error) {
+	version, err := sniffVersion(payload)
+	if err != nil {
+		d.stats.exporter(exporter).countError(flow.VersionUnknown, err.Reason())
+		return dst, err
+	}
+
+	before := len(dst)
+	dst, err = d.decodeVersion(version, exporter, payload, dst)
+	if err != nil {
+		d.stats.exporter(exporter).countError(version, err.Reason())
+		return dst[:before], err
+	}
+
+	d.stats.exporter(exporter).countFlows(version, len(dst)-before, d.now())
+	return dst, nil
+}
+
+// decodeVersion routes one sniffed datagram to its parser.
+func (d *Decoder) decodeVersion(
+	version flow.Version, exporter netip.Addr, payload []byte, dst []flow.Record,
+) ([]flow.Record, *decodeError) {
+	switch version {
+	case flow.VersionNetFlowV5:
+		return decodeNetFlowV5(exporter, payload, dst)
+	case flow.VersionNetFlowV8, flow.VersionNetFlowV9, flow.VersionIPFIX, flow.VersionSFlowV5:
+		// Sniffed but not parsed yet: each lands in its own milestone, and
+		// until then the datagram is rejected rather than half-read.
+		return dst, &decodeError{
+			reason: ReasonUnsupportedVersion,
+			detail: version.String() + " decoding is not implemented yet",
+		}
+	case flow.VersionUnknown:
+		return dst, &decodeError{reason: ReasonUnsupportedVersion, detail: "unknown version"}
+	default:
+		return dst, &decodeError{reason: ReasonUnsupportedVersion, detail: "unknown version"}
+	}
+}
+
+// sniffVersion identifies the wire protocol from the first bytes.
+//
+// NetFlow and IPFIX carry a 16-bit version first, sFlow a 32-bit one. The two
+// cannot collide: an sFlow v5 datagram begins 0x00000005, and no NetFlow
+// version is 0, so a zero first half-word can only be sFlow.
+func sniffVersion(payload []byte) (flow.Version, *decodeError) {
+	if len(payload) < minVersionBytes {
+		return flow.VersionUnknown, malformed("datagram of %d bytes is shorter than any header", len(payload))
+	}
+
+	switch short := binary.BigEndian.Uint16(payload); short {
+	case wireNetFlowV5:
+		return flow.VersionNetFlowV5, nil
+	case wireNetFlowV8:
+		return flow.VersionNetFlowV8, nil
+	case wireNetFlowV9:
+		return flow.VersionNetFlowV9, nil
+	case wireIPFIX:
+		return flow.VersionIPFIX, nil
+	case 0:
+		if binary.BigEndian.Uint32(payload) == wireSFlowV5 {
+			return flow.VersionSFlowV5, nil
+		}
+		return flow.VersionUnknown, &decodeError{
+			reason: ReasonUnsupportedVersion,
+			detail: fmt.Sprintf("unknown 32-bit version %d", binary.BigEndian.Uint32(payload)),
+		}
+	default:
+		return flow.VersionUnknown, &decodeError{
+			reason: ReasonUnsupportedVersion,
+			detail: fmt.Sprintf("unknown 16-bit version %d", short),
+		}
+	}
+}

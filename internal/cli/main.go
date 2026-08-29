@@ -114,6 +114,12 @@ func registerReceiverFlags() []cli.Flag {
 			Value:    config.DefaultReceiverMaxPacketSize,
 			Category: "* Receiver Options",
 		},
+		&cli.IntFlag{
+			Name:     "receiver.workers",
+			Usage:    "Decode workers consuming the queue (0 sizes to the CPU count)",
+			Value:    config.DefaultReceiverWorkers,
+			Category: "* Receiver Options",
+		},
 	}
 }
 
