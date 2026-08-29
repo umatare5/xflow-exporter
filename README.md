@@ -25,12 +25,14 @@ This exporter receives traffic flow records from on-premises network devices —
 | NetFlow v5 (incl. J-Flow v5)    | Supported |
 | NetFlow v8 (incl. J-Flow v8)    | Supported |
 | NetFlow v9 (incl. FNF, J-Flow)  | Supported |
-| IPFIX / NetFlow v10             | Planned   |
+| IPFIX / NetFlow v10             | Supported |
 | sFlow v5                        | Planned   |
 
 NetFlow v8 covers all fourteen aggregation methods of aggregation export version 2. A v8 record is pre-aggregated on the router, so it carries only its method's dimensions and the rest stay absent.
 
-NetFlow v9 templates are cached per exporter address and Observation Domain ID together, as RFC 7011 requires, so two domains reusing one template ID never corrupt each other. A template is refused when it declares a zero-width field or more than `--parser.max-fields-per-template` fields, and expires after `--parser.template-ttl` without a re-announcement. Options templates feed the sampling rate, which is stamped onto decoded records and published as `xflow_sampling_rate`.
+NetFlow v9 and IPFIX templates are cached per exporter address and Observation Domain ID together, as RFC 7011 requires, so two domains reusing one template ID never corrupt each other. A template is refused when it declares a zero-width fixed field or more than `--parser.max-fields-per-template` fields, and expires after `--parser.template-ttl` without a re-announcement. IPFIX adds enterprise information elements, variable-length fields with strict bounds checking, and template withdrawals.
+
+Options templates feed the packet sampling rate — the PSAMP interval/space pair, the random-sampler interval, or the legacy interval, in that order — which is stamped onto decoded records and published as `xflow_sampling_rate`. Cisco AVC application tables announced through options resolve the `applicationId` (IE 95) of each record into the name and category the device itself declared, and PAN-OS App-ID and User-ID strings are carried through a string interner so one name allocates once rather than per flow.
 
 Transport is plaintext UDP. DTLS is not supported: no shipping network OS exports flows over DTLS, and Go has no production DTLS 1.3 implementation yet.
 

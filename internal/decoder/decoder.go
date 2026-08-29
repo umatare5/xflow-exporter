@@ -77,6 +77,8 @@ const (
 type Decoder struct {
 	stats     *Stats
 	templates *templateStore
+	apps      *appTables
+	strings   *interner
 	// now is the clock flow timestamps are anchored with; a test pins it.
 	now func() time.Time
 }
@@ -86,8 +88,20 @@ func New(cfg config.Parser) *Decoder {
 	return &Decoder{
 		stats:     newStats(),
 		templates: newTemplateStore(cfg),
+		apps:      newAppTables(),
+		strings:   newInterner(),
 		now:       time.Now,
 	}
+}
+
+// resolveApplication fills the application strings from the exporter's own
+// announcements. A vendor-carried inline name wins, and an identifier the
+// table cannot name stays numbered rather than being guessed.
+func (d *Decoder) resolveApplication(exporter netip.Addr, r *flow.Record) {
+	if r.AppID == 0 || r.AppName != "" {
+		return
+	}
+	r.AppName, r.AppCategory = d.apps.resolve(exporter, r.AppID)
 }
 
 // Domains returns the per-observation-domain state for the metrics collector.
@@ -135,8 +149,13 @@ func (d *Decoder) decodeVersion(
 			d.stats.exporter(exporter).countError(flow.VersionNetFlowV9, reason)
 		}
 		return d.decodeNetFlowV9(exporter, payload, dst, issue)
-	case flow.VersionIPFIX, flow.VersionSFlowV5:
-		// Sniffed but not parsed yet: each lands in its own milestone, and
+	case flow.VersionIPFIX:
+		issue := func(reason string) {
+			d.stats.exporter(exporter).countError(flow.VersionIPFIX, reason)
+		}
+		return d.decodeIPFIX(exporter, payload, dst, issue)
+	case flow.VersionSFlowV5:
+		// Sniffed but not parsed yet: sFlow lands in its own milestone, and
 		// until then the datagram is rejected rather than half-read.
 		return dst, &decodeError{
 			reason: ReasonUnsupportedVersion,

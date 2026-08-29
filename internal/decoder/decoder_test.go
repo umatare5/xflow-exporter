@@ -127,7 +127,6 @@ func TestDecoder_DecodeRejectsSniffedButUnimplementedVersions(t *testing.T) {
 	d := newTestDecoder()
 
 	payloads := map[string][]byte{
-		"ipfix":    {0x00, 0x0A, 0x00, 0x10},
 		"sflow_v5": {0x00, 0x00, 0x00, 0x05},
 	}
 

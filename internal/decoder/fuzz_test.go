@@ -22,6 +22,12 @@ func FuzzDecode(f *testing.F) {
 	f.Add(v9Packet(1, fixtureV9ODID, fixtureV9Template()))
 	f.Add(v9Packet(2, fixtureV9ODID, fixtureV9Template(), flowSet(fixtureV9TemplateID, fixtureV9DataRecord())))
 	f.Add(v9Packet(3, fixtureV9ODID, flowSet(2, []byte{0, 0, 0, 0})))
+	f.Add(ipfixMessage(0, fixtureIPFIXTemplate()))
+	f.Add(ipfixMessage(1, fixtureIPFIXTemplate(),
+		flowSet(fixtureIPFIXTemplateID, fixtureIPFIXRecord())))
+	f.Add(ipfixMessage(2,
+		ipfixTemplateSet(ipfixSpec(fieldApplicationName, variableFieldLength, 0)),
+		flowSet(fixtureIPFIXTemplateID, []byte{255, 0, 3, 'a', 'b', 'c'})))
 
 	exporter := netip.MustParseAddr("192.0.2.99")
 

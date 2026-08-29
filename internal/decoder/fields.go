@@ -1,0 +1,263 @@
+// Package decoder turns received datagrams into normalized flow records.
+// This file maps information elements into flow.Record. NetFlow v9 field
+// types and IPFIX IANA information elements share one numbering, which is
+// what lets both protocols share this layer.
+package decoder
+
+import (
+	"encoding/binary"
+	"math"
+	"net/netip"
+	"time"
+
+	"github.com/umatare5/xflow-exporter/internal/flow"
+)
+
+// Vendor information elements mapped beyond the IANA set.
+const (
+	// Cisco AVC exports the application identifier as IANA IE 95; the name
+	// and category arrive through the application-table options this file's
+	// options reader captures.
+	fieldApplicationID = 95
+
+	// PAN-OS exports these string fields inside NetFlow v9 records using
+	// private type numbers, there being no enterprise bit in v9.
+	fieldPanAppID  = 56701
+	fieldPanUserID = 56702
+)
+
+// ciscoPEN is the Cisco private enterprise number, under which the AVC
+// application attributes are exported.
+const ciscoPEN = 9
+
+// Cisco AVC application attribute elements under ciscoPEN.
+const (
+	fieldCiscoAppCategory = 12232
+)
+
+// fieldState accumulates per-record values that need resolution after every
+// field is read: the flow clocks and the egress fallback counters. It also
+// carries the interner vendor strings resolve through.
+type fieldState struct {
+	firstUptimeMs, lastUptimeMs uint32
+	hasUptime                   bool
+	startAbs, endAbs            time.Time
+	outBytes, outPackets        uint64
+	intern                      *interner
+}
+
+// finishRecord resolves the accumulated state into the record and stamps the
+// domain sampling rate where the record carried none.
+func finishRecord(r *flow.Record, state *fieldState, bootTime time.Time, domain *domainState) {
+	// An egress-only template carries OUT_* alone; both present would double
+	// the flow if summed, so IN_* wins.
+	if r.Bytes == 0 {
+		r.Bytes = state.outBytes
+	}
+	if r.Packets == 0 {
+		r.Packets = state.outPackets
+	}
+
+	switch {
+	case !state.startAbs.IsZero() || !state.endAbs.IsZero():
+		r.Start = state.startAbs
+		r.End = state.endAbs
+	case state.hasUptime && !bootTime.IsZero():
+		r.Start = bootTime.Add(time.Duration(state.firstUptimeMs) * time.Millisecond)
+		r.End = bootTime.Add(time.Duration(state.lastUptimeMs) * time.Millisecond)
+	}
+
+	if r.SamplingRate == 0 {
+		r.SamplingRate = domain.samplingRate.Load()
+	}
+}
+
+// applyField maps one field into the record. An unknown element is skipped by
+// length, which is what lets a template carry fields this exporter does not
+// model without desynchronizing the ones it does.
+func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise uint32, value []byte) {
+	if enterprise != 0 {
+		// No enterprise element is mapped inside data records yet; the AVC
+		// attributes arrive through options records instead.
+		return
+	}
+
+	switch fieldType {
+	case fieldInBytes:
+		r.Bytes, _ = beUint(value)
+	case fieldInPackets:
+		r.Packets, _ = beUint(value)
+	case fieldOutBytes:
+		state.outBytes, _ = beUint(value)
+	case fieldOutPackets:
+		state.outPackets, _ = beUint(value)
+	case fieldProtocol:
+		if v, ok := beUint8(value); ok {
+			r.Protocol = v
+		}
+	case fieldSrcTOS:
+		if v, ok := beUint8(value); ok {
+			r.TOS = v
+		}
+	case fieldTCPFlags:
+		if v, ok := beUint8(value); ok {
+			r.TCPFlags = v
+		}
+	case fieldL4SrcPort:
+		if v, ok := beUint16(value); ok {
+			r.SrcPort = v
+		}
+	case fieldL4DstPort:
+		if v, ok := beUint16(value); ok {
+			r.DstPort = v
+		}
+	case fieldIPv4SrcAddr:
+		if len(value) == ipv4Len {
+			r.SrcAddr = netip.AddrFrom4([4]byte(value))
+		}
+	case fieldIPv4DstAddr:
+		if len(value) == ipv4Len {
+			r.DstAddr = netip.AddrFrom4([4]byte(value))
+		}
+	case fieldIPv6SrcAddr:
+		if len(value) == ipv6Len {
+			r.SrcAddr = netip.AddrFrom16([16]byte(value))
+		}
+	case fieldIPv6DstAddr:
+		if len(value) == ipv6Len {
+			r.DstAddr = netip.AddrFrom16([16]byte(value))
+		}
+	case fieldSrcMask, fieldIPv6SrcMask:
+		if v, ok := beUint8(value); ok {
+			r.SrcMask = v
+		}
+	case fieldDstMask, fieldIPv6DstMask:
+		if v, ok := beUint8(value); ok {
+			r.DstMask = v
+		}
+	case fieldInputSNMP:
+		if v, ok := beUint32(value); ok {
+			r.InputIf = v
+		}
+	case fieldOutputSNMP:
+		if v, ok := beUint32(value); ok {
+			r.OutputIf = v
+		}
+	case fieldSrcAS:
+		if v, ok := beUint32(value); ok {
+			r.SrcAS = v
+		}
+	case fieldDstAS:
+		if v, ok := beUint32(value); ok {
+			r.DstAS = v
+		}
+	case fieldApplicationID:
+		if v, ok := beUint32(value); ok {
+			r.AppID = v
+		}
+	default:
+		applyRareField(r, state, fieldType, value)
+	}
+}
+
+// applyRareField maps the elements off the hot path: the flow clocks and the
+// vendor strings.
+func applyRareField(r *flow.Record, state *fieldState, fieldType uint16, value []byte) {
+	switch fieldType {
+	case fieldFirstSwitched:
+		state.firstUptimeMs, _ = beUint32(value)
+		state.hasUptime = true
+	case fieldLastSwitched:
+		state.lastUptimeMs, _ = beUint32(value)
+		state.hasUptime = true
+	case fieldFlowStartSeconds:
+		if at, ok := unixSeconds(value); ok {
+			state.startAbs = at
+		}
+	case fieldFlowEndSeconds:
+		if at, ok := unixSeconds(value); ok {
+			state.endAbs = at
+		}
+	case fieldFlowStartMilliseconds:
+		if at, ok := unixMilliseconds(value); ok {
+			state.startAbs = at
+		}
+	case fieldFlowEndMilliseconds:
+		if at, ok := unixMilliseconds(value); ok {
+			state.endAbs = at
+		}
+	case fieldApplicationName:
+		// Some AVC configurations export the name inline instead of, or
+		// alongside, the application table.
+		r.AppName = state.intern.intern(value)
+	case fieldPanAppID:
+		r.AppName = state.intern.intern(value)
+	case fieldPanUserID:
+		r.User = state.intern.intern(value)
+	}
+}
+
+// beUint reads a big-endian unsigned integer of 1, 2, 4 or 8 bytes. Any other
+// width reports false: the value cannot be represented, and guessing would
+// publish a number the device did not send.
+func beUint(value []byte) (uint64, bool) {
+	switch len(value) {
+	case 1:
+		return uint64(value[0]), true
+	case 2:
+		return uint64(binary.BigEndian.Uint16(value)), true
+	case 4:
+		return uint64(binary.BigEndian.Uint32(value)), true
+	case 8:
+		return binary.BigEndian.Uint64(value), true
+	default:
+		return 0, false
+	}
+}
+
+// The narrowing readers below report false for a value their target cannot
+// hold: a four-byte protocol claiming 300 is garbage, and publishing a
+// truncation of it would be a number the device did not send.
+
+func beUint8(value []byte) (uint8, bool) {
+	v, ok := beUint(value)
+	if !ok || v > math.MaxUint8 {
+		return 0, false
+	}
+	return uint8(v), true
+}
+
+func beUint16(value []byte) (uint16, bool) {
+	v, ok := beUint(value)
+	if !ok || v > math.MaxUint16 {
+		return 0, false
+	}
+	return uint16(v), true
+}
+
+func beUint32(value []byte) (uint32, bool) {
+	v, ok := beUint(value)
+	if !ok || v > math.MaxUint32 {
+		return 0, false
+	}
+	return uint32(v), true
+}
+
+// unixSeconds and unixMilliseconds read an absolute flow clock. An epoch past
+// the signed range is garbage rather than an instant.
+
+func unixSeconds(value []byte) (time.Time, bool) {
+	v, ok := beUint(value)
+	if !ok || v > math.MaxInt64 {
+		return time.Time{}, false
+	}
+	return time.Unix(int64(v), 0), true
+}
+
+func unixMilliseconds(value []byte) (time.Time, bool) {
+	v, ok := beUint(value)
+	if !ok || v > math.MaxInt64 {
+		return time.Time{}, false
+	}
+	return time.UnixMilli(int64(v)), true
+}

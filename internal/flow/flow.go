@@ -88,6 +88,16 @@ type Record struct {
 	// SamplingRate is the rate the record itself carried (v5 header, sFlow
 	// sample). Zero means the record carried none, not an unsampled export.
 	SamplingRate uint32
+
+	// AppID is the applicationId (IE 95) as exported: an 8-bit classification
+	// engine and a 24-bit selector. Zero means the record carried none.
+	AppID uint32
+	// AppName and AppCategory are resolved from the device's own application
+	// table options, or carried inline where the vendor exports strings.
+	AppName     string
+	AppCategory string
+	// User is the vendor-exported user identity (PAN-OS User-ID).
+	User string
 }
 
 // Duration returns the flow duration, and false when the record did not carry

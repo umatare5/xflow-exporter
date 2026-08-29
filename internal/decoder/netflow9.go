@@ -5,7 +5,6 @@ package decoder
 
 import (
 	"encoding/binary"
-	"math"
 	"net/netip"
 	"time"
 
@@ -146,7 +145,8 @@ func (d *Decoder) parseV9Templates(key domainKey, set []byte, issue func(reason 
 		}
 		offset = next
 
-		d.storeTemplate(key, templateID, &template{fields: fields}, issue)
+		d.registerTemplate(key, templateID,
+			&template{fields: fields, recordLen: fixedRecordLen(fields)}, issue)
 	}
 }
 
@@ -188,24 +188,29 @@ func (d *Decoder) parseV9FieldSpecs(
 	return fields, offset + fieldCount*specLen, true
 }
 
-// storeTemplate finishes compiling a template and registers it.
-func (d *Decoder) storeTemplate(key domainKey, id uint16, t *template, issue func(reason string)) {
-	recordLen := 0
-	for _, f := range t.fields {
-		recordLen += int(f.length)
-	}
-	// A record must fit a flowset alongside its header.
-	if recordLen > 65535-flowSetHeaderLen {
+// registerTemplate checks a compiled template's record length and registers
+// it. The caller has computed recordLen, fixed or minimum.
+func (d *Decoder) registerTemplate(key domainKey, id uint16, t *template, issue func(reason string)) {
+	// A record must fit a set alongside its header.
+	if t.recordLen > 65535-flowSetHeaderLen {
 		issue(ReasonInvalidTemplate)
 		return
 	}
-	t.recordLen = recordLen
 
 	if !d.templates.add(key, id, t) {
 		// The domain is at its template bound; treat the announcement like an
 		// invalid template so the loss is visible.
 		issue(ReasonInvalidTemplate)
 	}
+}
+
+// fixedRecordLen sums a fixed-length field set.
+func fixedRecordLen(fields []templateField) int {
+	recordLen := 0
+	for _, f := range fields {
+		recordLen += int(f.length)
+	}
+	return recordLen
 }
 
 // parseV9OptionsTemplates compiles every options template in one flowset.
@@ -255,8 +260,9 @@ func (d *Decoder) parseV9OptionsTemplates(key domainKey, set []byte, issue func(
 		}
 		offset += fieldCount * specLen
 
-		d.storeTemplate(key, templateID, &template{
+		d.registerTemplate(key, templateID, &template{
 			fields:     fields,
+			recordLen:  fixedRecordLen(fields),
 			scopeCount: scopeCount,
 			options:    true,
 		}, issue)
@@ -286,19 +292,18 @@ func (d *Decoder) decodeV9DataSet(
 	for i := range count {
 		record := set[i*tpl.recordLen : (i+1)*tpl.recordLen]
 		if tpl.options {
-			d.readV9OptionsRecord(domain, tpl, record)
+			d.readV9OptionsRecord(key.exporter, domain, tpl, record)
 			continue
 		}
-		dst = appendV9Record(key, tpl, record, bootTime, domain, dst)
+		dst = d.appendV9Record(key, tpl, record, bootTime, domain, dst)
 	}
 	return dst
 }
 
-// readV9OptionsRecord extracts what this exporter consumes from one options
-// record: the packet sampling rate, preferring the random-sampler interval
-// over the plain one when both appear.
-func (d *Decoder) readV9OptionsRecord(domain *domainState, tpl *template, record []byte) {
-	var plain, random uint32
+// readV9OptionsRecord walks one fixed-length options record and feeds the
+// shared options consumer.
+func (d *Decoder) readV9OptionsRecord(exporter netip.Addr, domain *domainState, tpl *template, record []byte) {
+	var opts optionsState
 
 	offset := 0
 	for i, f := range tpl.fields {
@@ -307,34 +312,14 @@ func (d *Decoder) readV9OptionsRecord(domain *domainState, tpl *template, record
 		if i < tpl.scopeCount {
 			continue
 		}
-
-		switch f.fieldType {
-		case fieldSamplingInterval:
-			plain, _ = beUint32(value)
-		case fieldSamplerRandomInterval:
-			random, _ = beUint32(value)
-		}
+		opts.apply(f.fieldType, f.enterprise, value)
 	}
 
-	rate := random
-	if rate == 0 {
-		rate = plain
-	}
-	if rate > 0 {
-		domain.samplingRate.Store(rate)
-	}
-}
-
-// v9Times accumulates the flow clock fields of one record; the absolute
-// clocks win over the uptime-relative pair when a template carries both.
-type v9Times struct {
-	firstUptimeMs, lastUptimeMs uint32
-	hasUptime                   bool
-	startAbs, endAbs            time.Time
+	opts.commit(d, exporter, domain)
 }
 
 // appendV9Record decodes one data record in place at the end of dst.
-func appendV9Record(
+func (d *Decoder) appendV9Record(
 	key domainKey, tpl *template, record []byte,
 	bootTime time.Time, domain *domainState, dst []flow.Record,
 ) []flow.Record {
@@ -345,214 +330,16 @@ func appendV9Record(
 	})
 	r := &dst[len(dst)-1]
 
-	var times v9Times
-	var outBytes, outPackets uint64
+	state := fieldState{intern: d.strings}
 
 	offset := 0
 	for _, f := range tpl.fields {
 		value := record[offset : offset+int(f.length)]
 		offset += int(f.length)
-		applyV9Field(r, &times, &outBytes, &outPackets, f.fieldType, value)
+		applyField(r, &state, f.fieldType, f.enterprise, value)
 	}
 
-	// An egress-only template carries OUT_* alone; both present would double
-	// the flow if summed, so IN_* wins.
-	if r.Bytes == 0 {
-		r.Bytes = outBytes
-	}
-	if r.Packets == 0 {
-		r.Packets = outPackets
-	}
-
-	resolveV9Times(r, &times, bootTime)
-
-	if r.SamplingRate == 0 {
-		r.SamplingRate = domain.samplingRate.Load()
-	}
+	finishRecord(r, &state, bootTime, domain)
+	d.resolveApplication(key.exporter, r)
 	return dst
-}
-
-// resolveV9Times writes the flow instants, absolute clocks first.
-func resolveV9Times(r *flow.Record, times *v9Times, bootTime time.Time) {
-	switch {
-	case !times.startAbs.IsZero() || !times.endAbs.IsZero():
-		r.Start = times.startAbs
-		r.End = times.endAbs
-	case times.hasUptime:
-		r.Start = bootTime.Add(time.Duration(times.firstUptimeMs) * time.Millisecond)
-		r.End = bootTime.Add(time.Duration(times.lastUptimeMs) * time.Millisecond)
-	}
-}
-
-// applyV9Field maps one field into the record. An unknown type is skipped by
-// length, which is what lets a template carry fields this exporter does not
-// model without desynchronizing the ones it does.
-func applyV9Field(
-	r *flow.Record, times *v9Times, outBytes, outPackets *uint64, fieldType uint16, value []byte,
-) {
-	switch fieldType {
-	case fieldInBytes:
-		r.Bytes, _ = beUint(value)
-	case fieldInPackets:
-		r.Packets, _ = beUint(value)
-	case fieldOutBytes:
-		*outBytes, _ = beUint(value)
-	case fieldOutPackets:
-		*outPackets, _ = beUint(value)
-	case fieldProtocol:
-		if v, ok := beUint8(value); ok {
-			r.Protocol = v
-		}
-	case fieldSrcTOS:
-		if v, ok := beUint8(value); ok {
-			r.TOS = v
-		}
-	case fieldTCPFlags:
-		if v, ok := beUint8(value); ok {
-			r.TCPFlags = v
-		}
-	case fieldL4SrcPort:
-		if v, ok := beUint16(value); ok {
-			r.SrcPort = v
-		}
-	case fieldL4DstPort:
-		if v, ok := beUint16(value); ok {
-			r.DstPort = v
-		}
-	case fieldIPv4SrcAddr:
-		if len(value) == ipv4Len {
-			r.SrcAddr = netip.AddrFrom4([4]byte(value))
-		}
-	case fieldIPv4DstAddr:
-		if len(value) == ipv4Len {
-			r.DstAddr = netip.AddrFrom4([4]byte(value))
-		}
-	case fieldIPv6SrcAddr:
-		if len(value) == ipv6Len {
-			r.SrcAddr = netip.AddrFrom16([16]byte(value))
-		}
-	case fieldIPv6DstAddr:
-		if len(value) == ipv6Len {
-			r.DstAddr = netip.AddrFrom16([16]byte(value))
-		}
-	case fieldSrcMask, fieldIPv6SrcMask:
-		if v, ok := beUint8(value); ok {
-			r.SrcMask = v
-		}
-	case fieldDstMask, fieldIPv6DstMask:
-		if v, ok := beUint8(value); ok {
-			r.DstMask = v
-		}
-	case fieldInputSNMP:
-		if v, ok := beUint32(value); ok {
-			r.InputIf = v
-		}
-	case fieldOutputSNMP:
-		if v, ok := beUint32(value); ok {
-			r.OutputIf = v
-		}
-	case fieldSrcAS:
-		if v, ok := beUint32(value); ok {
-			r.SrcAS = v
-		}
-	case fieldDstAS:
-		if v, ok := beUint32(value); ok {
-			r.DstAS = v
-		}
-	default:
-		applyV9TimeField(times, fieldType, value)
-	}
-}
-
-// applyV9TimeField collects the flow clock fields.
-func applyV9TimeField(times *v9Times, fieldType uint16, value []byte) {
-	switch fieldType {
-	case fieldFirstSwitched:
-		times.firstUptimeMs, _ = beUint32(value)
-		times.hasUptime = true
-	case fieldLastSwitched:
-		times.lastUptimeMs, _ = beUint32(value)
-		times.hasUptime = true
-	case fieldFlowStartSeconds:
-		if at, ok := unixSeconds(value); ok {
-			times.startAbs = at
-		}
-	case fieldFlowEndSeconds:
-		if at, ok := unixSeconds(value); ok {
-			times.endAbs = at
-		}
-	case fieldFlowStartMilliseconds:
-		if at, ok := unixMilliseconds(value); ok {
-			times.startAbs = at
-		}
-	case fieldFlowEndMilliseconds:
-		if at, ok := unixMilliseconds(value); ok {
-			times.endAbs = at
-		}
-	}
-}
-
-// beUint reads a big-endian unsigned integer of 1, 2, 4 or 8 bytes. Any other
-// width reports false: the value cannot be represented, and guessing would
-// publish a number the device did not send.
-func beUint(value []byte) (uint64, bool) {
-	switch len(value) {
-	case 1:
-		return uint64(value[0]), true
-	case 2:
-		return uint64(binary.BigEndian.Uint16(value)), true
-	case 4:
-		return uint64(binary.BigEndian.Uint32(value)), true
-	case 8:
-		return binary.BigEndian.Uint64(value), true
-	default:
-		return 0, false
-	}
-}
-
-// The narrowing readers below report false for a value their target cannot
-// hold: a four-byte protocol claiming 300 is garbage, and publishing a
-// truncation of it would be a number the device did not send.
-
-func beUint8(value []byte) (uint8, bool) {
-	v, ok := beUint(value)
-	if !ok || v > math.MaxUint8 {
-		return 0, false
-	}
-	return uint8(v), true
-}
-
-func beUint16(value []byte) (uint16, bool) {
-	v, ok := beUint(value)
-	if !ok || v > math.MaxUint16 {
-		return 0, false
-	}
-	return uint16(v), true
-}
-
-func beUint32(value []byte) (uint32, bool) {
-	v, ok := beUint(value)
-	if !ok || v > math.MaxUint32 {
-		return 0, false
-	}
-	return uint32(v), true
-}
-
-// unixSeconds and unixMilliseconds read an absolute flow clock. An epoch past
-// the signed range is garbage rather than an instant.
-
-func unixSeconds(value []byte) (time.Time, bool) {
-	v, ok := beUint(value)
-	if !ok || v > math.MaxInt64 {
-		return time.Time{}, false
-	}
-	return time.Unix(int64(v), 0), true
-}
-
-func unixMilliseconds(value []byte) (time.Time, bool) {
-	v, ok := beUint(value)
-	if !ok || v > math.MaxInt64 {
-		return time.Time{}, false
-	}
-	return time.UnixMilli(int64(v)), true
 }

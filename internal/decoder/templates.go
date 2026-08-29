@@ -16,19 +16,25 @@ import (
 // attacker, registering templates without end. Real devices carry tens.
 const maxTemplatesPerDomain = 8192
 
-// templateField is one field specifier of a template.
+// templateField is one field specifier of a template. Enterprise is zero for
+// an IANA information element and the enterprise number for a vendor one,
+// which only IPFIX can express. An IPFIX variable-length field carries length
+// 65535 and encodes each value's length in the record itself.
 type templateField struct {
-	fieldType uint16
-	length    uint16
+	fieldType  uint16
+	length     uint16
+	enterprise uint32
 }
 
 // template is one compiled template. Fields are immutable after compilation;
 // refreshedAt moves under the domain lock on every re-announcement.
 type template struct {
 	fields []templateField
-	// recordLen is the fixed record length the fields sum to. IPFIX
-	// variable-length fields make it a minimum rather than a total.
-	recordLen int
+	// recordLen is the fixed record length the fields sum to. When
+	// hasVariable is set it is the minimum length instead, counting one byte
+	// per variable-length field.
+	recordLen   int
+	hasVariable bool
 	// scopeCount is how many leading fields are scope fields; non-zero only
 	// on an options template.
 	scopeCount  int
@@ -133,6 +139,26 @@ func (d *domainState) pruneExpiredLocked(now time.Time, ttl time.Duration) {
 	}
 }
 
+// remove withdraws one template.
+func (s *templateStore) remove(key domainKey, id uint16) {
+	d := s.domain(key)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.templates, id)
+}
+
+// removeAll withdraws every template of one kind in the domain.
+func (s *templateStore) removeAll(key domainKey, options bool) {
+	d := s.domain(key)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for id, t := range d.templates {
+		if t.options == options {
+			delete(d.templates, id)
+		}
+	}
+}
+
 // lookup returns one template, treating a template past the TTL as absent:
 // an orphaned template decoding new records would trust a schema the device
 // may have replaced.
@@ -182,6 +208,30 @@ func (d *domainState) trackSequence(seq uint32) {
 	default:
 		d.lastSeq = seq
 	}
+}
+
+// trackRecordSequence advances the IPFIX sequence, which counts data records
+// rather than packets. When a message's own record count is unknown the
+// tracking resets instead of guessing.
+func (d *domainState) trackRecordSequence(seq, records uint32, complete bool) {
+	const forwardWindow = 1 << 30
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if !d.seqInit {
+		d.seqInit = complete
+		d.lastSeq = seq + records
+		return
+	}
+
+	// lastSeq holds the sequence expected on the next message.
+	if diff := seq - d.lastSeq; diff > 0 && diff < forwardWindow {
+		d.sequenceMissed.Add(uint64(diff))
+	}
+
+	d.seqInit = complete
+	d.lastSeq = seq + records
 }
 
 // counts reports how many data and options templates the domain holds now.
