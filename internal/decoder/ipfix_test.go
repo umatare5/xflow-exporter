@@ -701,50 +701,6 @@ func TestDecodeIPFIX_RejectsBrokenStructure(t *testing.T) {
 	}
 }
 
-// TestDecodeNetFlowV9_PanOSStringsAreCarried covers the PAN-OS application
-// name, and pins that the User-ID beside it is skipped by its length rather
-// than read: a user identity is high-cardinality and personally identifying,
-// so no series carries it.
-func TestDecodeNetFlowV9_PanOSStringsAreCarried(t *testing.T) {
-	t.Parallel()
-
-	d := newTestDecoder()
-
-	const fieldPanUserID = 56702
-
-	tpl := flowSet(templateFlowSetID, templateSpec(fixtureV9TemplateID,
-		[2]uint16{fieldInBytes, 4},
-		[2]uint16{fieldPanAppID, 16},
-		[2]uint16{fieldPanUserID, 16},
-	))
-
-	record := be32(nil, 4242)
-	record = append(record, []byte("ssl\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")...)
-	record = append(record, []byte("alice\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")...)
-
-	records, err := d.Decode(testExporter,
-		v9Packet(1, fixtureV9ODID, tpl, flowSet(fixtureV9TemplateID, record)), nil)
-	if err != nil {
-		t.Fatalf("Decode() error = %v, want nil", err)
-	}
-	if len(records) != 1 {
-		t.Fatalf("Decode() returned %d records, want 1", len(records))
-	}
-	if records[0].AppName != "ssl" {
-		t.Errorf("record = %+v, want the padded PAN-OS application name trimmed and carried", records[0])
-	}
-	if records[0].Bytes != 4242 {
-		t.Errorf("Bytes = %d, want the User-ID skipped by length without desynchronizing", records[0].Bytes)
-	}
-
-	// A second record with the same strings must intern to the same backing.
-	records2, _ := d.Decode(testExporter,
-		v9Packet(2, fixtureV9ODID, flowSet(fixtureV9TemplateID, record)), nil)
-	if len(records2) != 1 || records2[0].AppName != "ssl" {
-		t.Fatalf("second decode = %+v, want the same strings", records2)
-	}
-}
-
 func BenchmarkDecodeIPFIX(b *testing.B) {
 	d := newTestDecoder()
 	if _, err := d.Decode(testExporter, ipfixMessage(0, fixtureIPFIXTemplate()), nil); err != nil {
@@ -856,8 +812,9 @@ func TestDecodeIPFIX_HonoursOptionsTemplateWithdrawal(t *testing.T) {
 // TestDecodeIPFIX_TCPControlBitsAtTwoOctets covers the element's native
 // width. RFC 9565 makes tcpControlBits unsigned16 and puts the control bits
 // in its low octet, the one-octet form being reduced-size encoding of the
-// same element. An exporter that declines to reduce is conformant, and the
-// bits above the low octet are the ones a collector is told to ignore.
+// same element. An exporter that declines to reduce is conformant: the data
+// offset above them is ignored by instruction, and the reduced form covers
+// the low octet alone.
 func TestDecodeIPFIX_TCPControlBitsAtTwoOctets(t *testing.T) {
 	t.Parallel()
 

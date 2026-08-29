@@ -1,6 +1,6 @@
-// Package collector provides collectors for xflow-exporter.
 // This file holds the label names the aggregation and self-monitoring
 // collectors share, so two families cannot drift apart on a spelling.
+
 package collector
 
 const (

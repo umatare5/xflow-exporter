@@ -26,12 +26,12 @@ Each table family carries three metrics sharing one label set: `_bytes_total` an
 - `proto` — the conventional protocol name for the common IANA numbers, the number itself otherwise.
 - `src_asn`/`dst_asn` — as exported, where `0` is a device that did not know the AS and no database placed the address. A record with neither AS feeds no entry. Where `--enrich.asn-database` is set, `xflow_asn_info{asn,organization}` names each AS the published pairs carry, on its own series: a database respelling a company would otherwise break every counter it touches. It follows the same cut those pairs take, the table behind that cut running to `--aggregation.max-entries` while a database names every AS there is. An AS no lookup resolved carries no name, which a join shows by finding nothing to join to.
 - `application` — the device-announced AVC name, the inline vendor string, or the `engine:selector` split of `applicationId` when only the number is known. `--enrich.services` fills it from the transport port where none of those exist.
-- `src_country`/`dst_country` — ISO codes from `--enrich.country-database`, `private` for an address on a LAN and `unknown` for a routable one the database could not place. Private means what Go's `netip` means by it, RFC 1918 and the IPv6 unique local range and nothing wider: shared address space, loopback and link-local have no country either but are not private, and naming them so would be the guess this distinction exists to avoid. A record neither side of which resolved feeds no entry.
+- `src_country`/`dst_country` — ISO codes from `--enrich.country-database`, `private` for an address on a LAN and `unknown` for a side it could not place — an address the database holds no country for, or no address at all on that side. Private means what Go's `netip` means by it, RFC 1918 and the IPv6 unique local range and nothing wider: shared address space, loopback and link-local have no country either but are not private, and naming them so would be the guess this distinction exists to avoid. A record neither side of which resolved feeds no entry.
 - `address`/`direction` — a single address a threat list names and the side it was seen on. Only flagged addresses appear, so the table holds what is worth acting on rather than one entry per address seen.
-- `flags` — the TCP control bits the flow's packets ORed together, rendered as names from the low bit up, the order `tcpdump` prints them in and the reverse of the header's own drawing, which is what Wireshark shows (`syn`, `syn,ack`, `fin,psh,ack`). Only TCP records feed it, and only those from a device that exported the field. A segment setting no bit is a NULL scan rather than a gap, so it keys `none` rather than being dropped.
-- `dscp` — the top six bits of the TOS byte as the class they name, the number otherwise. The two bits dropped are ECN, which is congestion signaling rather than a class. A record built on `match ipv4 dscp` exports the code point alone as IE 195 instead of the byte, which reads the same here; the byte wins where a template carries both, carrying the ECN bits with it. Admission keys on whether the device reported either, not on the value: `cs0` is best-effort traffic and belongs in the table, while a device that exports neither feeds nothing.
+- `flags` — the TCP control bits the flow's packets ORed together, rendered as names from the low bit up (`syn`, `syn,ack`, `fin,psh,ack`). Only TCP records feed it, and only those from a device that exported the field. A segment setting no bit is a NULL scan rather than a gap, so it keys `none` rather than being dropped.
+- `dscp` — the top six bits of the TOS byte as the class they name, the number otherwise. A record built on `match ipv4 dscp` exports the code point alone as IE 195 instead of the byte, which reads the same here; the byte wins where a template carries both, carrying the ECN bits with it. Admission keys on whether the device reported either, not on the value: `cs0` is best-effort traffic and belongs in the table, while a device that exports neither feeds nothing.
 - `destinations` is `services` without the source, so one entry reads as what a service received rather than who reached it. It is directional: an ingress-only pair of observation points keys the two directions of a conversation separately, so it is not a host total. Query-side folding of `services` matches it only while every source stays inside the Top-K cut, which a service reached by more sources than `--aggregation.top-k` does not.
-- The `exporters` family publishes unfolded: its cardinality is the fleet's, which no Top-K needs to guard.
+- The `exporters` family takes no scrape-time cut — neither Top-K nor min-bytes applies: its cardinality is the fleet's.
 
 ## Distributions
 
@@ -42,7 +42,7 @@ Each table family carries three metrics sharing one label set: `_bytes_total` an
 
 ## Exporter Health Metrics
 
-These series describe the exporter itself. They have no module flag.
+These series describe the exporter itself. They have no module flag. The aggregation series appear only while a collector module is enabled; the enrichment, threat and remote-write series only while their `--enrich.*` source or `--remote-write.url` is set.
 
 | Metric                                              | Type    | Description                                          |
 | :-------------------------------------------------- | :------ | :--------------------------------------------------- |
@@ -98,8 +98,8 @@ on a series whose `version` names another.
 | `malformed`               | A structure that does not fit its bytes              |
 | `unsupported_aggregation` | A NetFlow v8 method outside the fourteen known       |
 | `missing_template`        | A v9/IPFIX template that has not arrived yet         |
-| `invalid_template`        | A template announcement the parser limits refuse     |
-| `reserved_set`            | A flowset in the reserved 2-255 range                |
+| `invalid_template`        | A template announcement the parser refuses           |
+| `reserved_set`            | A set id its protocol leaves unassigned              |
 | `domain_limit`            | An observation domain past the device's budget       |
 
 `xflow_receiver_dropped_packets_total` carries one of two:

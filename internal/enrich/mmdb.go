@@ -1,6 +1,5 @@
-// Package enrich fills flow record dimensions the exporting device did not
-// carry, from sources local to this exporter.
 // This file reads MaxMind-format databases held on local disk.
+
 package enrich
 
 import (

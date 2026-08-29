@@ -1,4 +1,5 @@
-// Package server provides HTTP server lifecycle management for Prometheus exporters.
+// This file holds startup wiring, signal handling and graceful shutdown.
+
 package server
 
 import (
@@ -53,7 +54,7 @@ func NewLifecycleManager(registry *prometheus.Registry, cfg *config.Config, relo
 }
 
 // StartAndServe creates the receiver and the collectors, sets up the server,
-// and starts serving. It handles the complete lifecycle from setup to shutdown.
+// and starts serving.
 func StartAndServe(ctx context.Context, cfg *config.Config, version string) error {
 	slog.Info("Starting xflow-exporter",
 		"version", version,
@@ -164,8 +165,6 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		}()
 	}
 
-	// The remote write client reads the same registry a scrape reads, so
-	// shipping changes no series and no value.
 	remoteDone := make(chan struct{})
 	if cfg.RemoteWrite.Enabled() {
 		writer, werr := remotewrite.New(cfg.RemoteWrite, collectorMgr.Registry())
@@ -255,8 +254,6 @@ func sweepDomains(ctx context.Context, dec *decoder.Decoder, ttl time.Duration) 
 			if evicted := dec.SweepDomains(); evicted > 0 {
 				slog.Debug("Swept idle observation domains", "evicted", evicted)
 			}
-			// Only once the exporter budget is reached, so a device that has
-			// simply gone quiet keeps the freshness series that says so.
 			if evicted := dec.SweepExporters(); evicted > 0 {
 				slog.Debug("Swept idle exporters", "evicted", evicted)
 			}

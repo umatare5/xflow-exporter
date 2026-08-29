@@ -1,5 +1,5 @@
-// Package collector provides collectors for xflow-exporter.
 // This file holds the decode self-monitoring collector.
+
 package collector
 
 import (

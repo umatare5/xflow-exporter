@@ -1,6 +1,6 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file holds the template store NetFlow v9 and IPFIX decoding depends
 // on, and the per-domain state that travels with it.
+
 package decoder
 
 import (

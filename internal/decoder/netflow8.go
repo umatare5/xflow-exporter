@@ -1,6 +1,6 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file parses NetFlow v8, the router-aggregated legacy format J-Flow v8
 // shares. Field layouts follow the flow-tools reference implementation.
+
 package decoder
 
 import (

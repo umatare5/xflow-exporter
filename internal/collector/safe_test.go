@@ -7,7 +7,7 @@ import (
 )
 
 // panickingCollector emits one metric and then panics, mimicking a collector that
-// dereferences an absent WNC field halfway through Collect.
+// dereferences a nil source field halfway through Collect.
 type panickingCollector struct {
 	desc *prometheus.Desc
 }

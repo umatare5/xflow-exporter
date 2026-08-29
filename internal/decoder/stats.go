@@ -1,5 +1,5 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file holds the counters the workers write and a scrape reads.
+
 package decoder
 
 import (

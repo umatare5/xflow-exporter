@@ -6,7 +6,6 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-// TestRegisterFlags verifies that registerFlags returns all flags from sub-registrars.
 func TestRegisterFlags(t *testing.T) {
 	t.Parallel()
 
@@ -16,7 +15,6 @@ func TestRegisterFlags(t *testing.T) {
 	}
 }
 
-// TestRegisterWebFlags verifies web server configuration flags.
 func TestRegisterWebFlags(t *testing.T) {
 	t.Parallel()
 
@@ -45,7 +43,6 @@ func TestRegisterWebFlags(t *testing.T) {
 	}
 }
 
-// TestRegisterReceiverFlags verifies the UDP flow receiver flags.
 func TestRegisterReceiverFlags(t *testing.T) {
 	t.Parallel()
 
@@ -64,7 +61,6 @@ func TestRegisterReceiverFlags(t *testing.T) {
 	}
 }
 
-// TestRegisterParserFlags verifies the protocol parser limit flags.
 func TestRegisterParserFlags(t *testing.T) {
 	t.Parallel()
 
@@ -80,7 +76,6 @@ func TestRegisterParserFlags(t *testing.T) {
 	}
 }
 
-// TestRegisterAggregationFlags verifies the aggregation limit flags.
 func TestRegisterAggregationFlags(t *testing.T) {
 	t.Parallel()
 
@@ -93,7 +88,6 @@ func TestRegisterAggregationFlags(t *testing.T) {
 	}
 }
 
-// TestRegisterCollectorFlags verifies the data collector module switches.
 func TestRegisterCollectorFlags(t *testing.T) {
 	t.Parallel()
 
@@ -108,7 +102,6 @@ func TestRegisterCollectorFlags(t *testing.T) {
 	}
 }
 
-// TestRegisterEnrichmentFlags verifies the enrichment switches.
 func TestRegisterEnrichmentFlags(t *testing.T) {
 	t.Parallel()
 
@@ -135,7 +128,6 @@ func TestRegisterEnrichmentFlags(t *testing.T) {
 	}
 }
 
-// TestRegisterRemoteWriteFlags verifies the Remote Write 2.0 client flags.
 func TestRegisterRemoteWriteFlags(t *testing.T) {
 	t.Parallel()
 
@@ -164,7 +156,6 @@ func TestRegisterRemoteWriteFlags(t *testing.T) {
 	}
 }
 
-// TestRegisterLogFlags verifies logging configuration flags.
 func TestRegisterLogFlags(t *testing.T) {
 	t.Parallel()
 
@@ -180,7 +171,6 @@ func TestRegisterLogFlags(t *testing.T) {
 	}
 }
 
-// TestRegisterInternalCollectorFlags verifies internal collector flags.
 func TestRegisterInternalCollectorFlags(t *testing.T) {
 	t.Parallel()
 
@@ -196,7 +186,6 @@ func TestRegisterInternalCollectorFlags(t *testing.T) {
 	}
 }
 
-// TestRegisterUtilityFlags verifies utility flags.
 func TestRegisterUtilityFlags(t *testing.T) {
 	t.Parallel()
 
@@ -210,7 +199,8 @@ func TestRegisterUtilityFlags(t *testing.T) {
 	}
 }
 
-// TestRegisterFlags_NamesAreUnique verifies no flag name is registered twice.
+// TestRegisterFlags_NamesAreUnique pins that no flag name is declared twice,
+// which urfave/cli would otherwise accept silently.
 func TestRegisterFlags_NamesAreUnique(t *testing.T) {
 	t.Parallel()
 

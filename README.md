@@ -1,5 +1,11 @@
 <div align="center">
 
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/logo_dark.png" width="180px" />
+    <source media="(prefers-color-scheme: light)" srcset="./docs/assets/logo.png" width="180px" />
+    <img src="./docs/assets/logo.png" width="180px" />
+  </picture>
+
   <h1>xflow-exporter</h1>
 
   <p>A Prometheus Exporter for traffic flows: NetFlow, IPFIX and sFlow.</p>
@@ -12,8 +18,8 @@ This exporter receives flow records from on-premises network devices and serves 
 
 - 📥 **Push-to-Pull Bridge**: Receives UDP flow exports and serves them to Prometheus scrapes
 - 🧮 **In-Memory Aggregation**: Bounded-cardinality tables with Top-K and idle eviction
-- 🧭 **Router-Scoped Parsing**: Template caches keyed by exporter address, protocol and Observation Domain ID
-- 📊 **Native Histograms**: Flow size and duration distributions in single series
+- 📊 **Native Histograms**: Flow size and duration quantiles within five percent, no buckets to choose
+- 🔬 **Auditable Sampling**: Counts scaled by the rate in force, and that rate published beside them
 
 > [!IMPORTANT]
 > This project is pre-1.0: a minor release may rename or remove a metric. Read the [CHANGELOG](CHANGELOG.md) before upgrading.

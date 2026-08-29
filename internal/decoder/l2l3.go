@@ -1,7 +1,7 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file parses the sampled packet headers sFlow ships: Ethernet with
 // optional VLAN tags, then IPv4 or IPv6, then the transport ports. A header
 // cut short mid-layer keeps what decoded and leaves the rest absent.
+
 package decoder
 
 import (
@@ -13,18 +13,15 @@ import (
 
 // EtherTypes and protocol numbers the header walk understands.
 const (
-	etherTypeIPv4  = 0x0800
-	etherTypeIPv6  = 0x86DD
-	etherTypeVLAN  = 0x8100
-	etherTypeQinQ  = 0x88A8
-	protocolTCP    = 6
-	protocolUDP    = 17
-	ethernetHdrLen = 14
-	vlanTagLen     = 4
-	ipv4MinHdrLen  = 20
-	// ipv4FragmentOffsetMask selects the offset out of the flags-and-offset
-	// word, the three flag bits above it saying nothing about where a fragment
-	// sits.
+	etherTypeIPv4          = 0x0800
+	etherTypeIPv6          = 0x86DD
+	etherTypeVLAN          = 0x8100
+	etherTypeQinQ          = 0x88A8
+	protocolTCP            = 6
+	protocolUDP            = 17
+	ethernetHdrLen         = 14
+	vlanTagLen             = 4
+	ipv4MinHdrLen          = 20
 	ipv4FragmentOffsetMask = 0x1FFF
 	ipv6HdrLen             = 40
 	transportPorts         = 4

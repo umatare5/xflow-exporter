@@ -1,4 +1,5 @@
-// Package collector provides registry management and collector registration.
+// Package collector provides the prometheus.Collector implementations and
+// registry management.
 package collector
 
 import (

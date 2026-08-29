@@ -1,7 +1,7 @@
-// Package collector provides collectors for xflow-exporter.
 // This file holds the flow distribution histograms. They are native
 // histograms: one series per exporter with exponential buckets, in place of
 // the classic per-bucket series fan-out.
+
 package collector
 
 import (

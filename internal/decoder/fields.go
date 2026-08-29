@@ -1,7 +1,7 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file maps information elements into flow.Record. NetFlow v9 field
 // types and IPFIX IANA information elements share one numbering, which is
 // what lets both protocols share this layer.
+
 package decoder
 
 import (

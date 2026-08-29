@@ -1,6 +1,5 @@
-// Package enrich fills flow record dimensions the exporting device did not
-// carry, from sources local to this exporter.
 // This file flags addresses listed in files held on local disk.
+
 package enrich
 
 import (

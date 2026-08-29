@@ -1,5 +1,6 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file holds the per-datagram dispatch and the decode accounting.
+
+// Package decoder turns received datagrams into normalized flow records.
 package decoder
 
 import (
@@ -29,8 +30,10 @@ const (
 	// re-announces its templates.
 	ReasonMissingTemplate = "missing_template"
 	// ReasonInvalidTemplate marks a template announcement this exporter
-	// refuses: a zero-width field, a field count past the limit, or a
-	// specifier that does not fit its flowset.
+	// refuses: a structural fault -- a zero-width fixed field, a field count
+	// past the limit, an id in the reserved range and a specifier or record
+	// length that does not fit its set among them -- or a domain at its
+	// template budget.
 	ReasonInvalidTemplate = "invalid_template"
 	// ReasonReservedSet marks a set id its protocol leaves unassigned:
 	// 2-255 in v9; 0, 1 and 4-255 in IPFIX. Using one is a dialect this
@@ -63,7 +66,6 @@ func malformed(format string, args ...any) *decodeError {
 	return &decodeError{reason: ReasonMalformed, detail: fmt.Sprintf(format, args...)}
 }
 
-// minVersionBytes is what a version sniff needs.
 const minVersionBytes = 4
 
 // Wire version numbers as they appear in the first header field.

@@ -372,7 +372,6 @@ func registerInternalCollectorFlags() []cli.Flag {
 	}
 }
 
-// registerUtilityFlags defines utility flags.
 func registerUtilityFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.BoolFlag{

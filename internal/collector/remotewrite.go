@@ -1,5 +1,5 @@
-// Package collector provides collectors for xflow-exporter.
 // This file holds the remote write self-monitoring collector.
+
 package collector
 
 import (

@@ -1,5 +1,5 @@
-// Package remotewrite ships the exporter's own registry to a remote endpoint.
 // This file holds the counters the writer keeps and a scrape reads.
+
 package remotewrite
 
 import "sync/atomic"

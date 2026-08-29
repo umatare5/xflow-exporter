@@ -84,14 +84,17 @@ func TestPool_GetAllocatesNothingOnceWarm(t *testing.T) {
 	// Warm both internal pools.
 	p.Put(p.Get())
 
-	// A GC during the measurement empties sync.Pool, and the Get that follows
-	// rebuilds its value, so the average is not reliably zero. The bound
-	// still separates the two outcomes it must tell apart: storing the value
-	// rather than a pointer would allocate on every single Put, averaging one
-	// or more, while an occasional rebuild after a drop averages near zero.
+	// The race detector makes sync.Pool drop one Put in four, so a warm cycle
+	// averages 11/16 of an allocation rather than none. AllocsPerRun divides
+	// its total as integers, so maxAllocsPerRun means "the total stayed under
+	// the run count" and the run count is the entire margin. Raising the run
+	// count further only lengthens a window in which the process-wide malloc
+	// counter AllocsPerRun reads also charges other goroutines here. Storing
+	// the value in sync.Pool instead of in the pointer box costs one
+	// allocation per cycle, so no looser bound would catch that.
 	const maxAllocsPerRun = 0.5
 
-	allocs := testing.AllocsPerRun(100, func() {
+	allocs := testing.AllocsPerRun(1000, func() {
 		p.Put(p.Get())
 	})
 	if allocs >= maxAllocsPerRun {

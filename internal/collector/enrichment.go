@@ -1,5 +1,5 @@
-// Package collector provides collectors for xflow-exporter.
 // This file holds the enrichment self-monitoring collector.
+
 package collector
 
 import (

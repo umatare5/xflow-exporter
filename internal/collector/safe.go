@@ -1,4 +1,3 @@
-// Package collector provides panic recovery for collectors.
 package collector
 
 import (
@@ -24,7 +23,7 @@ func NewSafeCollector(base prometheus.Collector, name string) *SafeCollector {
 	}
 }
 
-// Describe implements prometheus.Collector interface by delegating to base collector.
+// Describe implements prometheus.Collector.
 func (c *SafeCollector) Describe(ch chan<- *prometheus.Desc) {
 	c.base.Describe(ch)
 }

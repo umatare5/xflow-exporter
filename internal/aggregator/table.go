@@ -1,6 +1,5 @@
-// Package aggregator accumulates flow records into bounded in-memory tables
-// the collectors read at scrape time.
 // This file holds the generic table every aggregation shares.
+
 package aggregator
 
 import (

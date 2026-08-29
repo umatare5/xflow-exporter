@@ -1,5 +1,5 @@
-// Package remotewrite ships the exporter's own registry to a remote endpoint.
 // This file builds the HTTP client the writes travel on.
+
 package remotewrite
 
 import (

@@ -1,10 +1,10 @@
-// Package collector provides collectors for xflow-exporter.
 // This file publishes the aggregation tables. Every family carries bytes,
 // packets and flows; the series whose labels all read "other" carries what the
 // entry bound folded at ingest, and nothing else. The tail the Top-K and
 // min-bytes cuts leave below the published prefix reaches no series either: it
 // is not added to other, and an entry evicted before it ever rises into the cut
 // takes its totals with it.
+
 package collector
 
 import (
@@ -266,8 +266,9 @@ func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-// collectExporters publishes the per-device table without folding: its
-// cardinality is the fleet's, which no Top-K needs to guard.
+// collectExporters publishes the per-device table without the Top-K or
+// min-bytes cut: its cardinality is the fleet's, which no scrape-time cut
+// needs to guard.
 func (c *FlowCollector) collectExporters(ch chan<- prometheus.Metric) {
 	entries, overflow := c.src.Exporters()
 	for _, e := range entries {

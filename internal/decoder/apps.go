@@ -1,6 +1,6 @@
-// Package decoder turns received datagrams into normalized flow records.
 // This file holds the per-exporter application tables Cisco AVC announces
 // through options, and the string interner every vendor string goes through.
+
 package decoder
 
 import (

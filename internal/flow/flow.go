@@ -102,8 +102,10 @@ type Record struct {
 	// unsampled export.
 	SamplingRate uint32
 
-	// AppID is the applicationId (IE 95) as exported: an 8-bit classification
-	// engine and a 24-bit selector. Zero means the record carried none.
+	// AppID is the applicationId (IE 95) as exported. RFC 6759 sizes the
+	// selector by engine; the value is read as the 4-octet Cisco layout, an
+	// 8-bit engine over a 24-bit selector, which is the split published
+	// downstream. Zero means the record carried none.
 	AppID uint32
 	// AppName and AppCategory are resolved from the device's own application
 	// table options, or carried inline where the vendor exports strings.

@@ -1,6 +1,5 @@
-// Package remotewrite ships the exporter's own registry to a remote endpoint,
-// for the deployments a Prometheus scrape cannot reach.
 // This file builds the symbol table Remote Write 2.0 encodes labels through.
+
 package remotewrite
 
 import (

@@ -30,7 +30,7 @@ A dimension a flow record did not carry produces no series: never `0`, `false` o
 
 The table families are counters accumulated since each entry was created, and an entry evicted then re-created restarts from zero.
 
-- **Ranges** — give `rate()` a range that spans several scrapes. The staleness marker Prometheus writes at eviction separates the old series from a rebirth.
+- **Rebirth** — the staleness marker Prometheus writes at eviction separates the old series from a rebirth.
 - **Folding** — the `other` series of each family is seeded at zero and absorbs what the entry bound rejected at ingest, so it only ever rises. Nothing else reaches it. The tail below the Top-K cut is withheld rather than summed into it, and an evicted entry's totals are not folded into it either: Prometheus already counted those bytes as increments on the entry's own series, so folding them again would make `sum(rate())` over the family read twice what was ingested.
 - **Flow counts** — `_flows_total` is as exported: a packet-sampling protocol observes flows rather than counting them, so no sampling multiplication is applied to it.
 
@@ -38,8 +38,8 @@ The table families are counters accumulated since each entry was created, and an
 
 `_bytes_total` and `_packets_total` are multiplied by the sampling rate in force when the record was decoded.
 
-- **Sources** — the v5 header interval, the v9/IPFIX options (PSAMP interval and space pair first, then the random-sampler interval, then the plain interval), and the per-sample rate sFlow carries inline.
-- **Audit** — `xflow_sampling_rate` publishes the rate each observation domain declared, so a corrected series can be traced to the rate that scaled it.
+- **Sources** — the v5 header interval, the v9/IPFIX options rates in the precedence [Protocols](protocols.md#options-and-enrichment) tabulates, and the per-sample rate sFlow carries inline.
+- **Audit** — `xflow_sampling_rate` publishes the rate each v9/IPFIX domain declared through its options. The v5 header interval and sFlow's inline rate ride the records themselves and publish no rate series.
 - **Unsampled** — a record carrying no rate multiplies by one, and PAN-OS NetFlow is always unsampled.
 
 ### Enrichment
@@ -81,9 +81,6 @@ no database can say otherwise: the same address answers from a different
 continent depending on who asks. Read `xflow_country_pair_*` as the country
 the prefix is registered in, and do not reconcile it with a transit bill.
 
-Nothing here reaches a network. The exporter reads files and never fetches
-them, so enrichment sends no address anywhere and holds no credential.
-
 ### Threat lists
 
 `--enrich.threat-file` reads a file of flagged addresses, one per line, and
@@ -97,17 +94,17 @@ is repeatable so several published lists combine into one set.
 - **One reload covers the lists and the databases alike.** `/-/reload` and
   `SIGHUP` re-read every enrichment source, each mmdb reader being replaced
   whole rather than reopened in place, so no restart is needed to pick a
-  refreshed file up. Paths come from `THREAT_FILE`, `ASN_DATABASE` and
-  `COUNTRY_DATABASE`.
+  refreshed file up. The script writes where `THREAT_FILE`, `ASN_DATABASE`
+  and `COUNTRY_DATABASE` point.
 - **A failed fetch leaves the previous file alone.** The script checks that
   each body names an address rather than trusting the status, since an empty
   response and an access-denied page both arrive as a `200`, and it refuses to
   write a merge below `MIN_ADDRESSES` (1000). A publisher that splits its list
   fills each part before opening the next, so a missing part behind a full one
-  is read as a gap rather than as the end, and a list whose parts stop reaching
-  `SPLIT_PART_LINES` (131072) is refused rather than walked on an assumption
-  that no longer holds. Every refusal names its reason and exits non-zero, so
-  the exporter keeps serving the set it already holds.
+  is read as a gap rather than as the end, and a multi-part list no part of
+  which reached `SPLIT_PART_LINES` (131072) is refused rather than walked on
+  an assumption that no longer holds. Every refusal names its reason and
+  exits non-zero, so the exporter keeps serving the set it already holds.
 - **Format** — one address per line. Blank lines, `#` and `;` comments, and
   any trailing field after whitespace or a comma are skipped, so a CSV export
   loads without a converter. A line that is not an address is skipped rather
@@ -143,10 +140,8 @@ source from disk. A `SIGHUP` does the same and needs no flag. Both are the
 spelling Prometheus uses.
 
 - **Off by default** — the endpoint is a write, so it stays unexposed unless
-  asked for, and it carries no authentication of its own. Keep it behind the
-  same controlled path as the metrics.
-- **POST or PUT only.** A reload changes what the process holds, so a GET
-  does not trigger one.
+  asked for; [SECURITY.md](../SECURITY.md) covers the exposure posture.
+- **POST or PUT only.**
 - **A failed reload keeps the previous data.** A list that has gone missing
   would otherwise unflag every address at once, which reads as a network that
   had just gone clean. `xflow_threat_reload_failures_total` counts those.
@@ -163,6 +158,8 @@ protocol cannot choose its senders.
   device and raises `xflow_domains_refused_total`.
 - **Idle domains** — swept on the template TTL, which returns the slot to the
   device's budget and keeps the domain count following the fleet.
+- **Templates** — each domain holds at most 8192; a full domain drops expired
+  templates first, and a refusal counts `invalid_template`.
 - **Vendor strings** — the interner holds at most 65536, each at most 255
   bytes. Past the entry bound a value is copied per occurrence, which costs an
   allocation and never a wrong reading. A string longer than the byte bound,
@@ -193,19 +190,11 @@ permitted senders. See [SECURITY.md](../SECURITY.md).
 
 ### Templates
 
-NetFlow v9 and IPFIX data decode against templates cached per exporter address and Observation Domain ID together, per RFC 7011, and per protocol besides: three decoders number their domains independently, so that pair alone does not name one.
-
-- **Startup** — `missing_template` rejections are expected after a restart until each device re-announces. A device that never does keeps the counter rising, which is the signal to check its template refresh configuration.
-- **Limits** — a template with a zero-width fixed field, more than `--parser.max-fields-per-template` fields, or specifiers that overrun their set is refused as `invalid_template`.
-- **Expiry** — a template unrefreshed for `--parser.template-ttl` stops serving: an orphaned template may describe a schema the device has replaced.
+NetFlow v9 and IPFIX data decode against templates cached per exporter address, protocol and Observation Domain ID together — [Protocols](protocols.md#netflow-v9-and-ipfix) carries the scope rationale, the refusal conditions and the expiry rule.
 
 ### Packet sections
 
-A NetFlow-Lite record carries one sampled packet section instead of parsed flow fields, and decodes through the header walk the sFlow decoder uses.
-
-- **Elements** — the v9 mode's deprecated field 104 (layer2packetSectionData, the measured device behaviour), and IPFIX `dataLinkFrameSection` (315), `ipHeaderPacketSection` (313) and `dataLinkFrameSize` (312).
-- **Precedence** — the section is walked only where the record carries neither address, so the device's own parse wins whole rather than field by field, and one record reads as one sampled packet.
-- **Padding** — a fixed-size v9 section is zero-padded, so a frame cut before its transport header reads zero ports from the padding — the one ambiguity a padded section cannot escape.
+A NetFlow-Lite record carries one sampled packet section instead of parsed flow fields, and decodes through the header walk the sFlow decoder uses — [Protocols](protocols.md#netflow-lite) carries the elements, the precedence and the padding ambiguity.
 
 ### Native histograms
 

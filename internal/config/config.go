@@ -572,13 +572,11 @@ func namesAnInterface(host string) bool {
 	return err == nil
 }
 
-// isValidLogLevel checks if the log level is valid.
 func isValidLogLevel(level string) bool {
 	validLevels := []string{"debug", "info", "warn", "error"}
 	return slices.Contains(validLevels, strings.ToLower(level))
 }
 
-// isValidLogFormat checks if the log format is valid.
 func isValidLogFormat(format string) bool {
 	validFormats := []string{"json", "text"}
 	return slices.Contains(validFormats, strings.ToLower(format))
