@@ -414,24 +414,27 @@ func TestAggregator_DestinationsNeedADestinationAndAProtocol(t *testing.T) {
 	}
 }
 
-// TestAggregator_TCPFlagsNeedTCPAndABitSet pins the two conditions. A flow
-// that carried no control bit is a device that did not export the field
-// rather than a TCP flow that set none, and a record of another protocol has
-// no control bits to report at all -- neither may share a series with a flow
-// whose bits were measured.
-func TestAggregator_TCPFlagsNeedTCPAndABitSet(t *testing.T) {
+// TestAggregator_TCPFlagsKeyOnReportedNotOnValue pins the two conditions.
+// Admission asks whether the device reported the control bits, not what they
+// were: a TCP segment setting none is a NULL scan, which is exactly what a
+// control-bit breakdown exists to surface, while a device that exports no
+// such field must not be given a series saying it measured nothing. A record
+// of another protocol has no control bits to report at all.
+func TestAggregator_TCPFlagsKeyOnReportedNotOnValue(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name     string
 		protocol uint8
 		flags    uint8
+		reported bool
 		want     int
 	}{
-		{name: "tcp with bits", protocol: 6, flags: 0x12, want: 1},
-		{name: "tcp with none", protocol: 6, flags: 0, want: 0},
-		{name: "udp", protocol: 17, flags: 0, want: 0},
-		{name: "udp carrying bits", protocol: 17, flags: 0x12, want: 0},
+		{name: "tcp with bits", protocol: 6, flags: 0x12, reported: true, want: 1},
+		{name: "tcp setting none", protocol: 6, flags: 0, reported: true, want: 1},
+		{name: "tcp the device did not report", protocol: 6, flags: 0, reported: false, want: 0},
+		{name: "udp", protocol: 17, flags: 0, reported: false, want: 0},
+		{name: "udp carrying bits", protocol: 17, flags: 0x12, reported: true, want: 0},
 	}
 
 	for _, tt := range tests {
@@ -440,12 +443,12 @@ func TestAggregator_TCPFlagsNeedTCPAndABitSet(t *testing.T) {
 
 			a := New(testConfig(), Modules{TCPFlags: true})
 			r := testRecord()
-			r.Protocol, r.TCPFlags = tt.protocol, tt.flags
+			r.Protocol, r.TCPFlags, r.TCPFlagsReported = tt.protocol, tt.flags, tt.reported
 			a.Ingest([]flow.Record{r})
 
 			entries, _ := a.TCPFlags()
 			if len(entries) != tt.want {
-				t.Errorf("TCPFlags() returned %d entries, want %d", len(entries), tt.want)
+				t.Fatalf("TCPFlags() returned %d entries, want %d", len(entries), tt.want)
 			}
 			if tt.want == 1 && entries[0].Key.Flags != tt.flags {
 				t.Errorf("flags = %#x, want %#x", entries[0].Key.Flags, tt.flags)

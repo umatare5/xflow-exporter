@@ -63,6 +63,11 @@ type Record struct {
 	// and the two would otherwise be one series.
 	TOSReported bool
 	TCPFlags    uint8
+	// TCPFlagsReported records that a device carried the control bits, which
+	// their value cannot: a TCP segment may legitimately set none, a NULL
+	// scan being defined by setting none, and that is exactly the traffic a
+	// control-bit breakdown exists to surface.
+	TCPFlagsReported bool
 
 	InputIf  uint32
 	OutputIf uint32

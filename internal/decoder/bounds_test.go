@@ -450,19 +450,70 @@ func v9DataSetNaming(odid uint32, templateID uint16) []byte {
 	return append(b, 0, 0, 0, 0)
 }
 
-// TestDecodeV9_RefusesAnIPFIXAnnouncedVariableLengthTemplate is the regression
-// test for a remote unauthenticated process death. The template store is keyed
-// by exporter address and Observation Domain ID, which RFC 7011 requires but
-// which does not separate the two protocols that share the store. An IPFIX
-// variable-length field registers as length 65535 against a recordLen of one,
-// and the v9 walk reads every field at its declared length, so the second
-// datagram slices 65535 bytes out of a one-byte record.
+// v9TemplateNaming announces one v9 template of three four-byte fields:
+// source address, destination address and octet count.
+func v9TemplateNaming(odid uint32, templateID uint16) []byte {
+	body := be16(nil, templateID)
+	body = be16(body, 3)
+	for _, fieldType := range []uint16{fieldIPv4SrcAddr, fieldIPv4DstAddr, fieldInBytes} {
+		body = be16(body, fieldType)
+		body = be16(body, 4)
+	}
+
+	b := be16(nil, 9)
+	b = be16(b, 1)
+	b = be32(b, 1000)
+	b = be32(b, 1)
+	b = be32(b, 1)
+	b = be32(b, odid)
+	return append(b, flowSet(0, body)...)
+}
+
+// v9AddressRecord builds a v9 data flowset of twelve bytes, which the three
+// fields above divide into one record.
+func v9AddressRecord(odid uint32, setID uint16) []byte {
+	rec := []byte{10, 1, 1, 1, 10, 2, 2, 2}
+	rec = be32(rec, 4242)
+
+	b := be16(nil, 9)
+	b = be16(b, 1)
+	b = be32(b, 1000)
+	b = be32(b, 1)
+	b = be32(b, 1)
+	b = be32(b, odid)
+	return append(b, flowSet(setID, rec)...)
+}
+
+// ipfixSamplingOptionsTemplate announces an IPFIX options template declaring
+// one scope field and the sampling interval.
+func ipfixSamplingOptionsTemplate(odid uint32, templateID uint16) []byte {
+	body := be16(nil, templateID)
+	body = be16(body, 2)
+	body = be16(body, 1)
+	body = be16(body, 144)
+	body = be16(body, 4)
+	body = be16(body, fieldSamplingInterval)
+	body = be16(body, 4)
+
+	set := flowSet(ipfixOptionsTemplateSetID, body)
+
+	b := be16(nil, 10)
+	b = be16(b, uint16(ipfixHeaderLen+len(set)))
+	b = be32(b, 1)
+	b = be32(b, 1)
+	b = be32(b, odid)
+	return append(b, set...)
+}
+
+// TestDecodeV9_DoesNotDecodeAgainstAnotherProtocolsTemplate is the regression
+// test for the store merging three protocols into one template id space. A
+// device exporting v9 and IPFIX at once sends both from one address, and both
+// number templates from 256, so the collision arrives without an attacker.
 //
-// Nothing recovers it: the only recover() in the process wraps Collect, and
-// the decode workers are bare goroutines. A device with one v9 and one IPFIX
-// flow exporter aimed here shares a source address and an ODID, and both
-// allocate template ids from 256, so this arrives without an attacker.
-func TestDecodeV9_RefusesAnIPFIXAnnouncedVariableLengthTemplate(t *testing.T) {
+// What made it worse than a lost record is that the walk succeeded: the
+// fields agreed on a length, so the bytes reached the aggregator as a
+// measurement rather than as an error.
+func TestDecodeV9_DoesNotDecodeAgainstAnotherProtocolsTemplate(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()
@@ -477,16 +528,85 @@ func TestDecodeV9_RefusesAnIPFIXAnnouncedVariableLengthTemplate(t *testing.T) {
 		t.Fatalf("Decode() error = %v, want the v9 data set tolerated", err)
 	}
 	if len(got) != 0 {
+		t.Errorf("Decode() returned %d records, want none from a template v9 never announced", len(got))
+	}
+
+	if missing := errorCount(d, ReasonMissingTemplate); missing != 1 {
+		t.Errorf("missing_template count = %d, want 1 so the gap is visible", missing)
+	}
+}
+
+// TestDecodeV9_DoesNotPoisonTheSamplingRateFromAnotherProtocol is the severe
+// half of the same collision. A v9 data flowset whose id matches an IPFIX
+// options template was read as an options record, and whatever its bytes held
+// became the domain's sampling rate, which multiplies every count the
+// aggregator publishes afterwards.
+func TestDecodeV9_DoesNotPoisonTheSamplingRateFromAnotherProtocol(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	const (
+		odid       = 7
+		optionsID  = 257
+		observedID = 300
+	)
+
+	if _, err := d.Decode(testExporter, v9TemplateNaming(odid, observedID), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want the v9 template accepted", err)
+	}
+	rateNow := func() uint32 {
+		t.Helper()
+
+		got, err := d.Decode(testExporter, v9AddressRecord(odid, observedID), nil)
+		if err != nil || len(got) != 1 {
+			t.Fatalf("Decode() error = %v, records = %d, want one observable record", err, len(got))
+		}
+		return got[0].SamplingRate
+	}
+
+	before := rateNow()
+
+	if _, err := d.Decode(testExporter, ipfixSamplingOptionsTemplate(odid, optionsID), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want the IPFIX options template accepted", err)
+	}
+	if _, err := d.Decode(testExporter, v9AddressRecord(odid, optionsID), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want the colliding v9 data set tolerated", err)
+	}
+
+	if after := rateNow(); after != before {
+		t.Errorf("sampling rate = %d after a v9 data set, want %d unchanged", after, before)
+	}
+}
+
+// TestDecodeV9_RefusesAVariableLengthTemplate covers the guard that keeps a
+// record walk from reading a field at 65535 bytes. Nothing on the wire
+// reaches it now that templates are keyed by protocol, so the template is
+// planted in the store directly: the guard prevents a process death, and a
+// guard nothing exercises is a guard nobody notices losing.
+func TestDecodeV9_RefusesAVariableLengthTemplate(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	const odid = 7
+
+	key := domainKey{exporter: testExporter, odid: odid, proto: flow.VersionNetFlowV9}
+	if !d.templates.add(key, 256, &template{
+		fields:      []templateField{{fieldType: fieldApplicationName, length: variableFieldLength}},
+		recordLen:   1,
+		hasVariable: true,
+	}) {
+		t.Fatal("add() refused the template the test needs")
+	}
+
+	got, err := d.Decode(testExporter, v9DataSetNaming(odid, 256), nil)
+	if err != nil {
+		t.Fatalf("Decode() error = %v, want the v9 data set tolerated", err)
+	}
+	if len(got) != 0 {
 		t.Errorf("Decode() returned %d records, want none from a template v9 cannot walk", len(got))
 	}
 
-	var refused uint64
-	for _, e := range d.Stats().Snapshot()[0].Errors {
-		if e.Version == flow.VersionNetFlowV9 && e.Reason == ReasonInvalidTemplate {
-			refused = e.Count
-		}
-	}
-	if refused != 1 {
+	if refused := errorCount(d, ReasonInvalidTemplate); refused != 1 {
 		t.Errorf("invalid_template count = %d, want 1 so the refusal is visible", refused)
 	}
 }

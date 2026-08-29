@@ -1,11 +1,15 @@
 package collector
 
 import (
+	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 
 	"github.com/umatare5/xflow-exporter/internal/aggregator"
 	"github.com/umatare5/xflow-exporter/internal/config"
@@ -194,13 +198,19 @@ func TestProtocolName(t *testing.T) {
 		want     string
 	}{
 		{1, "icmp"},
+		{2, "igmp"},
+		{4, "ipip"},
 		{6, "tcp"},
 		{17, "udp"},
+		{41, "ipv6"},
 		{47, "gre"},
 		{50, "esp"},
 		{51, "ah"},
 		{58, "icmpv6"},
+		{88, "eigrp"},
 		{89, "ospf"},
+		{103, "pim"},
+		{112, "vrrp"},
 		{132, "sctp"},
 		{200, "200"},
 	}
@@ -322,6 +332,7 @@ func TestTCPFlagNames(t *testing.T) {
 		{flags: 0x04, want: "rst"},
 		{flags: 0x1B, want: "fin,syn,psh,ack"},
 		{flags: 0xC0, want: "ece,cwr"},
+		{flags: 0x00, want: "none"},
 	}
 
 	for _, tt := range tests {
@@ -363,7 +374,7 @@ func TestFlowCollector_TCPFlagsAndDSCPLabels(t *testing.T) {
 	agg := aggregator.New(aggConfig(), aggregator.Modules{TCPFlags: true, DSCP: true})
 
 	r := flowRecord("10.0.0.1", "10.0.0.2", 700)
-	r.TCPFlags = 0x12
+	r.TCPFlags, r.TCPFlagsReported = 0x12, true
 	r.TOS, r.TOSReported = 0xB8, true
 	agg.Ingest([]flow.Record{r})
 
@@ -383,4 +394,75 @@ xflow_tcp_flags_bytes_total{exporter="other",flags="other"} 0
 		"xflow_tcp_flags_bytes_total", "xflow_dscp_bytes_total"); err != nil {
 		t.Errorf("CollectAndCompare() mismatch: %v", err)
 	}
+}
+
+// TestFlowCollector_TopKIsStableAcrossScrapes is the regression test for a
+// series set that churned with nothing being ingested. Byte counts tie
+// readily -- under sampling every single-packet minimum-size flow corrects to
+// the same figure -- and a tie group straddling the Top-K cut admitted a
+// different subset of itself on every scrape, so a long-term store billed
+// series the exporter had not published twice in a row.
+func TestFlowCollector_TopKIsStableAcrossScrapes(t *testing.T) {
+	t.Parallel()
+
+	const (
+		topK  = 8
+		tied  = 20
+		bytes = 1280
+	)
+
+	cfg := aggConfig()
+	cfg.TopK = topK
+	cfg.MinBytes = 0
+
+	agg := aggregator.New(cfg, aggregator.Modules{Hosts: true})
+	records := make([]flow.Record, 0, tied)
+	for i := range tied {
+		records = append(records, flowRecord("10.0.0.1", fmt.Sprintf("10.1.0.%d", i+1), bytes))
+	}
+	agg.Ingest(records)
+
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg)
+
+	first := publishedHostPairs(t, c)
+	if len(first) != topK {
+		t.Fatalf("published %d series, want %d so the cut falls inside the tie group", len(first), topK)
+	}
+
+	for scrape := range 5 {
+		got := publishedHostPairs(t, c)
+		if !slices.Equal(first, got) {
+			t.Errorf("scrape %d published %v, want %v unchanged with nothing ingested", scrape+2, got, first)
+		}
+	}
+}
+
+// publishedHostPairs collects the host-pair byte series and returns their
+// destination labels in order, the fold series excluded.
+func publishedHostPairs(t *testing.T, c prometheus.Collector) []string {
+	t.Helper()
+
+	ch := make(chan prometheus.Metric, 1024)
+	go func() {
+		c.Collect(ch)
+		close(ch)
+	}()
+
+	var dsts []string
+	for m := range ch {
+		var pb dto.Metric
+		if err := m.Write(&pb); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		if !strings.Contains(m.Desc().String(), "xflow_host_pair_bytes_total") {
+			continue
+		}
+		for _, l := range pb.GetLabel() {
+			if l.GetName() == "dst" && l.GetValue() != "other" {
+				dsts = append(dsts, l.GetValue())
+			}
+		}
+	}
+	slices.Sort(dsts)
+	return dsts
 }

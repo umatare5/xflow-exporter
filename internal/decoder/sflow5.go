@@ -60,7 +60,7 @@ func (d *Decoder) decodeSFlowV5(
 		return dst, malformed("sflow datagram of %d bytes ends inside its header", len(payload))
 	}
 
-	domain := d.templates.domain(domainKey{exporter: exporter, odid: subAgentID})
+	domain := d.templates.domain(domainKey{exporter: exporter, odid: subAgentID, proto: flow.VersionSFlowV5})
 	if domain == nil {
 		issue(ReasonDomainLimit)
 		return dst, nil
@@ -249,7 +249,8 @@ func readSFlowSampledIPv4(record []byte, r *flow.Record) bool {
 	r.SrcPort = uint16(srcPort)  //nolint:gosec // The wire field is a port.
 	r.DstPort = uint16(dstPort)  //nolint:gosec // The wire field is a port.
 	r.TCPFlags = uint8(tcpFlags) //nolint:gosec // The wire field is the TCP flag byte.
-	r.TOS = uint8(tos)           //nolint:gosec // The wire field is the TOS byte.
+	r.TCPFlagsReported = true
+	r.TOS = uint8(tos) //nolint:gosec // The wire field is the TOS byte.
 	r.TOSReported = true
 	r.SrcAddr = netip.AddrFrom4([4]byte(src))
 	r.DstAddr = netip.AddrFrom4([4]byte(dstAddr))
@@ -277,7 +278,8 @@ func readSFlowSampledIPv6(record []byte, r *flow.Record) bool {
 	r.SrcPort = uint16(srcPort)  //nolint:gosec // The wire field is a port.
 	r.DstPort = uint16(dstPort)  //nolint:gosec // The wire field is a port.
 	r.TCPFlags = uint8(tcpFlags) //nolint:gosec // The wire field is the TCP flag byte.
-	r.TOS = uint8(priority)      //nolint:gosec // The wire field is the traffic class.
+	r.TCPFlagsReported = true
+	r.TOS = uint8(priority) //nolint:gosec // The wire field is the traffic class.
 	r.TOSReported = true
 	r.SrcAddr = addrFrom16([16]byte(src))
 	r.DstAddr = addrFrom16([16]byte(dstAddr))

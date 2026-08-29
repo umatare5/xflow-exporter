@@ -94,7 +94,9 @@ type DestinationKey struct {
 	Port     uint16
 }
 
-// ASNKey keys the AS-pair aggregation.
+// ASNKey keys the AS-pair aggregation. A zero is the absence of an answer,
+// which is what AS 0 is reserved to mean, and is left as the number: unlike a
+// country, an AS has a spelling for "none" that an operator already reads.
 type ASNKey struct {
 	Exporter netip.Addr
 	SrcAS    uint32
@@ -249,10 +251,10 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 		}, bytes, packets, r.Flows, now)
 	}
 
-	// A TCP flow always carries at least one control bit, so a zero here is
-	// a device that did not export the field rather than a flow that set
-	// nothing, and the two must not share a series.
-	if a.tcpFlags != nil && r.Protocol == protocolTCP && r.TCPFlags != 0 {
+	// Keyed on whether the device reported the bits, not on their value: a
+	// segment setting none is a NULL scan rather than a field left unset,
+	// and a breakdown of control bits is where that has to be visible.
+	if a.tcpFlags != nil && r.Protocol == protocolTCP && r.TCPFlagsReported {
 		a.tcpFlags.add(TCPFlagsKey{Exporter: r.Exporter, Flags: r.TCPFlags},
 			bytes, packets, r.Flows, now)
 	}

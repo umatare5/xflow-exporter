@@ -166,35 +166,51 @@ func TestCountry_FillsBothSides(t *testing.T) {
 	}
 }
 
-// TestCountry_OneSidePlacedIsStillAFill covers a flow leaving a private
-// network: the internal side belongs to no country and stays absent.
-func TestCountry_OneSidePlacedIsStillAFill(t *testing.T) {
+// TestCountry_PrivateIsAnAnswerNotAGap covers a flow leaving a private
+// network. The internal side belongs to no country, which is a fact about the
+// address rather than a database that fell short, and the two must not read
+// alike: the lookup is never reached for it.
+func TestCountry_PrivateIsAnAnswerNotAGap(t *testing.T) {
 	t.Parallel()
 
-	c := newCountryWithLookup(countryTable(map[netip.Addr]string{publicDst: "US"}))
+	asked := 0
+	lookup := func(addr netip.Addr) (string, bool) {
+		asked++
+		return countryTable(map[netip.Addr]string{publicDst: "US"})(addr)
+	}
+	c := newCountryWithLookup(lookup)
 
 	r := flow.Record{SrcAddr: privateSrc, DstAddr: publicDst}
 	c.Enrich(&r)
 
-	if r.SrcCountry != "" {
-		t.Errorf("SrcCountry = %q, want a private address placed nowhere", r.SrcCountry)
+	if r.SrcCountry != CountryPrivate {
+		t.Errorf("SrcCountry = %q, want %q", r.SrcCountry, CountryPrivate)
 	}
 	if r.DstCountry != "US" {
 		t.Errorf("DstCountry = %q, want US", r.DstCountry)
+	}
+	if asked != 1 {
+		t.Errorf("the database was asked %d times, want 1: a private address has no lookup", asked)
 	}
 	if got := c.Snapshot(); got.Filled != 1 {
 		t.Errorf("Snapshot() = %+v, want one filled", got)
 	}
 }
 
-func TestCountry_NeitherSidePlacedIsUnknown(t *testing.T) {
+// TestCountry_UnplaceableGlobalIsUnknown pins the other half. A routable
+// address the database carries no entry for stays absent, so a gap in a
+// database never reads as somebody's LAN.
+func TestCountry_UnplaceableGlobalIsUnknown(t *testing.T) {
 	t.Parallel()
 
 	c := newCountryWithLookup(countryTable(nil))
 
-	r := flow.Record{SrcAddr: privateSrc, DstAddr: privateSrc}
+	r := flow.Record{SrcAddr: publicDst, DstAddr: publicDst}
 	c.Enrich(&r)
 
+	if r.SrcCountry != "" || r.DstCountry != "" {
+		t.Errorf("countries = %q/%q, want both absent", r.SrcCountry, r.DstCountry)
+	}
 	if got := c.Snapshot(); got.Unknown != 1 || got.Filled != 0 {
 		t.Errorf("Snapshot() = %+v, want one unknown", got)
 	}

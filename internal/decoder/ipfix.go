@@ -39,7 +39,7 @@ func (d *Decoder) decodeIPFIX(
 	}
 
 	sequence := binary.BigEndian.Uint32(payload[8:12])
-	key := domainKey{exporter: exporter, odid: binary.BigEndian.Uint32(payload[12:16])}
+	key := domainKey{exporter: exporter, odid: binary.BigEndian.Uint32(payload[12:16]), proto: flow.VersionIPFIX}
 	domain := d.templates.domain(key)
 	if domain == nil {
 		issue(ReasonDomainLimit)

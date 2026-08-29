@@ -277,12 +277,20 @@ func collectFamily[K comparable](
 ) {
 	entries, fold := read()
 
-	// The largest entries by bytes keep their own series.
+	// The largest entries by bytes keep their own series, the older entry
+	// winning a tie. The order has to be total: a comparison that returns
+	// zero leaves the sort free to place either first, and the snapshot
+	// arrives in map order, so the cut would admit a different subset of a
+	// tie group on every scrape and publish churn nothing ingested.
 	slices.SortFunc(entries, func(a, b aggregator.EntrySnapshot[K]) int {
 		switch {
 		case a.Bytes > b.Bytes:
 			return -1
 		case a.Bytes < b.Bytes:
+			return 1
+		case a.Born < b.Born:
+			return -1
+		case a.Born > b.Born:
 			return 1
 		default:
 			return 0
@@ -385,13 +393,19 @@ func countryLabel(code string) string {
 // names; anything else renders as its number.
 var protocolNames = map[uint8]string{
 	1:   "icmp",
+	2:   "igmp",
+	4:   "ipip",
 	6:   "tcp",
 	17:  "udp",
+	41:  "ipv6",
 	47:  "gre",
 	50:  "esp",
 	51:  "ah",
 	58:  "icmpv6",
+	88:  "eigrp",
 	89:  "ospf",
+	103: "pim",
+	112: "vrrp",
 	132: "sctp",
 }
 
@@ -404,8 +418,9 @@ func protocolName(protocol uint8) string {
 	return strconv.Itoa(int(protocol))
 }
 
-// tcpFlagBits names each control bit in header order, which is the order
-// every packet tool prints them in.
+// tcpFlagBits names each control bit from the low bit up, which is the order
+// every packet tool prints them in and the reverse of the header's own
+// drawing.
 var tcpFlagBits = [8]struct {
 	mask uint8
 	name string
@@ -427,6 +442,12 @@ var tcpFlagBits = [8]struct {
 // numbers says so. Only set bits appear, so the label is short and the
 // distinct values are the handful a network actually produces.
 func tcpFlagNames(flags uint8) string {
+	// A segment setting no bit is a NULL scan, which the table admits, and an
+	// empty label value reads as an absent label wherever it is rendered.
+	if flags == 0 {
+		return "none"
+	}
+
 	var b strings.Builder
 	for _, f := range tcpFlagBits {
 		if flags&f.mask == 0 {

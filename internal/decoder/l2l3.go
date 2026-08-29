@@ -120,6 +120,7 @@ func readTransport(segment []byte, r *flow.Record) {
 		r.DstPort = binary.BigEndian.Uint16(segment[2:4])
 		if len(segment) > tcpFlagsOffset {
 			r.TCPFlags = segment[tcpFlagsOffset]
+			r.TCPFlagsReported = true
 		}
 	case protocolUDP:
 		if len(segment) < transportPorts {

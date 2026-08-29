@@ -56,6 +56,10 @@ const (
 	fieldFlowStartMilliseconds = 152
 	fieldFlowEndMilliseconds   = 153
 
+	// The code point alone, which Flexible NetFlow exports in place of the
+	// TOS byte where the record matched on DSCP rather than on TOS.
+	fieldDSCP = 195
+
 	// Options fields carrying the packet sampling configuration.
 	fieldSamplingInterval      = 34
 	fieldSamplerRandomInterval = 50
@@ -80,7 +84,7 @@ func (d *Decoder) decodeNetFlowV9(
 	sysUptimeMs := binary.BigEndian.Uint32(payload[4:8])
 	exportSecs := binary.BigEndian.Uint32(payload[8:12])
 	sequence := binary.BigEndian.Uint32(payload[12:16])
-	key := domainKey{exporter: exporter, odid: binary.BigEndian.Uint32(payload[16:20])}
+	key := domainKey{exporter: exporter, odid: binary.BigEndian.Uint32(payload[16:20]), proto: flow.VersionNetFlowV9}
 
 	domain := d.templates.domain(key)
 	if domain == nil {
@@ -290,11 +294,12 @@ func (d *Decoder) decodeV9DataSet(
 		return dst
 	}
 
-	// NetFlow v9 has no variable-length encoding, so a template carrying one
-	// reached this domain over IPFIX. Its recordLen is a minimum rather than
-	// a width, and the walk below reads every field at its declared length --
-	// 65535 for the variable one, past the end of a record carved to the
-	// minimum.
+	// NetFlow v9 has no variable-length encoding and neither v9 parser sets
+	// the flag, so nothing reaches this on the wire once the store keys
+	// templates by protocol. It stands because what it prevents is a process
+	// death rather than a wrong number: recordLen would be a minimum rather
+	// than a width, and the walk below reads every field at its declared
+	// length -- 65535 for the variable one, past the end of the record.
 	if tpl.hasVariable {
 		issue(ReasonInvalidTemplate)
 		return dst

@@ -374,7 +374,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "suffix: p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -438,7 +438,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "suffix: p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -707,7 +707,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "suffix: p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1091,7 +1091,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "suffix: p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1155,7 +1155,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "suffix: p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1232,7 +1232,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "suffix: p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1296,7 +1296,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "suffix: p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1360,7 +1360,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "suffix: p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1424,7 +1424,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "suffix: p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1488,7 +1488,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "suffix: p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1552,7 +1552,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "suffix: p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1616,7 +1616,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "pps",
+          "unit": "suffix: p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",

@@ -89,6 +89,9 @@ Optional enrichment fills dimensions a device did not export, each off by defaul
 
 `--remote-write.url` ships the registry's counters and gauges to a Remote Write 2.0 endpoint for the deployments a scrape cannot reach, alongside or instead of `/metrics`. Native histograms stay scrape-only.
 
+> [!Note]
+> `--aggregation.top-k` bounds what is live at any instant, not what a long-term store accumulates: the address-keyed families turn their Top-K over as talkers come and go — measured at 5.3× the live series count per hour for `xflow_service_*` on a quiet link — while the dimensional families (`asns`, `applications`, `tcp_flags`, `dscp`, `countries`) stay flat at 1.0×. Aggregate the former with recording rules, or drop them with `write_relabel_configs`, before shipping to remote storage; neither `--remote-write.url` nor a scrape filters anything of its own accord.
+
 The operational knobs live under `--receiver.*`, `--parser.*` and `--aggregation.*`. On Linux the read loops use `recvmmsg` batching — other platforms read one datagram per call.
 
 ## Endpoints

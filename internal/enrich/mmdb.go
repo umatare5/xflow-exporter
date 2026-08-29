@@ -229,18 +229,28 @@ func (c *Country) Close() error {
 	return c.mmdb.close()
 }
 
+// CountryPrivate is what a private address resolves to. It is not an ISO
+// code and cannot collide with one, which are two upper-case letters.
+//
+// It exists because "the database could not place this" and "this address
+// belongs to no country" are different answers that read the same. A LAN is
+// the second, and it is a fact about the address rather than a gap in a
+// database: no lookup can improve on it, and folding it in with the first
+// leaves an operator unable to tell their own network from a database miss.
+const CountryPrivate = "private"
+
 // Enrich fills both sides' country codes. No flow protocol exports a country,
 // so nothing here is ever skipped for a device reading.
 func (c *Country) Enrich(r *flow.Record) {
 	filled := false
 	if r.SrcAddr.IsValid() {
-		if code, ok := c.lookup(r.SrcAddr); ok {
+		if code, ok := countryOf(r.SrcAddr, c.lookup); ok {
 			r.SrcCountry = code
 			filled = true
 		}
 	}
 	if r.DstAddr.IsValid() {
-		if code, ok := c.lookup(r.DstAddr); ok {
+		if code, ok := countryOf(r.DstAddr, c.lookup); ok {
 			r.DstCountry = code
 			filled = true
 		}
@@ -253,9 +263,23 @@ func (c *Country) Enrich(r *flow.Record) {
 	c.unknown.Add(1)
 }
 
+// countryOf answers for an address the database cannot be asked about, and
+// defers to it otherwise.
+//
+// Private means what netip means by it -- RFC 1918 and the IPv6 unique local
+// range -- and nothing wider. Shared address space, loopback and link-local
+// have no country either, but they are not private, and naming them so would
+// be the guess this exists to avoid.
+func countryOf(addr netip.Addr, lookup func(netip.Addr) (string, bool)) (string, bool) {
+	if addr.IsPrivate() {
+		return CountryPrivate, true
+	}
+	return lookup(addr)
+}
+
 // lookupDB resolves one address to its ISO code, reporting false where the
-// database carries none. A private or reserved address resolves to nothing,
-// which is correct: it belongs to no country.
+// database carries none. A reserved address resolves to nothing, which is
+// correct: it belongs to no country.
 func (c *Country) lookupDB(addr netip.Addr) (string, bool) {
 	db := c.mmdb.reader()
 	if db == nil {
