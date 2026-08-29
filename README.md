@@ -46,12 +46,15 @@ Add a job for `localhost:10040` using [examples/prometheus.yml](examples/prometh
 | NetFlow v5 (incl. J-Flow v5)    | Supported |
 | NetFlow v8 (incl. J-Flow v8)    | Supported |
 | NetFlow v9 (incl. FNF, J-Flow)  | Supported |
+| NetFlow-Lite (packet sections)  | Supported |
 | IPFIX / NetFlow v10             | Supported |
 | sFlow v5                        | Supported |
 
 NetFlow v8 covers all fourteen aggregation methods of aggregation export version 2. A v8 record is pre-aggregated on the router, so it carries only its method's dimensions and the rest stay absent.
 
 NetFlow v9 and IPFIX templates are cached per exporter address and Observation Domain ID together, as RFC 7011 requires, so two domains reusing one template ID never corrupt each other. A template is refused when it declares a zero-width fixed field or more than `--parser.max-fields-per-template` fields, and expires after `--parser.template-ttl` without a re-announcement. IPFIX adds enterprise information elements, variable-length fields with strict bounds checking, and template withdrawals.
+
+NetFlow-Lite (Catalyst 2960-X/XR, 2960-CX, 3560-CX, 4948E) ships sampled packet sections inside v9 or IPFIX records: the deprecated v9 field 104 as measured on the devices, and the IANA elements 315/313/312 in IPFIX mode. Sections decode through the same header walk the sFlow decoder uses, fields the device parsed itself win over the section, and the 309/310 random-sampler options pair feeds the sampling correction.
 
 sFlow v5 decodes flow samples, compact and expanded, from the raw Ethernet header — through stacked VLAN tags to IPv4/IPv6 and the TCP/UDP ports — and from the pre-parsed sampled IPv4/IPv6 records. Counter samples are out of scope: they carry interface statistics, not traffic. A sampled header cut short keeps the layers that decoded and leaves the rest absent.
 

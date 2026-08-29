@@ -246,6 +246,28 @@ func TestDecodeSFlowV5_TruncatedHeaderKeepsWhatDecoded(t *testing.T) {
 	}
 }
 
+func TestDecodeSFlowV5_UnreadableKnownRecordIsCounted(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	// A sampled-IPv4 record four bytes short of its fixed layout.
+	short := sflowRecord(sflowSampledIPv4, make([]byte, 28))
+	datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
+		sflowFlowSampleBody(10, 1, 2, short)))
+
+	records, err := d.Decode(testExporter, datagram, nil)
+	if err != nil {
+		t.Fatalf("Decode() error = %v, want the datagram tolerated", err)
+	}
+	if len(records) != 0 {
+		t.Errorf("Decode() returned %d records, want 0 from the unreadable record", len(records))
+	}
+	if got := errorCountFor(d, flow.VersionSFlowV5, ReasonMalformed); got != 1 {
+		t.Errorf("malformed count = %d, want 1", got)
+	}
+}
+
 func TestDecodeSFlowV5_RejectsBrokenStructure(t *testing.T) {
 	t.Parallel()
 

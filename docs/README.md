@@ -41,6 +41,14 @@ NetFlow v9 and IPFIX data decode against templates cached per exporter address a
 - **Limits** — a template with a zero-width fixed field, more than `--parser.max-fields-per-template` fields, or specifiers that overrun their set is refused as `invalid_template`.
 - **Expiry** — a template unrefreshed for `--parser.template-ttl` stops serving: an orphaned template may describe a schema the device has replaced.
 
+### Packet sections
+
+A NetFlow-Lite record carries one sampled packet section instead of parsed flow fields, and decodes through the header walk the sFlow decoder uses.
+
+- **Elements** — the v9 mode's deprecated field 104 (layer2packetSectionData, the measured device behaviour), and IPFIX `dataLinkFrameSection` (315), `ipHeaderPacketSection` (313) and `dataLinkFrameSize` (312).
+- **Precedence** — fields the device parsed itself win; the section fills only what is still absent, and one record reads as one sampled packet.
+- **Padding** — a fixed-size v9 section is zero-padded, so a frame cut before its transport header reads zero ports from the padding; that is the one ambiguity a padded section cannot escape.
+
 ### Native histograms
 
 `--collector.distributions` publishes `xflow_flow_bytes` and `xflow_flow_duration_seconds` as native histograms, one series per exporter with exponential buckets.

@@ -12,6 +12,10 @@ import (
 const (
 	fieldSamplingPacketInterval = 305
 	fieldSamplingPacketSpace    = 306
+	// The random n-out-of-N sampler pair NetFlow-Lite exports: size packets
+	// selected out of each population.
+	fieldSamplingSize       = 309
+	fieldSamplingPopulation = 310
 )
 
 // AVC application name element; the identifier is fieldApplicationID.
@@ -25,6 +29,8 @@ type optionsState struct {
 	packetInterval uint32
 	packetSpace    uint32
 	hasSpace       bool
+	samplingSize   uint32
+	population     uint32
 
 	appID       uint32
 	appName     []byte
@@ -53,6 +59,10 @@ func (o *optionsState) apply(fieldType uint16, enterprise uint32, value []byte) 
 	case fieldSamplingPacketSpace:
 		o.packetSpace, _ = beUint32(value)
 		o.hasSpace = true
+	case fieldSamplingSize:
+		o.samplingSize, _ = beUint32(value)
+	case fieldSamplingPopulation:
+		o.population, _ = beUint32(value)
 	case fieldApplicationID:
 		o.appID, _ = beUint32(value)
 	case fieldApplicationName:
@@ -79,10 +89,14 @@ func (o *optionsState) commit(d *Decoder, exporter netip.Addr, domain *domainSta
 
 // samplingRate resolves the declared fields into one 1-in-N rate. The PSAMP
 // pair is the modern spelling: N packets selected then M skipped means one
-// selected stretch every interval+space packets.
+// selected stretch every interval+space packets. The random sampler declares
+// size selected out of each population instead.
 func (o *optionsState) samplingRate() uint32 {
 	if o.hasSpace && o.packetInterval > 0 {
 		return (o.packetInterval + o.packetSpace) / o.packetInterval
+	}
+	if o.samplingSize > 0 && o.population > 0 {
+		return o.population / o.samplingSize
 	}
 	if o.randomInterval > 0 {
 		return o.randomInterval

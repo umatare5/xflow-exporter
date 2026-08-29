@@ -30,6 +30,16 @@ func FuzzDecode(f *testing.F) {
 		flowSet(fixtureIPFIXTemplateID, []byte{255, 0, 3, 'a', 'b', 'c'})))
 	f.Add(sflowDatagram(1, sflowSample(sflowFlowSample,
 		sflowFlowSampleBody(1000, 3, 4, rawHeaderRecord(tcpFrame(false), 1518)))))
+	f.Add(v9Packet(4, fixtureV9ODID,
+		flowSet(templateFlowSetID, templateSpec(fixtureV9TemplateID,
+			[2]uint16{fieldPacketSectionV9Data, liteSectionSize})),
+		flowSet(fixtureV9TemplateID, padTo(tcpFrame(false)))))
+	f.Add(ipfixMessage(3,
+		ipfixTemplateSet(
+			ipfixSpec(fieldDataLinkFrameSize, 4, 0),
+			ipfixSpec(fieldDataLinkFrameSection, variableFieldLength, 0)),
+		flowSet(fixtureIPFIXTemplateID, append(append(be32(nil, 1518),
+			byte(len(tcpFrame(true)))), tcpFrame(true)...))))
 	f.Add(sflowDatagram(2, sflowSample(sflowFlowSample,
 		sflowFlowSampleBody(10, 1, 2, rawHeaderRecord(tcpFrame(true), 900)))))
 
