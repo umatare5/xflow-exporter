@@ -14,7 +14,7 @@
 
 ## Overview
 
-This exporter receives flow records from on-premises network devices and serves aggregated Prometheus metrics.
+This exporter receives flow records from on-premises devices and serves them as Prometheus metrics.
 
 - 📥 **Push-to-Pull Bridge**: Receives UDP flow exports and serves them to Prometheus scrapes
 - 🧮 **In-Memory Aggregation**: Bounded-cardinality tables with Top-K and idle eviction
@@ -26,8 +26,8 @@ This exporter receives flow records from on-premises network devices and serves 
 Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it.
 
 ```mermaid
-flowchart TB
-    FE["Flow Exporters<br>(Catalyst / SRX / PAN-OS ...)"]
+flowchart LR
+    FE["Flow Exporters<br>(Catalyst / SRX ...)"]
     XF["Flow Receiver<br>(xflow-exporter)"]
     PROM["Flow Analyzer<br>(Prometheus)"]
     AM["Alertmanager"]
@@ -66,11 +66,11 @@ See [Prometheus Configuration](#prometheus-configuration) for the job and the al
 
 ## Protocol Support
 
-NetFlow v5/v8/v9, NetFlow-Lite, IPFIX and sFlow v5, over plaintext UDP. See [docs/protocols.md](docs/protocols.md) for per-protocol behaviour and limits.
+NetFlow v5/v8/v9, NetFlow-Lite, IPFIX and sFlow v5, over plaintext UDP — see [Protocols](docs/protocols.md).
 
 ## Syntax
 
-`xflow-exporter --help` prints every flag, and [docs/configuration.md](docs/configuration.md) carries the same list.
+`xflow-exporter --help` prints every flag, and [`docs/configuration.md`](docs/configuration.md) carries the same list.
 
 Each data collector is enabled per module:
 
@@ -88,9 +88,7 @@ Each data collector is enabled per module:
 | `--collector.threats`       | Traffic per flagged address, needs a list file     |
 | `--collector.distributions` | Flow size and duration native histograms           |
 
-Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from its port, and `--enrich.asn-database`, `--enrich.country-database` and `--enrich.threat-file` read files held locally. See [Enrichment](docs/README.md#enrichment).
-
-`--remote-write.url` ships the registry where a scrape cannot reach, and the receive path is tuned with the `--receiver.*`, `--parser.*` and `--aggregation.*` knobs. See [Remote write](docs/README.md#remote-write) and [Push and pull](docs/README.md#push-and-pull).
+`--receiver.*`, `--parser.*` and `--aggregation.*` tune the receive path — see [Push and pull](docs/README.md#push-and-pull).
 
 ## Endpoints
 
@@ -103,7 +101,7 @@ The exporter serves four endpoints:
 
 ## Metrics
 
-Eleven modules aggregate the flows, and the exporter publishes its own health beside them. The full catalogues live in `docs/`:
+Eleven modules aggregate the flows, and the catalogues live in `docs/`:
 
 | Page                                  | Covers                                                 |
 | :------------------------------------ | :----------------------------------------------------- |
@@ -120,7 +118,7 @@ The series a dashboard usually starts from:
 | `applications`  | `xflow_application_bytes_total` | Counter          | Traffic by application |
 | `distributions` | `xflow_flow_bytes`              | Native histogram | Flow size distribution |
 
-See [docs/README.md](docs/README.md) for the absence, folding and sampling rules every module shares.
+See [`docs/README.md`](docs/README.md) for the absence, folding and sampling rules every module shares.
 
 > [!Important]
 >
@@ -128,7 +126,7 @@ See [docs/README.md](docs/README.md) for the absence, folding and sampling rules
 
 ### Exporter Health Metrics
 
-These series describe the exporter itself rather than the traffic it aggregates. They have no module and no collector flag, and [docs/health.md](docs/health.md) carries the whole set with its labels and reason values.
+These series describe the exporter itself rather than the traffic it aggregates. They have no module and no collector flag, and [`docs/health.md`](docs/health.md) carries the whole set with its labels and reason values.
 
 | Metric                                 | Type    | Description                      |
 | :------------------------------------- | :------ | :------------------------------- |
@@ -186,23 +184,23 @@ For complete monitoring, see [`.air.toml`](https://github.com/umatare5/xflow-exp
 
 #### Job Configuration Example
 
-Add the job config to your Prometheus YAML file using [examples/prometheus.yml](./examples/prometheus.yml) as a reference.
+Add the job from [`examples/prometheus.yml`](./examples/prometheus.yml) to your Prometheus configuration.
 
 #### Alerting Rules Configuration Example
 
-Add the alerting rules to your Prometheus YAML file using [examples/prometheus_alert_rules.yml](./examples/prometheus_alert_rules.yml) as a reference.
+Add the rules from [`examples/prometheus_alert_rules.yml`](./examples/prometheus_alert_rules.yml) to your configuration.
 
 ### Grafana Dashboard
 
-Import [examples/grafana_dashboard.json](./examples/grafana_dashboard.json), whose data source and devices are variables.
+Import [`examples/grafana_dashboard.json`](./examples/grafana_dashboard.json), whose data source and devices are variables.
 
 > [!Note]
 > Panels rank by packets rather than bytes, and the composition panels rank rather than total — [Dashboards](docs/README.md#dashboards) carries what each panel covers and why.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the `make` targets, the Docker build and the release process.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the `make` targets, the Docker build and the release process.
 
 ## Licence
 
-[MIT](LICENSE). The binary statically links Apache-2.0, MIT, ISC and BSD 3-Clause dependencies, whose notices are reproduced in [NOTICE](NOTICE) and shipped alongside `LICENSE` in every release archive and container image.
+[MIT](LICENSE). The binary statically links Apache-2.0, MIT, ISC and BSD 3-Clause dependencies, whose notices are reproduced in [`NOTICE`](NOTICE) and shipped alongside `LICENSE` in every release archive and container image.

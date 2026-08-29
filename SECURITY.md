@@ -14,10 +14,13 @@ One maintainer works on this in their own time, so no response time is promised.
 
 This exporter receives traffic flow records (NetFlow, IPFIX, sFlow) from network devices over UDP, and exposes aggregates of them as Prometheus metrics. Flow records reveal who talked to whom, so both the receiver and the metrics endpoint deserve a controlled network path.
 
-- **Flow records** — IP addresses, ports and traffic volumes of monitored networks, so keep the receiver reachable from the exporting devices alone.
-- **Parser input** — every received datagram is untrusted input, and the parsers enforce hard limits on field counts, record sizes, observation domains per device and interned vendor strings. Report a way around those limits as a vulnerability.
-- **Permitted senders** — restrict the receiver port to your own devices at the packet filter. State keyed by the source address grows with the number of distinct senders, and a push protocol cannot choose them. A proxy is not a substitute: it replaces the source address, which collapses every device into one and breaks the template scoping RFC 7011 requires.
-- **Metrics** — unauthenticated plain HTTP whose label sets can carry monitored IP addresses, so keep it on a controlled path.
+- **Flow records** — IP addresses, ports and volumes of the monitored networks.
+- **Parser input** — every received datagram is untrusted, and the parsers bound it.
+- **Permitted senders** — restrict the receiver port to your own devices at the filter.
+- **Metrics** — unauthenticated plain HTTP whose labels can carry monitored addresses.
+
+> [!IMPORTANT]
+> Keep the receiver reachable from the exporting devices alone, and the metrics endpoint on a controlled path. The parsers enforce hard limits on field counts, record sizes, observation domains per device and interned vendor strings — report a way around any of them as a vulnerability. State keyed by the source address grows with the number of distinct senders, and a push protocol cannot choose them, so a proxy is no substitute: it replaces the source address, which collapses every device into one and breaks the template scoping RFC 7011 requires.
 
 Restricting the port looks like this with nftables.
 
@@ -32,7 +35,7 @@ Nothing, unless `--remote-write.url` is set. That flag enables the Remote Write 
 
 When remote write is enabled, the exporter holds that endpoint's credentials: `--remote-write.username` and `--remote-write.password` (or `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD`) send basic auth, and `--remote-write.header` attaches arbitrary request headers, which can carry a bearer token. Validation accepts a plain `http://` URL without a warning, and basic auth over it travels in cleartext, so use `https://` on any path that is not fully trusted.
 
-Every enrichment source reads a file on local disk, and a lookup sends no address anywhere. Fetching the threat lists and the MaxMind databases is a separate job the operator runs.
+Every enrichment source reads a file on local disk, and a lookup sends no address anywhere. Fetching the threat lists and the MaxMind-format databases is a separate job, run by the operator through [`scripts/fetch-enrichment-data.sh`](scripts/fetch-enrichment-data.sh) or any equivalent.
 
 `--web.enable-lifecycle` exposes `/-/reload`, which re-reads those files. It is unauthenticated, like the metrics endpoint, so keep it on a controlled path. It is off by default, and a `SIGHUP` reloads without exposing anything.
 

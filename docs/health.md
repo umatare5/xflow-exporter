@@ -68,7 +68,7 @@ Each entry carries what the series' HELP text and the shared [Absence](README.md
 
 **`xflow_build_info`**
 
-it is registered before any collector, so it is the only series a scrape carries on an exporter with every module disabled and every enrichment source unset.
+it is registered before any collector, and the receiver and decoder series are registered beside it whatever the modules say, so a scrape on an exporter with nothing enabled still carries all three.
 
 **`xflow_receiver_packets_total`**
 

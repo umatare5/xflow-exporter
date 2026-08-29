@@ -84,6 +84,6 @@ GLOBAL OPTIONS:
 
 ## Notes
 
-`--receiver.buffer-bytes` asks the kernel for that SO_RCVBUF, and Linux clamps the grant to `net.core.rmem_max`, which this exporter cannot raise. Size it, and `--receiver.queue-size`, to absorb the export storms Flexible NetFlow emits after a cache flush.
+`--receiver.buffer-bytes` asks the kernel for that much `SO_RCVBUF`, and Linux clamps the grant to `net.core.rmem_max`, which this exporter cannot raise. Size it, and `--receiver.queue-size`, to absorb the export storms Flexible NetFlow emits after a cache flush.
 
 A listener accepts every supported protocol, identified per datagram, so `--receiver.address` entries separate networks or ports rather than protocols.
