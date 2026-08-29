@@ -12,7 +12,7 @@ USAGE:
    xflow-exporter [global options]
 
 VERSION:
-   dev
+   0.5.0
 
 GLOBAL OPTIONS:
    --dry-run                    Validate configuration without starting the server
@@ -42,7 +42,7 @@ GLOBAL OPTIONS:
    # Enrichment Options
 
    --enrich.asn-database string                                 Path to a MaxMind-format ASN database, filling the AS numbers a device omits
-   --enrich.country-database string                                 Path to a MaxMind-format country database, filling the ISO codes for --collector.countries
+   --enrich.country-database string                             Path to a MaxMind-format country database, filling the ISO codes for --collector.countries
    --enrich.services                                            Name the application from the transport port where the device named none
    --enrich.threat-file string [ --enrich.threat-file string ]  Path to a file of flagged addresses, one per line (repeatable)
 
