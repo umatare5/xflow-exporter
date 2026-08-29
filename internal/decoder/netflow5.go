@@ -86,9 +86,13 @@ func netflowV5Record(
 
 		Packets: uint64(binary.BigEndian.Uint32(record[16:20])),
 		Bytes:   uint64(binary.BigEndian.Uint32(record[20:24])),
+		Flows:   1,
 
 		SrcAS: uint32(binary.BigEndian.Uint16(record[40:42])),
 		DstAS: uint32(binary.BigEndian.Uint16(record[42:44])),
+
+		SrcMask: record[44],
+		DstMask: record[45],
 
 		Start: bootTime.Add(time.Duration(first) * time.Millisecond),
 		End:   bootTime.Add(time.Duration(last) * time.Millisecond),

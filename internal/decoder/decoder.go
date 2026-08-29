@@ -20,6 +20,9 @@ const (
 	// ReasonMalformed marks a datagram whose claimed structure does not fit
 	// its bytes.
 	ReasonMalformed = "malformed"
+	// ReasonUnsupportedAggregation marks a NetFlow v8 datagram whose
+	// aggregation method this exporter does not know.
+	ReasonUnsupportedAggregation = "unsupported_aggregation"
 )
 
 // decodeError carries the reason a datagram was rejected, for the error
@@ -106,7 +109,9 @@ func (d *Decoder) decodeVersion(
 	switch version {
 	case flow.VersionNetFlowV5:
 		return decodeNetFlowV5(exporter, payload, dst)
-	case flow.VersionNetFlowV8, flow.VersionNetFlowV9, flow.VersionIPFIX, flow.VersionSFlowV5:
+	case flow.VersionNetFlowV8:
+		return decodeNetFlowV8(exporter, payload, dst)
+	case flow.VersionNetFlowV9, flow.VersionIPFIX, flow.VersionSFlowV5:
 		// Sniffed but not parsed yet: each lands in its own milestone, and
 		// until then the datagram is rejected rather than half-read.
 		return dst, &decodeError{

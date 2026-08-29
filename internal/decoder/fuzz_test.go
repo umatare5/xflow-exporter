@@ -14,6 +14,9 @@ func FuzzDecode(f *testing.F) {
 	f.Add(buildV5Packet(netflowV5MaxCount))
 	f.Add([]byte{0x00, 0x00, 0x00, 0x05})
 	f.Add([]byte{0x00, 0x09, 0xFF, 0xFF, 0x00, 0x00})
+	f.Add(append(buildV8Header(1, 1), make([]byte, 28)...))
+	f.Add(append(buildV8Header(8, 1), make([]byte, 44)...))
+	f.Add(append(buildV8Header(14, 2), make([]byte, 80)...))
 
 	exporter := netip.MustParseAddr("192.0.2.99")
 

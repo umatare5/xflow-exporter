@@ -23,10 +23,12 @@ This exporter receives traffic flow records from on-premises network devices —
 | Protocol                        | Status    |
 | :------------------------------ | :-------- |
 | NetFlow v5 (incl. J-Flow v5)    | Supported |
-| NetFlow v8 (incl. J-Flow v8)    | Planned   |
+| NetFlow v8 (incl. J-Flow v8)    | Supported |
 | NetFlow v9 (incl. FNF, J-Flow)  | Planned   |
 | IPFIX / NetFlow v10             | Planned   |
 | sFlow v5                        | Planned   |
+
+NetFlow v8 covers all fourteen aggregation methods of aggregation export version 2. A v8 record is pre-aggregated on the router, so it carries only its method's dimensions and the rest stay absent.
 
 Transport is plaintext UDP. DTLS is not supported: no shipping network OS exports flows over DTLS, and Go has no production DTLS 1.3 implementation yet.
 
@@ -92,7 +94,7 @@ These series describe the exporter itself. They have no module and no collector 
 
 On `xflow_receiver_dropped_packets_total`, `reason` is `queue_full` for a burst the queue could not absorb and `truncated` for a datagram larger than `--receiver.max-packet-size`. Both series are seeded at 0, so a first drop is a rise on a series that was already there.
 
-On `xflow_decode_errors_total`, `reason` is `unsupported_version` for a datagram no decoder claims and `malformed` for one whose claimed structure does not fit its bytes. Exporter-labeled series appear on a device's first datagram: a push protocol cannot know its senders in advance.
+On `xflow_decode_errors_total`, `reason` is `unsupported_version` for a datagram no decoder claims, `malformed` for one whose claimed structure does not fit its bytes, and `unsupported_aggregation` for a NetFlow v8 aggregation method outside the fourteen this exporter knows. Exporter-labeled series appear on a device's first datagram: a push protocol cannot know its senders in advance.
 
 Alert on freshness with `time() - xflow_last_flow_timestamp_seconds`: a device that goes silent stops moving its timestamp while every counter freezes, and nothing else can tell that from a healthy quiet network.
 

@@ -67,9 +67,17 @@ type Record struct {
 	// downstream, where the rate in force is known.
 	Bytes   uint64
 	Packets uint64
+	// Flows is how many flows this record aggregates: 1 for a per-flow
+	// protocol, the device's own count for a NetFlow v8 aggregate.
+	Flows uint64
 
 	SrcAS uint32
 	DstAS uint32
+
+	// SrcMask and DstMask are prefix lengths. On a v8 prefix aggregate the
+	// address fields carry the prefix base rather than a host.
+	SrcMask uint8
+	DstMask uint8
 
 	// Start and End are absolute flow times, zero where the record carried
 	// none. A v5/v9 record dates them relative to the device's uptime, and the
