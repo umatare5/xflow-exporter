@@ -14,7 +14,7 @@
 
 - `cmd/` — Entry point (`main.go`), which calls `internal/cli` for app setup
 - `internal/cli/` — CLI flag definitions and app wiring (urfave/cli/v3)
-- `internal/config/` — flag/env parsing, defaults (`0.0.0.0:10052`), and validation
+- `internal/config/` — flag/env parsing, defaults (`0.0.0.0:10053`), and validation
 - `internal/receiver/` — UDP listeners and the datagram queue the decoders read
 - `internal/decoder/` — NetFlow v5/v8/v9, IPFIX and sFlow v5 parsers, and the template store
 - `internal/flow/` — the normalized record every decoder produces

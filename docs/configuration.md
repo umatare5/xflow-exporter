@@ -22,7 +22,7 @@ GLOBAL OPTIONS:
    --version, -v                print the version
    --web.enable-lifecycle       Enable /-/reload, which re-reads the enrichment sources
    --web.listen-address string  Address to bind the HTTP server to (default: "0.0.0.0")
-   --web.listen-port int        Port number to bind the HTTP server to (default: 10052)
+   --web.listen-port int        Port number to bind the HTTP server to (default: 10053)
    --web.telemetry-path string  Path for the metrics endpoint (default: "/metrics")
 
    # Collector Options

@@ -613,7 +613,7 @@ func TestValidate_ListenAddressNamesAnInterface(t *testing.T) {
 		{address: "::1", wantErr: false},
 		{address: "localhost", wantErr: true},
 		{address: "not-an-address", wantErr: true},
-		{address: "0.0.0.0:10052", wantErr: true},
+		{address: "0.0.0.0:10053", wantErr: true},
 		{address: "127.0.0.1:", wantErr: true},
 	}
 
