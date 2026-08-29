@@ -173,11 +173,11 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 		}
 	case fieldIPv6SrcAddr:
 		if len(value) == ipv6Len {
-			r.SrcAddr = netip.AddrFrom16([16]byte(value))
+			r.SrcAddr = addrFrom16([16]byte(value))
 		}
 	case fieldIPv6DstAddr:
 		if len(value) == ipv6Len {
-			r.DstAddr = netip.AddrFrom16([16]byte(value))
+			r.DstAddr = addrFrom16([16]byte(value))
 		}
 	case fieldSrcMask, fieldIPv6SrcMask:
 		if v, ok := beUint8(value); ok {
@@ -264,6 +264,16 @@ func applyRareField(r *flow.Record, state *fieldState, fieldType uint16, value [
 	case fieldPanAppID:
 		r.AppName = state.intern.intern(value)
 	}
+}
+
+// addrFrom16 reads a 16-byte address, returning the IPv4 form of one written
+// as IPv4-mapped. A device that normalises its addresses into an IPv6 field
+// sends ::ffff:198.51.100.7 for what its own IPv4 fields, every published
+// list and every rendered label spell 198.51.100.7, and netip holds the two
+// as distinct values: the threat set would miss the address it holds, and the
+// aggregation would key one host twice under two spellings.
+func addrFrom16(value [16]byte) netip.Addr {
+	return netip.AddrFrom16(value).Unmap()
 }
 
 // beUint reads a big-endian unsigned integer of 1, 2, 4 or 8 bytes. Any other

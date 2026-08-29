@@ -80,6 +80,11 @@ func registerWebFlags() []cli.Flag {
 			Usage: "Path for the metrics endpoint",
 			Value: config.DefaultTelemetryPath,
 		},
+		&cli.BoolFlag{
+			Name:        "web.enable-lifecycle",
+			Usage:       "Enable " + config.ReloadPath + ", which re-reads the enrichment sources",
+			HideDefault: true,
+		},
 	}
 }
 
@@ -217,7 +222,7 @@ func registerCollectorFlags() []cli.Flag {
 		},
 		&cli.BoolFlag{
 			Name:        "collector.threats",
-			Usage:       "Enable flagged address metrics, which need --enrich.threat-api-key",
+			Usage:       "Enable flagged address metrics, which need --enrich.threat-file",
 			Category:    "# Collector Options",
 			HideDefault: true,
 		},
@@ -255,38 +260,13 @@ func registerEnrichmentFlags() []cli.Flag {
 				TrimSpace: true,
 			},
 		},
-		&cli.StringFlag{
-			Name:     "enrich.threat-api-key",
-			Usage:    "AbuseIPDB API key, which sends public addresses to that service when set",
-			Sources:  cli.EnvVars("XFLOW_THREAT_API_KEY"),
+		&cli.StringSliceFlag{
+			Name:     "enrich.threat-file",
+			Usage:    "Path to a file of flagged addresses, one per line (repeatable)",
 			Category: "# Enrichment Options",
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
-		},
-		&cli.IntFlag{
-			Name:     "enrich.threat-threshold",
-			Usage:    "Abuse confidence at or above which an address is flagged",
-			Value:    config.DefaultThreatThreshold,
-			Category: "# Enrichment Options",
-		},
-		&cli.DurationFlag{
-			Name:     "enrich.threat-cache-ttl",
-			Usage:    "How long a reputation verdict is reused before it is asked again",
-			Value:    config.DefaultThreatCacheTTL,
-			Category: "# Enrichment Options",
-		},
-		&cli.IntFlag{
-			Name:     "enrich.threat-cache-size",
-			Usage:    "Reputation verdicts held in memory",
-			Value:    config.DefaultThreatCacheSize,
-			Category: "# Enrichment Options",
-		},
-		&cli.DurationFlag{
-			Name:     "enrich.threat-timeout",
-			Usage:    "Timeout of one reputation lookup",
-			Value:    config.DefaultThreatTimeout,
-			Category: "# Enrichment Options",
 		},
 	}
 }

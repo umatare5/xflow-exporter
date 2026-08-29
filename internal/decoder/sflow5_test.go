@@ -202,6 +202,75 @@ func TestDecodeSFlowV5_SampledIPv4Record(t *testing.T) {
 	}
 }
 
+func TestDecodeSFlowV5_SampledIPv6RecordUnmapsIPv4(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	body := be32(nil, 700)
+	body = be32(body, protocolUDP)
+	body = append(body, netip.MustParseAddr("::ffff:10.0.0.9").AsSlice()...)
+	body = append(body, netip.MustParseAddr("::ffff:10.0.0.10").AsSlice()...)
+	body = be32(body, 53000)
+	body = be32(body, 53)
+	body = be32(body, 0)    // tcp flags
+	body = be32(body, 0x10) // priority
+
+	datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
+		sflowFlowSampleBody(100, 1, 2, sflowRecord(sflowSampledIPv6, body))))
+
+	records, err := d.Decode(testExporter, datagram, nil)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
+	}
+	if got := records[0].SrcAddr; got != netip.MustParseAddr("10.0.0.9") {
+		t.Errorf("SrcAddr = %v, want the unmapped 10.0.0.9", got)
+	}
+	if got := records[0].DstAddr; got != netip.MustParseAddr("10.0.0.10") {
+		t.Errorf("DstAddr = %v, want the unmapped 10.0.0.10", got)
+	}
+}
+
+func TestDecodeSFlowV5_RawIPv6HeaderUnmapsIPv4(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
+		sflowFlowSampleBody(10, 1, 2, rawHeaderRecord(mappedIPv6Frame(), 128))))
+
+	records, err := d.Decode(testExporter, datagram, nil)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
+	}
+	if got := records[0].SrcAddr; got != netip.MustParseAddr("192.0.2.10") {
+		t.Errorf("SrcAddr = %v, want the unmapped 192.0.2.10", got)
+	}
+	if got := records[0].DstAddr; got != netip.MustParseAddr("198.51.100.7") {
+		t.Errorf("DstAddr = %v, want the unmapped 198.51.100.7", got)
+	}
+}
+
+// mappedIPv6Frame is an Ethernet frame whose IPv6 header carries IPv4-mapped
+// addresses, which a translating device on the sampled path produces.
+func mappedIPv6Frame() []byte {
+	f := make([]byte, 0, 78)
+	f = append(f, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66)
+	f = be16(f, etherTypeIPv6)
+
+	ip := make([]byte, ipv6HdrLen)
+	ip[0] = 0x60 // version 6
+	ip[6] = protocolTCP
+	copy(ip[8:24], netip.MustParseAddr("::ffff:192.0.2.10").AsSlice())
+	copy(ip[24:40], netip.MustParseAddr("::ffff:198.51.100.7").AsSlice())
+	f = append(f, ip...)
+
+	tcp := make([]byte, 20)
+	binary.BigEndian.PutUint16(tcp[0:2], 51234)
+	binary.BigEndian.PutUint16(tcp[2:4], 443)
+	return append(f, tcp...)
+}
+
 func TestDecodeSFlowV5_CounterSampleYieldsNothing(t *testing.T) {
 	t.Parallel()
 

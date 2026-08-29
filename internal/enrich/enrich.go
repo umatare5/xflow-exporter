@@ -8,6 +8,7 @@
 package enrich
 
 import (
+	"fmt"
 	"log/slog"
 	"sync/atomic"
 
@@ -62,6 +63,12 @@ func (c *counters) snapshot(name string) Snapshot {
 	}
 }
 
+// Reloader is an enrichment source that can re-read what it holds. A source
+// backed by a file satisfies it; one backed by a fixed table does not.
+type Reloader interface {
+	Reload() error
+}
+
 // Snapshotter is what the metrics collector reads. The chain satisfies it.
 type Snapshotter interface {
 	Snapshot() []Snapshot
@@ -108,6 +115,26 @@ func (c *Chain) Snapshot() []Snapshot {
 		snapshots = append(snapshots, e.Snapshot())
 	}
 	return snapshots
+}
+
+// Reload re-reads every source that can be re-read, and reports the first
+// failure. A source that fails keeps whatever it already held, so a reload
+// of a list that has gone missing never empties it.
+func (c *Chain) Reload() error {
+	if c == nil {
+		return nil
+	}
+
+	for _, e := range c.enrichers {
+		reloader, ok := e.(Reloader)
+		if !ok {
+			continue
+		}
+		if err := reloader.Reload(); err != nil {
+			return fmt.Errorf("reloading %s: %w", e.Name(), err)
+		}
+	}
+	return nil
 }
 
 // Close releases whatever the enrichers hold open.

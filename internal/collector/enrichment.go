@@ -13,18 +13,47 @@ import (
 // indistinguishable from one that was never enabled.
 type EnrichmentCollector struct {
 	src enrich.Snapshotter
+	// threat is the flagged-address source when one is enabled, whose set
+	// size and reload outcomes are worth their own series.
+	threat *enrich.Threat
 
-	lookupsDesc *prometheus.Desc
+	lookupsDesc    *prometheus.Desc
+	entriesDesc    *prometheus.Desc
+	skippedDesc    *prometheus.Desc
+	reloadsDesc    *prometheus.Desc
+	reloadFailDesc *prometheus.Desc
 }
 
 // NewEnrichmentCollector creates a collector over the enrichment chain.
-func NewEnrichmentCollector(src enrich.Snapshotter) *EnrichmentCollector {
+// threat may be nil, in which case its series are absent rather than zero.
+func NewEnrichmentCollector(src enrich.Snapshotter, threat *enrich.Threat) *EnrichmentCollector {
 	return &EnrichmentCollector{
-		src: src,
+		src:    src,
+		threat: threat,
 		lookupsDesc: prometheus.NewDesc(
 			"xflow_enrichment_lookups_total",
 			"Records each enrichment source saw, by what it made of them, since process start",
 			[]string{labelEnricher, labelResult}, nil,
+		),
+		entriesDesc: prometheus.NewDesc(
+			"xflow_threat_entries",
+			"Flagged addresses held from the threat list files",
+			nil, nil,
+		),
+		skippedDesc: prometheus.NewDesc(
+			"xflow_threat_skipped_lines",
+			"Lines of the threat list files that name no address, in the set in force",
+			nil, nil,
+		),
+		reloadsDesc: prometheus.NewDesc(
+			"xflow_threat_reloads_total",
+			"Threat list loads that succeeded since process start, the initial one included",
+			nil, nil,
+		),
+		reloadFailDesc: prometheus.NewDesc(
+			"xflow_threat_reload_failures_total",
+			"Threat list loads that failed since process start, each keeping the previous set",
+			nil, nil,
 		),
 	}
 }
@@ -32,6 +61,12 @@ func NewEnrichmentCollector(src enrich.Snapshotter) *EnrichmentCollector {
 // Describe implements prometheus.Collector.
 func (c *EnrichmentCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.lookupsDesc
+	if c.threat != nil {
+		ch <- c.entriesDesc
+		ch <- c.skippedDesc
+		ch <- c.reloadsDesc
+		ch <- c.reloadFailDesc
+	}
 }
 
 // Collect implements prometheus.Collector by reading the lookup counters. All
@@ -52,4 +87,15 @@ func (c *EnrichmentCollector) Collect(ch chan<- prometheus.Metric) {
 				float64(outcome.count), snap.Enricher, outcome.result)
 		}
 	}
+
+	if c.threat == nil {
+		return
+	}
+
+	stats := c.threat.Stats()
+	ch <- prometheus.MustNewConstMetric(c.entriesDesc, prometheus.GaugeValue, float64(stats.Entries))
+	ch <- prometheus.MustNewConstMetric(c.skippedDesc, prometheus.GaugeValue, float64(stats.Skipped))
+	ch <- prometheus.MustNewConstMetric(c.reloadsDesc, prometheus.CounterValue, float64(stats.Reloads))
+	ch <- prometheus.MustNewConstMetric(
+		c.reloadFailDesc, prometheus.CounterValue, float64(stats.Failures))
 }

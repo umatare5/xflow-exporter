@@ -100,6 +100,38 @@ func be64(b []byte, v uint64) []byte {
 	return append(b, tmp[:]...)
 }
 
+// TestDecodeIPFIX_IPv4MappedAddressBecomesIPv4 covers the device that carries
+// its IPv4 flows in the IPv6 fields. The two spellings are distinct netip
+// values, so a record left mapped would miss a threat list holding the IPv4
+// form and would key the aggregation separately from the same host's other
+// flows.
+func TestDecodeIPFIX_IPv4MappedAddressBecomesIPv4(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	record := fixtureIPFIXRecord()
+	copy(record[0:16], netip.MustParseAddr("::ffff:198.51.100.7").AsSlice())
+	copy(record[16:32], netip.MustParseAddr("::ffff:203.0.113.9").AsSlice())
+
+	message := ipfixMessage(0, fixtureIPFIXTemplate(),
+		flowSet(fixtureIPFIXTemplateID, record),
+	)
+
+	records, err := d.Decode(testExporter, message, nil)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
+	}
+
+	got := records[0]
+	if got.SrcAddr != netip.MustParseAddr("198.51.100.7") {
+		t.Errorf("SrcAddr = %v, want the unmapped 198.51.100.7", got.SrcAddr)
+	}
+	if got.DstAddr != netip.MustParseAddr("203.0.113.9") {
+		t.Errorf("DstAddr = %v, want the unmapped 203.0.113.9", got.DstAddr)
+	}
+}
+
 func TestDecodeIPFIX_TemplateThenData(t *testing.T) {
 	t.Parallel()
 

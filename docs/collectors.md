@@ -24,7 +24,7 @@ Each table family carries three metrics sharing one label set: `_bytes_total` an
 - `src_asn`/`dst_asn` — as exported, where `0` is a device that did not know the AS. A record with neither AS feeds no entry.
 - `application` — the device-announced AVC name, the inline vendor string, or the `engine:selector` split of `applicationId` when only the number is known. `--enrich.services` fills it from the transport port where none of those exist.
 - `src_country`/`dst_country` — ISO codes from `--enrich.country-database`, `unknown` for a side the database could not place. A record neither side of which resolved feeds no entry.
-- `address`/`direction` — a single address a reputation source flagged and the side it was seen on. Only flagged addresses appear, so the table holds what is worth acting on rather than one entry per address seen.
+- `address`/`direction` — a single address a threat list names and the side it was seen on. Only flagged addresses appear, so the table holds what is worth acting on rather than one entry per address seen.
 - The `exporters` family publishes unfolded: its cardinality is the fleet's, which no Top-K needs to guard.
 
 ## Distributions
@@ -58,6 +58,10 @@ These series describe the exporter itself. They have no module flag.
 | `xflow_aggregation_evictions_total`                 | Counter | Idle entries evicted per `aggregation`               |
 | `xflow_aggregation_overflow_records_total`          | Counter | Records folded into `other` by the entry bound       |
 | `xflow_enrichment_lookups_total`                    | Counter | Records per `enricher` and `result`                  |
+| `xflow_threat_entries`                              | Gauge   | Flagged addresses held from the list files           |
+| `xflow_threat_skipped_lines`                        | Gauge   | List lines that name no address, in the set in force |
+| `xflow_threat_reloads_total`                        | Counter | List loads that succeeded, the initial one included  |
+| `xflow_threat_reload_failures_total`                | Counter | List loads that failed, keeping the previous set     |
 | `xflow_remote_write_sends_total`                    | Counter | Writes the remote endpoint accepted                  |
 | `xflow_remote_write_failures_total`                 | Counter | Writes that failed                                   |
 | `xflow_remote_write_samples_total`                  | Counter | Series shipped                                       |

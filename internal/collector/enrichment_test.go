@@ -20,7 +20,7 @@ func TestEnrichmentCollector_ReportsEveryOutcome(t *testing.T) {
 		{Protocol: 6, DstPort: 443, AppName: "already-named"}, // skipped
 	})
 
-	c := NewEnrichmentCollector(chain)
+	c := NewEnrichmentCollector(chain, nil)
 
 	expected := `
 # HELP xflow_enrichment_lookups_total Records each enrichment source saw, by what it made of them, since process start
@@ -39,7 +39,7 @@ xflow_enrichment_lookups_total{enricher="services",result="unknown"} 1
 func TestEnrichmentCollector_SeedsEveryOutcome(t *testing.T) {
 	t.Parallel()
 
-	c := NewEnrichmentCollector(enrich.NewChain(enrich.NewServices()))
+	c := NewEnrichmentCollector(enrich.NewChain(enrich.NewServices()), nil)
 
 	if got := testutil.CollectAndCount(c, "xflow_enrichment_lookups_total"); got != 3 {
 		t.Errorf("series = %d before any record, want the three outcomes seeded", got)
@@ -50,7 +50,7 @@ func TestCollector_RegisterEnrichmentCollector(t *testing.T) {
 	t.Parallel()
 
 	c := NewCollector(testConfig())
-	c.RegisterEnrichmentCollector(enrich.NewChain(enrich.NewServices()))
+	c.RegisterEnrichmentCollector(enrich.NewChain(enrich.NewServices()), nil)
 
 	families, err := c.Registry().Gather()
 	if err != nil {

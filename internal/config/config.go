@@ -52,18 +52,6 @@ const (
 	// silence means the template is orphaned.
 	DefaultParserTemplateTTL = 30 * time.Minute
 
-	// DefaultThreatThreshold is the abuse confidence at or above which an
-	// address is flagged. AbuseIPDB scores 0 to 100.
-	DefaultThreatThreshold = 50
-	// DefaultThreatCacheTTL is how long a verdict is reused. A reputation
-	// changes over days, not seconds, and the cache is what keeps the
-	// request rate off the flow rate.
-	DefaultThreatCacheTTL = 6 * time.Hour
-	// DefaultThreatCacheSize bounds the verdicts held.
-	DefaultThreatCacheSize = 65536
-	// DefaultThreatTimeout bounds one lookup.
-	DefaultThreatTimeout = 5 * time.Second
-
 	// DefaultRemoteWriteInterval is how often the registry is shipped. It
 	// matches a conventional scrape interval, the remote endpoint seeing the
 	// same resolution a scrape would have given it.
@@ -85,7 +73,11 @@ const (
 	DefaultAggregationMinBytes = 0
 	// HealthPath lives here so Validate can reject a telemetry path that takes it.
 	// The server package already depends on this one, so the reverse would cycle.
-	HealthPath       = "/healthz"
+	HealthPath = "/healthz"
+	// ReloadPath re-reads the enrichment sources. It is exposed only with
+	// --web.enable-lifecycle, which is the spelling Prometheus uses for the
+	// same endpoint.
+	ReloadPath       = "/-/reload"
 	DefaultLogLevel  = "info"
 	DefaultLogFormat = "json"
 )
@@ -109,6 +101,10 @@ type Web struct {
 	ListenAddress string `json:"listen_address"`
 	ListenPort    int    `json:"listen_port"`
 	TelemetryPath string `json:"telemetry_path"`
+	// EnableLifecycle exposes the management endpoints, which reload the
+	// enrichment sources from disk. It is off by default, the reload being
+	// an unauthenticated write that belongs behind a controlled path.
+	EnableLifecycle bool `json:"enable_lifecycle"`
 }
 
 // Receiver holds UDP flow receiver configuration.
@@ -153,20 +149,10 @@ type Collectors struct {
 // off by default: enrichment fills dimensions that then key their own series,
 // so enabling one is a deliberate choice about cardinality.
 type Enrichment struct {
-	Services        bool   `json:"services"`
-	ASNDatabase     string `json:"asn_database"`
-	CountryDatabase string `json:"country_database"`
-	Threat          Threat `json:"threat"`
-}
-
-// Threat holds the reputation lookup configuration. The API key is never
-// serialized: it authenticates to a third party.
-type Threat struct {
-	APIKey    string        `json:"-"`
-	Threshold int           `json:"threshold"`
-	CacheTTL  time.Duration `json:"cache_ttl"`
-	CacheSize int           `json:"cache_size"`
-	Timeout   time.Duration `json:"timeout"`
+	Services        bool     `json:"services"`
+	ASNDatabase     string   `json:"asn_database"`
+	CountryDatabase string   `json:"country_database"`
+	ThreatFiles     []string `json:"threat_files"`
 }
 
 // RemoteWrite holds the Remote Write 2.0 client configuration. It is off
@@ -202,9 +188,10 @@ type InternalCollector struct {
 func Parse(cmd *cli.Command) (*Config, error) {
 	cfg := &Config{
 		Web: Web{
-			ListenAddress: cmd.String("web.listen-address"),
-			ListenPort:    cmd.Int("web.listen-port"),
-			TelemetryPath: cmd.String("web.telemetry-path"),
+			ListenAddress:   cmd.String("web.listen-address"),
+			ListenPort:      cmd.Int("web.listen-port"),
+			TelemetryPath:   cmd.String("web.telemetry-path"),
+			EnableLifecycle: cmd.Bool("web.enable-lifecycle"),
 		},
 		Receiver: Receiver{
 			Addresses:     cmd.StringSlice("receiver.address"),
@@ -228,13 +215,7 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			Services:        cmd.Bool("enrich.services"),
 			ASNDatabase:     cmd.String("enrich.asn-database"),
 			CountryDatabase: cmd.String("enrich.country-database"),
-			Threat: Threat{
-				APIKey:    cmd.String("enrich.threat-api-key"),
-				Threshold: cmd.Int("enrich.threat-threshold"),
-				CacheTTL:  cmd.Duration("enrich.threat-cache-ttl"),
-				CacheSize: cmd.Int("enrich.threat-cache-size"),
-				Timeout:   cmd.Duration("enrich.threat-timeout"),
-			},
+			ThreatFiles:     cmd.StringSlice("enrich.threat-file"),
 		},
 		Collectors: Collectors{
 			Exporters:     cmd.Bool("collector.exporters"),

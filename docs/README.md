@@ -66,53 +66,64 @@ The sources are these.
 | `--enrich.services`         | The application, from the transport port |
 | `--enrich.asn-database`     | The AS numbers, from a MaxMind-format DB |
 | `--enrich.country-database` | The ISO country codes, from the same     |
-| `--enrich.threat-api-key`   | A flag on addresses AbuseIPDB reports    |
+| `--enrich.threat-file`      | A flag on addresses a list file names    |
 
 A database path that cannot be opened fails startup rather than enriching
 nothing in silence. Neither database ships with this exporter: point the
 flags at a GeoLite2 or DB-IP file you already hold. Database lookups are
 local, so no address leaves the host.
 
-The reputation source is the exception, and the only part of this exporter
-that talks to anyone.
+Nothing here reaches a network. The exporter reads files and never fetches
+them, so no address ever leaves the host and no credential is configured.
 
-- **It sends addresses to AbuseIPDB.** Setting `--enrich.threat-api-key`, or
-  `XFLOW_THREAT_API_KEY`, is what turns that on. Without a key nothing is
-  sent and nothing is flagged.
-- **Only public addresses go out.** Anything the monitored network assigns
-  itself — RFC 1918, loopback, link-local, multicast, unique-local — is never
-  sent: the service holds nothing on it, and shipping it would leak the
-  network's internal structure for no answer in return.
-- **Lookups are asynchronous.** A record is flagged from the cache alone and
-  a miss queues the address, so a third party's latency never reaches the
-  decode path where a slow answer costs datagrams.
-- **Verdicts are cached and bounded**, for `--enrich.threat-cache-ttl` and up
-  to `--enrich.threat-cache-size`. A failed lookup is cached too, so a
-  service that is down costs one request per address per TTL.
-- **An unflagged address is not a clean one.** It is an address no verdict
-  covers yet, which is absence rather than a finding.
+### Threat lists
 
-### Remote write
+`--enrich.threat-file` reads a file of flagged addresses, one per line, and
+is repeatable so several published lists combine into one set.
 
-`--remote-write.url` ships the exporter's own registry to a Remote Write 2.0
-endpoint, for the deployments a Prometheus scrape cannot reach. It is off
-until a URL is set.
+- **Fetching is not the exporter's job.** `scripts/fetch-threat-lists.sh`
+  downloads the published lists, merges and deduplicates them, and writes one
+  file. Run it from cron and reload afterwards, the same shape the MaxMind
+  databases are already kept in.
+- **Format** — one address per line. Blank lines, `#` and `;` comments, and
+  any trailing field after whitespace or a comma are skipped, so a CSV export
+  loads without a converter. A line that is not an address is skipped rather
+  than failing the file: one malformed row must not cost the rest.
+- **An unlisted address is not a clean one.** It is an address no list
+  covers, which is absence rather than a finding.
+- **Both directions are covered.** Most lists name the origins of inbound
+  attacks, and a hit lands on `direction="src"`. One names malicious
+  destinations — command-and-control, malware drops and phishing hosts — and
+  a hit there lands on `direction="dst"`, which reads as an inside host that
+  reached one of them.
+- **A prefix is not an address.** A `198.51.100.0/24` line is skipped like any
+  other line that is not an address, so a list published in CIDR notation
+  loads only its bare addresses. `xflow_threat_skipped_lines` counts what a
+  load passed over, and a reload logs the count, so the gap is visible rather
+  than read as full coverage. Blank lines and comments are not counted.
+- **The licence of a list is the operator's to check.** Several published
+  aggregates carry a non-commercial clause inherited from an upstream feed.
+  The lists the script fetches are MIT and CC0.
+- **Size** — the lists the script fetches combine to roughly 420,000
+  addresses, which costs about 20 MiB and answers a lookup in tens of
+  nanoseconds.
 
-- **A second reader, not a second source** — the writer gathers the same
-  registry a scrape gathers, so enabling it changes no series and no value.
-  Scraping and shipping at once simply delivers the same data twice.
-- **Resolution** — one gather per `--remote-write.interval`, which is what
-  the remote endpoint sees. It plays the part a scrape interval plays.
-- **Native histograms are not shipped.** Remote Write 2.0 carries them as
-  their own message, and reducing one to a single sample would be a value
-  nobody measured. `--collector.distributions` therefore reaches a scrape
-  but not a remote endpoint.
-- **Credentials** — basic auth from `--remote-write.username` and
-  `--remote-write.password`, which also read `XFLOW_REMOTE_WRITE_USERNAME`
-  and `XFLOW_REMOTE_WRITE_PASSWORD`, plus any `--remote-write.header`.
-- **Observability** — `xflow_remote_write_*` reports accepted writes, failed
-  ones, series shipped, and the instant of the last success, which is absent
-  until one succeeds.
+### Reloading
+
+`--web.enable-lifecycle` exposes `/-/reload`, which re-reads every enrichment
+source from disk. A `SIGHUP` does the same and needs no flag. Both are the
+spelling Prometheus uses.
+
+- **Off by default** — the endpoint is a write, so it stays unexposed unless
+  asked for, and it carries no authentication of its own. Keep it behind the
+  same controlled path as the metrics.
+- **POST or PUT only.** A reload changes what the process holds, so a GET
+  does not trigger one.
+- **A failed reload keeps the previous data.** A list that has gone missing
+  would otherwise unflag every address at once, which reads as a network that
+  had just gone clean. `xflow_threat_reload_failures_total` counts those.
+- **Atomic** — the new set is built whole before it replaces the old one, so
+  a lookup never sees a half-loaded set and the decode path never pauses.
 
 ### Bounded state
 

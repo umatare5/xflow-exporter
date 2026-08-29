@@ -77,8 +77,8 @@ func (c *Collector) RegisterDistributions() *Distributions {
 }
 
 // RegisterEnrichmentCollector registers the enrichment self-monitoring collector.
-func (c *Collector) RegisterEnrichmentCollector(src enrich.Snapshotter) {
-	c.registry.MustRegister(NewSafeCollector(NewEnrichmentCollector(src), "Enrichment"))
+func (c *Collector) RegisterEnrichmentCollector(src enrich.Snapshotter, threat *enrich.Threat) {
+	c.registry.MustRegister(NewSafeCollector(NewEnrichmentCollector(src, threat), "Enrichment"))
 	slog.Debug("Registered enrichment collector")
 }
 

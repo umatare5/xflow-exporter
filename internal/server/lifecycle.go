@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"runtime"
 	"strconv"
@@ -28,18 +29,26 @@ import (
 
 // LifecycleManager manages HTTP server startup and graceful shutdown.
 type LifecycleManager struct {
-	server *http.Server
-	cfg    *config.Config
+	server   *http.Server
+	cfg      *config.Config
+	reloader Reloader
 }
 
-// NewLifecycleManager creates a new server lifecycle manager.
-func NewLifecycleManager(registry *prometheus.Registry, cfg *config.Config) *LifecycleManager {
+// NewLifecycleManager creates a new server lifecycle manager. reloader is
+// exposed on the management endpoint only when the lifecycle flag is set,
+// and it is what a SIGHUP drives as well.
+func NewLifecycleManager(registry *prometheus.Registry, cfg *config.Config, reloader Reloader) *LifecycleManager {
 	addr := net.JoinHostPort(cfg.Web.ListenAddress, strconv.Itoa(cfg.Web.ListenPort))
-	server := New(registry, addr, cfg.Web.TelemetryPath)
+
+	var exposed Reloader
+	if cfg.Web.EnableLifecycle {
+		exposed = reloader
+	}
 
 	return &LifecycleManager{
-		server: server,
-		cfg:    cfg,
+		server:   New(registry, addr, cfg.Web.TelemetryPath, exposed),
+		cfg:      cfg,
+		reloader: reloader,
 	}
 }
 
@@ -93,12 +102,12 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	// database that cannot be opened fails startup: an exporter that quietly
 	// enriched nothing would be indistinguishable from one whose database
 	// knew nothing.
-	chain, err := buildEnrichmentChain(cfg.Enrichment)
+	chain, threat, err := buildEnrichmentChain(cfg.Enrichment)
 	if err != nil {
 		return err
 	}
 	if chain.Enabled() {
-		collectorMgr.RegisterEnrichmentCollector(chain)
+		collectorMgr.RegisterEnrichmentCollector(chain, threat)
 		defer chain.Close()
 	}
 
@@ -165,7 +174,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	}
 
 	// Create and run server lifecycle manager
-	serverMgr := NewLifecycleManager(collectorMgr.Registry(), cfg)
+	serverMgr := NewLifecycleManager(collectorMgr.Registry(), cfg, chain)
 	err = serverMgr.Run(ctx)
 
 	cancel()
@@ -180,8 +189,9 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 // buildEnrichmentChain assembles the enabled enrichment sources in the order
 // they are applied. Order matters where two sources fill one dimension: the
 // first to know wins, and every source leaves a device reading alone.
-func buildEnrichmentChain(cfg config.Enrichment) (*enrich.Chain, error) {
+func buildEnrichmentChain(cfg config.Enrichment) (*enrich.Chain, *enrich.Threat, error) {
 	var enrichers []enrich.Enricher
+	var threat *enrich.Threat
 
 	if cfg.Services {
 		enrichers = append(enrichers, enrich.NewServices())
@@ -189,32 +199,27 @@ func buildEnrichmentChain(cfg config.Enrichment) (*enrich.Chain, error) {
 	if cfg.ASNDatabase != "" {
 		asn, err := enrich.NewASN(cfg.ASNDatabase)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		enrichers = append(enrichers, asn)
 	}
 	if cfg.CountryDatabase != "" {
 		country, err := enrich.NewCountry(cfg.CountryDatabase)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		enrichers = append(enrichers, country)
 	}
-	if cfg.Threat.APIKey != "" {
-		threat, err := enrich.NewThreat(enrich.ThreatConfig{
-			APIKey:    cfg.Threat.APIKey,
-			Threshold: cfg.Threat.Threshold,
-			CacheTTL:  cfg.Threat.CacheTTL,
-			CacheSize: cfg.Threat.CacheSize,
-			Timeout:   cfg.Threat.Timeout,
-		})
+	if len(cfg.ThreatFiles) > 0 {
+		loaded, err := enrich.NewThreat(cfg.ThreatFiles)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		threat = loaded
 		enrichers = append(enrichers, threat)
 	}
 
-	return enrich.NewChain(enrichers...), nil
+	return enrich.NewChain(enrichers...), threat, nil
 }
 
 // sweepDomains drops idle observation domains until ctx ends. The interval is
@@ -240,6 +245,39 @@ func sweepDomains(ctx context.Context, dec *decoder.Decoder, ttl time.Duration) 
 				slog.Debug("Swept idle observation domains", "evicted", evicted)
 			}
 		}
+	}
+}
+
+// watchHangup reloads the enrichment sources on every SIGHUP until ctx ends,
+// returning the function that releases the signal registration.
+func (lm *LifecycleManager) watchHangup(ctx context.Context) func() {
+	if lm.reloader == nil {
+		return func() {}
+	}
+
+	hangup := make(chan os.Signal, 1)
+	signal.Notify(hangup, syscall.SIGHUP)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-hangup:
+				if err := lm.reloader.Reload(); err != nil {
+					slog.Error("Failed to reload on SIGHUP", "error", err)
+					continue
+				}
+				slog.Info("Reloaded the enrichment sources on SIGHUP")
+			}
+		}
+	}()
+
+	return func() {
+		signal.Stop(hangup)
+		<-done
 	}
 }
 
@@ -278,6 +316,12 @@ func (lm *LifecycleManager) Run(ctx context.Context) error {
 	// Setup graceful shutdown context
 	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	// A SIGHUP reloads the enrichment sources, which is the signal
+	// Prometheus reloads on and what an operator reaches for when the
+	// management endpoint is not exposed.
+	stopHangup := lm.watchHangup(ctx)
+	defer stopHangup()
 
 	// Start server in goroutine
 	errCh := make(chan error, 1)

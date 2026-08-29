@@ -79,13 +79,13 @@ Each data collector is enabled per module:
 | `--collector.asns`          | Traffic per AS pair from device-exported numbers |
 | `--collector.applications`  | Traffic per AVC / App-ID / applicationId name    |
 | `--collector.countries`     | Traffic per country pair, needs a country database   |
-| `--collector.threats`       | Traffic per flagged address, needs an API key    |
+| `--collector.threats`       | Traffic per flagged address, needs a list file   |
 | `--collector.distributions` | Flow size and duration native histograms         |
 
-Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from its port, and `--enrich.asn-database` and `--enrich.country-database` read MaxMind-format files held locally, and `--enrich.threat-api-key` flags addresses against AbuseIPDB. See [docs/README.md](docs/README.md#enrichment).
+Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from its port, and `--enrich.asn-database`, `--enrich.country-database` and `--enrich.threat-file` read files held locally. See [docs/README.md](docs/README.md#enrichment).
 
-> [!CAUTION]
-> The reputation source is the only part of this exporter that talks to a third party. It sends **public** addresses to AbuseIPDB and never the ones your network assigns itself.
+> [!Note]
+> This exporter fetches nothing. [`scripts/fetch-threat-lists.sh`](scripts/fetch-threat-lists.sh) downloads and merges the published threat lists, and `/-/reload` picks up what it left behind — the same shape the MaxMind databases are already kept in.
 
 `--remote-write.url` ships the same registry to a Remote Write 2.0 endpoint for the deployments a scrape cannot reach, alongside or instead of `/metrics`.
 
@@ -98,6 +98,7 @@ The exporter serves three endpoints:
 - `/` — landing page, which confirms the exporter is running when reached at <http://localhost:10052/>
 - `/metrics` — metrics endpoint, configurable via `--web.telemetry-path`
 - `/healthz` — liveness probe, which returns a static 200 and deliberately ignores flow reception
+- `/-/reload` — re-reads the enrichment sources on POST or PUT, exposed only with `--web.enable-lifecycle`. A `SIGHUP` does the same without the flag
 
 ## Metrics
 

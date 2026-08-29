@@ -1,117 +1,64 @@
 // Package enrich fills flow record dimensions the exporting device did not
 // carry, from sources local to this exporter.
-// This file flags addresses against a reputation API.
+// This file flags addresses listed in files held on local disk.
 package enrich
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
+	"bufio"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"net/netip"
-	"net/url"
-	"sync"
+	"os"
+	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
-// The AbuseIPDB check endpoint and the header its key travels in.
-const (
-	abuseIPDBEndpoint  = "https://api.abuseipdb.com/api/v2/check"
-	abuseIPDBKeyHeader = "Key"
-)
+// maxThreatLineLength bounds one line of a list file. An address is far
+// shorter than this, so a longer line is a file that is not a list at all,
+// and reading it whole would be reading an arbitrary file into memory.
+const maxThreatLineLength = 256
 
-// abuseIPDBResponse is the shape the check endpoint answers with. Only the
-// confidence score is read: it is what the threshold compares against.
-//
-// The tags spell the service's own field names, which are camel case. They
-// are an external contract rather than this project's own JSON, so the
-// naming rule does not apply to them.
-//
-//nolint:tagliatelle // The service names these fields, not this project.
-type abuseIPDBResponse struct {
-	Data struct {
-		AbuseConfidenceScore int `json:"abuseConfidenceScore"`
-	} `json:"data"`
+// threatSet is one immutable snapshot of the flagged addresses. It is
+// replaced wholesale on reload rather than mutated, so a lookup never sees a
+// half-loaded set and never takes a lock.
+type threatSet struct {
+	addresses map[netip.Addr]struct{}
+	// sources is how many files went into this set, entries how many
+	// distinct addresses came out, and skipped how many lines were not an
+	// address at all.
+	sources int
+	entries int
+	skipped int
 }
 
-// ThreatConfig holds what the reputation lookup needs.
-type ThreatConfig struct {
-	// APIKey authenticates to the reputation service. Enrichment is off
-	// without one.
-	APIKey string
-	// Threshold is the confidence at or above which an address is flagged.
-	Threshold int
-	// CacheTTL is how long a verdict is reused before it is asked again.
-	CacheTTL time.Duration
-	// CacheSize bounds the verdicts held.
-	CacheSize int
-	// Timeout bounds one lookup.
-	Timeout time.Duration
-}
-
-// verdict is one address's cached answer.
-type verdict struct {
-	flagged bool
-	expires time.Time
-}
-
-// Threat flags addresses a reputation service reports as abusive.
+// Threat flags addresses listed in files this exporter reads from disk.
 //
-// Only public addresses are ever sent. An address inside the monitored
-// network is the operator's own, the service holds nothing on it, and
-// shipping it to a third party would leak the network's internal structure
-// for no answer in return.
-//
-// The lookup is asynchronous: the record being enriched is flagged from the
-// cache alone, and a miss queues the address for a later scrape to benefit
-// from. A synchronous call would put a third party's latency on the decode
-// path, where a slow answer costs datagrams.
+// Nothing is downloaded and nothing is sent. The lists are fetched by
+// whatever the operator already uses for the MaxMind databases, and a reload
+// picks up what that left behind. That keeps every address inside the host
+// and keeps a third party's latency off the decode path entirely.
 type Threat struct {
 	counters
-	cfg    ThreatConfig
-	client *http.Client
+	paths []string
 
-	mu      sync.Mutex
-	cache   map[netip.Addr]verdict
-	pending map[netip.Addr]bool
-	queue   chan netip.Addr
+	// set is swapped atomically, so a reload never blocks a lookup and a
+	// failed one leaves the previous snapshot serving.
+	set atomic.Pointer[threatSet]
 
-	// now is pinned by tests.
-	now func() time.Time
-	// lookup is the seam a test replaces, the production one calling the API.
-	lookup func(context.Context, netip.Addr) (bool, error)
-
-	stop     chan struct{}
-	stopOnce sync.Once
-	done     chan struct{}
-
-	errors atomic.Uint64
+	reloads  atomic.Uint64
+	failures atomic.Uint64
 }
 
-// NewThreat creates the reputation enricher and starts its lookup worker.
-func NewThreat(cfg ThreatConfig) (*Threat, error) {
-	if cfg.APIKey == "" {
-		return nil, errors.New("a reputation API key is required to flag addresses")
+// NewThreat reads the given list files into the first snapshot. A file that
+// cannot be read fails startup: an exporter flagging nothing looks exactly
+// like one whose lists held nothing.
+func NewThreat(paths []string) (*Threat, error) {
+	t := &Threat{paths: paths}
+	if err := t.Reload(); err != nil {
+		return nil, err
 	}
-
-	t := &Threat{
-		cfg:     cfg,
-		client:  &http.Client{Timeout: cfg.Timeout},
-		cache:   make(map[netip.Addr]verdict),
-		pending: make(map[netip.Addr]bool),
-		queue:   make(chan netip.Addr, cfg.CacheSize),
-		now:     time.Now,
-		stop:    make(chan struct{}),
-		done:    make(chan struct{}),
-	}
-	t.lookup = t.lookupAPI
-
-	go t.run()
 	return t, nil
 }
 
@@ -125,181 +72,171 @@ func (t *Threat) Snapshot() Snapshot {
 	return t.snapshot(t.Name())
 }
 
-// Errors reports the lookups that failed since process start.
-func (t *Threat) Errors() uint64 {
-	return t.errors.Load()
-}
+// Reload rebuilds the set from the configured files.
+//
+// The new set is built whole before it replaces the old one, so a reload of
+// a large list never leaves a lookup consulting a partial set, and a file
+// that has gone missing leaves the previous snapshot in place rather than
+// unflagging every address at once.
+func (t *Threat) Reload() error {
+	addresses := make(map[netip.Addr]struct{})
 
-// Close stops the lookup worker.
-func (t *Threat) Close() error {
-	t.stopOnce.Do(func() { close(t.stop) })
-	<-t.done
+	skipped := 0
+	for _, path := range t.paths {
+		n, err := readThreatFile(path, addresses)
+		if err != nil {
+			t.failures.Add(1)
+			return err
+		}
+		skipped += n
+	}
+
+	// A skipped line is coverage this exporter does not have. Prefixes are
+	// the usual reason, since a list published in CIDR notation loads only
+	// its bare addresses, and silence about that reads as full coverage.
+	if skipped > 0 {
+		slog.Warn("Skipped threat list lines that are not an address",
+			"skipped", skipped, "loaded", len(addresses))
+	}
+
+	t.set.Store(&threatSet{
+		addresses: addresses,
+		sources:   len(t.paths),
+		entries:   len(addresses),
+		skipped:   skipped,
+	})
+	t.reloads.Add(1)
 	return nil
 }
 
-// Enrich flags each side from the cache, queueing what it has no verdict for.
+// Stats reports the reload outcomes and the size of the set in force.
+func (t *Threat) Stats() ThreatStats {
+	set := t.set.Load()
+	stats := ThreatStats{
+		Reloads:  t.reloads.Load(),
+		Failures: t.failures.Load(),
+	}
+	if set != nil {
+		stats.Sources = set.sources
+		stats.Entries = set.entries
+		stats.Skipped = set.skipped
+	}
+	return stats
+}
+
+// ThreatStats is the reload accounting a scrape reads.
+type ThreatStats struct {
+	Reloads  uint64
+	Failures uint64
+	Sources  int
+	Entries  int
+	Skipped  int
+}
+
+// Enrich flags each side listed in the set in force.
+//
+// A record neither side of which is listed counts as unknown rather than as
+// a finding: an unlisted address is one no list covers, which is absence and
+// not a clean bill of health.
 func (t *Threat) Enrich(r *flow.Record) {
-	srcKnown := t.check(r.SrcAddr, &r.SrcFlagged)
-	dstKnown := t.check(r.DstAddr, &r.DstFlagged)
-
-	switch {
-	case srcKnown || dstKnown:
-		t.filled.Add(1)
-	default:
+	set := t.set.Load()
+	if set == nil {
 		t.unknown.Add(1)
-	}
-}
-
-// check flags one side from the cache and reports whether a verdict existed.
-func (t *Threat) check(addr netip.Addr, flagged *bool) bool {
-	if !isPublic(addr) {
-		return false
-	}
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if v, ok := t.cache[addr]; ok && t.now().Before(v.expires) {
-		*flagged = v.flagged
-		return true
-	}
-
-	t.enqueueLocked(addr)
-	return false
-}
-
-// enqueueLocked queues one address for the worker, at most once at a time.
-// A full queue drops the request: the address returns on the next record.
-func (t *Threat) enqueueLocked(addr netip.Addr) {
-	if t.pending[addr] {
 		return
 	}
 
-	select {
-	case t.queue <- addr:
-		t.pending[addr] = true
-	default:
+	flagged := false
+	if _, listed := set.addresses[r.SrcAddr]; listed {
+		r.SrcFlagged = true
+		flagged = true
 	}
-}
-
-// run resolves queued addresses until Close.
-func (t *Threat) run() {
-	defer close(t.done)
-
-	for {
-		select {
-		case <-t.stop:
-			return
-		case addr := <-t.queue:
-			t.resolve(addr)
-		}
-	}
-}
-
-// resolve asks the service about one address and caches the answer. A failed
-// lookup is cached as unflagged for the TTL, so a service that is down costs
-// one request per address per TTL rather than one per record.
-func (t *Threat) resolve(addr netip.Addr) {
-	ctx, cancel := context.WithTimeout(context.Background(), t.cfg.Timeout)
-	defer cancel()
-
-	flagged, err := t.lookup(ctx, addr)
-	if err != nil {
-		t.errors.Add(1)
+	if _, listed := set.addresses[r.DstAddr]; listed {
+		r.DstFlagged = true
+		flagged = true
 	}
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	delete(t.pending, addr)
-	t.evictLocked()
-	t.cache[addr] = verdict{flagged: flagged, expires: t.now().Add(t.cfg.CacheTTL)}
-}
-
-// evictLocked drops expired entries once the cache is full, and gives up the
-// oldest remaining one when nothing has expired.
-func (t *Threat) evictLocked() {
-	if len(t.cache) < t.cfg.CacheSize {
+	if flagged {
+		t.filled.Add(1)
 		return
 	}
-
-	now := t.now()
-	for addr, v := range t.cache {
-		if !now.Before(v.expires) {
-			delete(t.cache, addr)
-		}
-	}
-	if len(t.cache) < t.cfg.CacheSize {
-		return
-	}
-
-	oldest, found := netip.Addr{}, false
-	for addr, v := range t.cache {
-		if !found || v.expires.Before(t.cache[oldest].expires) {
-			oldest, found = addr, true
-		}
-	}
-	if found {
-		delete(t.cache, oldest)
-	}
+	t.unknown.Add(1)
 }
 
-// lookupAPI asks AbuseIPDB about one address.
-func (t *Threat) lookupAPI(ctx context.Context, addr netip.Addr) (bool, error) {
-	return t.lookupAt(ctx, abuseIPDBEndpoint, addr)
-}
-
-// lookupAt asks the service at endpoint about one address. The endpoint is a
-// parameter so a test can point it at a stub rather than the real service.
-func (t *Threat) lookupAt(ctx context.Context, endpoint string, addr netip.Addr) (bool, error) {
-	query := url.Values{}
-	query.Set("ipAddress", addr.String())
-	query.Set("maxAgeInDays", "90")
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		endpoint+"?"+query.Encode(), http.NoBody)
+// readThreatFile adds one file's addresses to the set.
+//
+// The format is one address per line, which is what every published list
+// this is meant to read uses. A comment, a blank line, and any trailing
+// field after whitespace or a comma are skipped, so a CSV export of the same
+// data loads without a converter. A line that is not an address is skipped
+// rather than failing the file: one malformed row must not cost the other
+// quarter of a million.
+func readThreatFile(path string, into map[netip.Addr]struct{}) (int, error) {
+	// The path is a flag the operator set, the same trust as the database
+	// paths beside it. Nothing on the wire reaches it.
+	file, err := os.Open(path) //nolint:gosec // The path is operator configuration.
 	if err != nil {
-		return false, fmt.Errorf("building the reputation request: %w", err)
+		return 0, fmt.Errorf("opening the threat list %q: %w", path, err)
 	}
-	req.Header.Set(abuseIPDBKeyHeader, t.cfg.APIKey)
-	req.Header.Set("Accept", "application/json")
+	defer closeList(file, path)
 
-	resp, err := t.client.Do(req)
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, maxThreatLineLength), maxThreatLineLength)
+
+	skipped := 0
+	for scanner.Scan() {
+		addr, ok := parseThreatLine(scanner.Text())
+		if !ok {
+			// A blank line and a comment are not coverage anyone expected,
+			// so only a line that carried something counts as skipped.
+			if carriesValue(scanner.Text()) {
+				skipped++
+			}
+			continue
+		}
+		into[addr] = struct{}{}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return 0, fmt.Errorf("reading the threat list %q: %w", path, err)
+	}
+	return skipped, nil
+}
+
+// carriesValue reports whether a line was meant to name something, which is
+// what separates a line the file skipped from its blanks and its comments.
+func carriesValue(line string) bool {
+	line = strings.TrimSpace(line)
+	return line != "" && !strings.HasPrefix(line, "#") && !strings.HasPrefix(line, ";")
+}
+
+// closeList releases one list file. The addresses have been read by then, so
+// a close failure changes nothing for the caller.
+func closeList(file *os.File, path string) {
+	if err := file.Close(); err != nil {
+		slog.Debug("Failed to close a threat list", "path", path, "error", err)
+	}
+}
+
+// parseThreatLine reads one address from one line, reporting false for a
+// line that carries none.
+func parseThreatLine(line string) (netip.Addr, bool) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+		return netip.Addr{}, false
+	}
+
+	// Keep the first field, so a CSV row or an address with a trailing
+	// comment loads the same as a bare address.
+	if cut := strings.IndexAny(line, " \t,;"); cut >= 0 {
+		line = line[:cut]
+	}
+
+	addr, err := netip.ParseAddr(line)
 	if err != nil {
-		return false, fmt.Errorf("asking the reputation service: %w", err)
-	}
-	defer closeBody(resp)
-
-	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("the reputation service answered %s", resp.Status)
+		return netip.Addr{}, false
 	}
 
-	var answer abuseIPDBResponse
-	if err := json.NewDecoder(resp.Body).Decode(&answer); err != nil {
-		return false, fmt.Errorf("decoding the reputation answer: %w", err)
-	}
-
-	return answer.Data.AbuseConfidenceScore >= t.cfg.Threshold, nil
-}
-
-// closeBody releases one response. A close failure changes nothing for the
-// caller, the answer having been read already.
-func closeBody(resp *http.Response) {
-	if err := resp.Body.Close(); err != nil {
-		slog.Debug("Failed to close the reputation response", "error", err)
-	}
-}
-
-// isPublic reports whether an address may be sent to a third party. Anything
-// the monitored network assigns itself is out: the service holds nothing on
-// it, and sending it would leak the network's structure for no answer.
-func isPublic(addr netip.Addr) bool {
-	return addr.IsValid() &&
-		!addr.IsPrivate() &&
-		!addr.IsLoopback() &&
-		!addr.IsLinkLocalUnicast() &&
-		!addr.IsLinkLocalMulticast() &&
-		!addr.IsMulticast() &&
-		!addr.IsUnspecified() &&
-		!addr.IsInterfaceLocalMulticast()
+	// An address carrying a zone is a link-local one scoped to an interface
+	// of the host that wrote it, which cannot match a flow record here.
+	return addr.WithZone(""), true
 }

@@ -20,6 +20,7 @@ GLOBAL OPTIONS:
    --log.format string          Log format (json, text) (default: "json")
    --log.level string           Log level (debug, info, warn, error) (default: "info")
    --version, -v                print the version
+   --web.enable-lifecycle       Enable /-/reload, which re-reads the enrichment sources
    --web.listen-address string  Address to bind the HTTP server to (default: "0.0.0.0")
    --web.listen-port int        Port number to bind the HTTP server to (default: 10052)
    --web.telemetry-path string  Path for the metrics endpoint (default: "/metrics")
@@ -33,18 +34,14 @@ GLOBAL OPTIONS:
    --collector.exporters      Enable per-device traffic metrics
    --collector.hosts          Enable source-destination address pair metrics
    --collector.services       Enable address pair with protocol and port metrics
-   --collector.threats        Enable flagged address metrics, which need --enrich.threat-api-key
+   --collector.threats        Enable flagged address metrics, which need --enrich.threat-file
 
    # Enrichment Options
 
-   --enrich.asn-database string        Path to a MaxMind-format ASN database, filling the AS numbers a device omits
-   --enrich.country-database string        Path to a MaxMind-format country database, filling the ISO codes for --collector.countries
-   --enrich.services                   Name the application from the transport port where the device named none
-   --enrich.threat-api-key string      AbuseIPDB API key, which sends public addresses to that service when set [$XFLOW_THREAT_API_KEY]
-   --enrich.threat-cache-size int      Reputation verdicts held in memory (default: 65536)
-   --enrich.threat-cache-ttl duration  How long a reputation verdict is reused before it is asked again (default: 6h0m0s)
-   --enrich.threat-threshold int       Abuse confidence at or above which an address is flagged (default: 50)
-   --enrich.threat-timeout duration    Timeout of one reputation lookup (default: 5s)
+   --enrich.asn-database string                                 Path to a MaxMind-format ASN database, filling the AS numbers a device omits
+   --enrich.country-database string                                 Path to a MaxMind-format country database, filling the ISO codes for --collector.countries
+   --enrich.services                                            Name the application from the transport port where the device named none
+   --enrich.threat-file string [ --enrich.threat-file string ]  Path to a file of flagged addresses, one per line (repeatable)
 
    * Aggregation Options
 

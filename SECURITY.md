@@ -28,10 +28,14 @@ nft add rule inet filter input udp dport 2055 drop
 
 ## What leaves the host
 
-Nothing, unless `--enrich.threat-api-key` is set. That flag sends the public
-addresses seen in flows to AbuseIPDB to be scored. Addresses the monitored
-network assigns itself are never sent, and every other enrichment source
-reads a file on local disk.
+Nothing. Every enrichment source reads a file on local disk, and the exporter
+holds no credential for any external service. Fetching the threat lists and
+the MaxMind databases is a separate job the operator runs, so no address seen
+in a flow is ever sent anywhere.
+
+`--web.enable-lifecycle` exposes `/-/reload`, which re-reads those files. It
+is unauthenticated, like the metrics endpoint, so keep it on a controlled
+path. It is off by default, and a `SIGHUP` reloads without exposing anything.
 
 ## Out of scope
 
