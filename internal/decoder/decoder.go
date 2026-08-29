@@ -155,12 +155,10 @@ func (d *Decoder) decodeVersion(
 		}
 		return d.decodeIPFIX(exporter, payload, dst, issue)
 	case flow.VersionSFlowV5:
-		// Sniffed but not parsed yet: sFlow lands in its own milestone, and
-		// until then the datagram is rejected rather than half-read.
-		return dst, &decodeError{
-			reason: ReasonUnsupportedVersion,
-			detail: version.String() + " decoding is not implemented yet",
+		issue := func(reason string) {
+			d.stats.exporter(exporter).countError(flow.VersionSFlowV5, reason)
 		}
+		return d.decodeSFlowV5(exporter, payload, dst, issue)
 	case flow.VersionUnknown:
 		return dst, &decodeError{reason: ReasonUnsupportedVersion, detail: "unknown version"}
 	default:

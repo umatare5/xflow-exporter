@@ -28,6 +28,10 @@ func FuzzDecode(f *testing.F) {
 	f.Add(ipfixMessage(2,
 		ipfixTemplateSet(ipfixSpec(fieldApplicationName, variableFieldLength, 0)),
 		flowSet(fixtureIPFIXTemplateID, []byte{255, 0, 3, 'a', 'b', 'c'})))
+	f.Add(sflowDatagram(1, sflowSample(sflowFlowSample,
+		sflowFlowSampleBody(1000, 3, 4, rawHeaderRecord(tcpFrame(false), 1518)))))
+	f.Add(sflowDatagram(2, sflowSample(sflowFlowSample,
+		sflowFlowSampleBody(10, 1, 2, rawHeaderRecord(tcpFrame(true), 900)))))
 
 	exporter := netip.MustParseAddr("192.0.2.99")
 

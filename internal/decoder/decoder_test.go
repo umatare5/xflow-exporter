@@ -121,39 +121,6 @@ func TestDecoder_DecodeAccountsRejections(t *testing.T) {
 	}
 }
 
-func TestDecoder_DecodeRejectsSniffedButUnimplementedVersions(t *testing.T) {
-	t.Parallel()
-
-	d := newTestDecoder()
-
-	payloads := map[string][]byte{
-		"sflow_v5": {0x00, 0x00, 0x00, 0x05},
-	}
-
-	for version, payload := range payloads {
-		records, err := d.Decode(testExporter, payload, nil)
-		if err == nil {
-			t.Errorf("Decode(%s) error = nil, want unsupported until its milestone lands", version)
-		}
-		if len(records) != 0 {
-			t.Errorf("Decode(%s) returned %d records, want 0", version, len(records))
-		}
-	}
-
-	snap := d.Stats().Snapshot()[0]
-	seen := map[string]bool{}
-	for _, e := range snap.Errors {
-		if e.Reason == ReasonUnsupportedVersion {
-			seen[e.Version.String()] = true
-		}
-	}
-	for version := range payloads {
-		if !seen[version] {
-			t.Errorf("no unsupported_version count for %s", version)
-		}
-	}
-}
-
 // TestDecoder_DecodeTruncatesPartialAppends pins that a failed decode leaves
 // dst exactly as it was handed in, so a worker's reused slice never leaks
 // half-parsed records into the next datagram.

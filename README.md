@@ -26,11 +26,13 @@ This exporter receives traffic flow records from on-premises network devices —
 | NetFlow v8 (incl. J-Flow v8)    | Supported |
 | NetFlow v9 (incl. FNF, J-Flow)  | Supported |
 | IPFIX / NetFlow v10             | Supported |
-| sFlow v5                        | Planned   |
+| sFlow v5                        | Supported |
 
 NetFlow v8 covers all fourteen aggregation methods of aggregation export version 2. A v8 record is pre-aggregated on the router, so it carries only its method's dimensions and the rest stay absent.
 
 NetFlow v9 and IPFIX templates are cached per exporter address and Observation Domain ID together, as RFC 7011 requires, so two domains reusing one template ID never corrupt each other. A template is refused when it declares a zero-width fixed field or more than `--parser.max-fields-per-template` fields, and expires after `--parser.template-ttl` without a re-announcement. IPFIX adds enterprise information elements, variable-length fields with strict bounds checking, and template withdrawals.
+
+sFlow v5 decodes flow samples, compact and expanded, from the raw Ethernet header — through stacked VLAN tags to IPv4/IPv6 and the TCP/UDP ports — and from the pre-parsed sampled IPv4/IPv6 records. Counter samples are out of scope: they carry interface statistics, not traffic. A sampled header cut short keeps the layers that decoded and leaves the rest absent.
 
 Options templates feed the packet sampling rate — the PSAMP interval/space pair, the random-sampler interval, or the legacy interval, in that order — which is stamped onto decoded records and published as `xflow_sampling_rate`. Cisco AVC application tables announced through options resolve the `applicationId` (IE 95) of each record into the name and category the device itself declared, and PAN-OS App-ID and User-ID strings are carried through a string interner so one name allocates once rather than per flow.
 

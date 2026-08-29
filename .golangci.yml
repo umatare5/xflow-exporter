@@ -214,7 +214,7 @@ linters:
       - path: ^cmd/
         linters:
           - mnd          # Allow magic numbers for CLI configuration
-      - path: ^internal/decoder/(netflow8|netflow9|ipfix|fields)\.go$
+      - path: ^internal/decoder/(netflow8|netflow9|ipfix|fields|sflow5|l2l3)\.go$
         linters:
           - mnd          # Wire record lengths, method numbers and field widths are the data of these files
       - path: ^internal/server/
