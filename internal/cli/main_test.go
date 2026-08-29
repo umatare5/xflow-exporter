@@ -11,7 +11,7 @@ func TestRegisterFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerFlags()
-	if got, want := len(flags), 16; got != want {
+	if got, want := len(flags), 20; got != want {
 		t.Errorf("registerFlags() returned %d flags, want %d", got, want)
 	}
 }
@@ -75,6 +75,19 @@ func TestRegisterParserFlags(t *testing.T) {
 	}
 	if _, ok := flags[1].(*cli.DurationFlag); !ok {
 		t.Errorf("flag[1] is %T, want *cli.DurationFlag", flags[1])
+	}
+}
+
+// TestRegisterAggregationFlags verifies the aggregation limit flags.
+func TestRegisterAggregationFlags(t *testing.T) {
+	t.Parallel()
+
+	flags := registerAggregationFlags()
+	if got, want := len(flags), 4; got != want {
+		t.Fatalf("registerAggregationFlags() returned %d flags, want %d", got, want)
+	}
+	if _, ok := flags[0].(*cli.DurationFlag); !ok {
+		t.Errorf("flag[0] is %T, want *cli.DurationFlag", flags[0])
 	}
 }
 

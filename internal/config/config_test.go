@@ -24,6 +24,10 @@ func parseFlags() []cli.Flag {
 		&cli.IntFlag{Name: "receiver.workers", Value: DefaultReceiverWorkers},
 		&cli.IntFlag{Name: "parser.max-fields-per-template", Value: DefaultParserMaxFieldsPerTemplate},
 		&cli.DurationFlag{Name: "parser.template-ttl", Value: DefaultParserTemplateTTL},
+		&cli.DurationFlag{Name: "aggregation.entry-ttl", Value: DefaultAggregationEntryTTL},
+		&cli.IntFlag{Name: "aggregation.max-entries", Value: DefaultAggregationMaxEntries},
+		&cli.IntFlag{Name: "aggregation.top-k", Value: DefaultAggregationTopK},
+		&cli.Int64Flag{Name: "aggregation.min-bytes", Value: DefaultAggregationMinBytes},
 		&cli.StringFlag{Name: "log.level", Value: DefaultLogLevel},
 		&cli.StringFlag{Name: "log.format", Value: DefaultLogFormat},
 		&cli.BoolFlag{Name: "collector.internal.go-runtime"},
@@ -95,6 +99,18 @@ func TestParse_Defaults(t *testing.T) {
 	}
 	if cfg.Parser.TemplateTTL != DefaultParserTemplateTTL {
 		t.Errorf("Parser.TemplateTTL = %v, want %v", cfg.Parser.TemplateTTL, DefaultParserTemplateTTL)
+	}
+	if cfg.Aggregation.EntryTTL != DefaultAggregationEntryTTL {
+		t.Errorf("Aggregation.EntryTTL = %v, want %v", cfg.Aggregation.EntryTTL, DefaultAggregationEntryTTL)
+	}
+	if cfg.Aggregation.MaxEntries != DefaultAggregationMaxEntries {
+		t.Errorf("Aggregation.MaxEntries = %d, want %d", cfg.Aggregation.MaxEntries, DefaultAggregationMaxEntries)
+	}
+	if cfg.Aggregation.TopK != DefaultAggregationTopK {
+		t.Errorf("Aggregation.TopK = %d, want %d", cfg.Aggregation.TopK, DefaultAggregationTopK)
+	}
+	if cfg.Aggregation.MinBytes != DefaultAggregationMinBytes {
+		t.Errorf("Aggregation.MinBytes = %d, want %d", cfg.Aggregation.MinBytes, DefaultAggregationMinBytes)
 	}
 	if cfg.Log.Level != DefaultLogLevel {
 		t.Errorf("Log.Level = %q, want %q", cfg.Log.Level, DefaultLogLevel)
@@ -196,6 +212,12 @@ func validConfig() *Config {
 		Parser: Parser{
 			MaxFieldsPerTemplate: DefaultParserMaxFieldsPerTemplate,
 			TemplateTTL:          DefaultParserTemplateTTL,
+		},
+		Aggregation: Aggregation{
+			EntryTTL:   DefaultAggregationEntryTTL,
+			MaxEntries: DefaultAggregationMaxEntries,
+			TopK:       DefaultAggregationTopK,
+			MinBytes:   DefaultAggregationMinBytes,
 		},
 		Log: Log{
 			Level:  DefaultLogLevel,
@@ -381,6 +403,26 @@ func TestConfig_Validate(t *testing.T) {
 			name:    "parser template TTL zero",
 			mutate:  func(c *Config) { c.Parser.TemplateTTL = 0 },
 			wantErr: "parser template TTL must be positive",
+		},
+		{
+			name:    "aggregation entry TTL zero",
+			mutate:  func(c *Config) { c.Aggregation.EntryTTL = 0 },
+			wantErr: "aggregation entry TTL must be positive",
+		},
+		{
+			name:    "aggregation max entries zero",
+			mutate:  func(c *Config) { c.Aggregation.MaxEntries = 0 },
+			wantErr: "invalid aggregation max entries",
+		},
+		{
+			name:    "aggregation top-k zero",
+			mutate:  func(c *Config) { c.Aggregation.TopK = 0 },
+			wantErr: "invalid aggregation top-k",
+		},
+		{
+			name:    "aggregation negative min bytes",
+			mutate:  func(c *Config) { c.Aggregation.MinBytes = -1 },
+			wantErr: "invalid aggregation min bytes",
 		},
 		{
 			name:    "invalid log level",

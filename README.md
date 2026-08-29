@@ -68,6 +68,13 @@ GLOBAL OPTIONS:
    --receiver.queue-size int                                Datagrams buffered between the read loops and the decoders (default: 8192)
    --receiver.workers int                                   Decode workers consuming the queue (0 sizes to the CPU count) (default: 0)
 
+   * Aggregation Options
+
+   --aggregation.entry-ttl duration  How long an idle aggregation entry keeps its series (default: 15m0s)
+   --aggregation.max-entries int     Entry bound per aggregation table; new keys past it fold into other (default: 100000)
+   --aggregation.min-bytes int       Bytes below which an entry folds into other at scrape time (0 publishes all) (default: 0)
+   --aggregation.top-k int           Entries each table publishes as their own series; the rest fold into other (default: 1000)
+
    * Parser Options
 
    --parser.max-fields-per-template int  Most fields one NetFlow v9 or IPFIX template may declare (default: 128)

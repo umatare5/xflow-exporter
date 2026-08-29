@@ -50,6 +50,19 @@ const (
 	// usable. Devices resend templates every few minutes, so half an hour of
 	// silence means the template is orphaned.
 	DefaultParserTemplateTTL = 30 * time.Minute
+
+	// DefaultAggregationEntryTTL is how long an idle aggregation entry stays
+	// before eviction removes it, and its series with it.
+	DefaultAggregationEntryTTL = 15 * time.Minute
+	// DefaultAggregationMaxEntries bounds each aggregation table; a record
+	// past the bound folds into the table's other bucket.
+	DefaultAggregationMaxEntries = 100000
+	// DefaultAggregationTopK bounds how many entries each table publishes as
+	// their own series; the rest fold into the other bucket at scrape time.
+	DefaultAggregationTopK = 1000
+	// DefaultAggregationMinBytes of zero publishes every entry the Top-K
+	// bound admits regardless of size.
+	DefaultAggregationMinBytes = 0
 	// HealthPath lives here so Validate can reject a telemetry path that takes it.
 	// The server package already depends on this one, so the reverse would cycle.
 	HealthPath       = "/healthz"
@@ -62,6 +75,7 @@ type Config struct {
 	Web               Web               `json:"web"`
 	Receiver          Receiver          `json:"receiver"`
 	Parser            Parser            `json:"parser"`
+	Aggregation       Aggregation       `json:"aggregation"`
 	Log               Log               `json:"log"`
 	InternalCollector InternalCollector `json:"internal_collector"`
 	DryRun            bool              `json:"dry_run"`
@@ -88,6 +102,14 @@ type Receiver struct {
 type Parser struct {
 	MaxFieldsPerTemplate int           `json:"max_fields_per_template"`
 	TemplateTTL          time.Duration `json:"template_ttl"`
+}
+
+// Aggregation holds the in-memory aggregation limits.
+type Aggregation struct {
+	EntryTTL   time.Duration `json:"entry_ttl"`
+	MaxEntries int           `json:"max_entries"`
+	TopK       int           `json:"top_k"`
+	MinBytes   int64         `json:"min_bytes"`
 }
 
 // Log holds logging configuration.
@@ -121,6 +143,12 @@ func Parse(cmd *cli.Command) (*Config, error) {
 		Parser: Parser{
 			MaxFieldsPerTemplate: cmd.Int("parser.max-fields-per-template"),
 			TemplateTTL:          cmd.Duration("parser.template-ttl"),
+		},
+		Aggregation: Aggregation{
+			EntryTTL:   cmd.Duration("aggregation.entry-ttl"),
+			MaxEntries: cmd.Int("aggregation.max-entries"),
+			TopK:       cmd.Int("aggregation.top-k"),
+			MinBytes:   cmd.Int64("aggregation.min-bytes"),
 		},
 		Log: Log{
 			Level:  cmd.String("log.level"),
@@ -199,6 +227,45 @@ func (c *Config) Validate() error {
 
 	if err := c.validateParser(); err != nil {
 		return fmt.Errorf("parser validation failed: %w", err)
+	}
+
+	if err := c.validateAggregation(); err != nil {
+		return fmt.Errorf("aggregation validation failed: %w", err)
+	}
+
+	return nil
+}
+
+// validateAggregation validates the aggregation limits.
+func (c *Config) validateAggregation() error {
+	a := &c.Aggregation
+
+	validationRules := []struct {
+		condition bool
+		message   string
+	}{
+		{
+			a.EntryTTL <= 0,
+			fmt.Sprintf("aggregation entry TTL must be positive, got: %v", a.EntryTTL),
+		},
+		{
+			a.MaxEntries < 1,
+			fmt.Sprintf("invalid aggregation max entries: %d (must be positive)", a.MaxEntries),
+		},
+		{
+			a.TopK < 1,
+			fmt.Sprintf("invalid aggregation top-k: %d (must be positive)", a.TopK),
+		},
+		{
+			a.MinBytes < 0,
+			fmt.Sprintf("invalid aggregation min bytes: %d (must not be negative)", a.MinBytes),
+		},
+	}
+
+	for _, rule := range validationRules {
+		if rule.condition {
+			return errors.New(rule.message)
+		}
 	}
 
 	return nil

@@ -52,6 +52,7 @@ func registerFlags() []cli.Flag {
 	flags = append(flags, registerWebFlags()...)
 	flags = append(flags, registerReceiverFlags()...)
 	flags = append(flags, registerParserFlags()...)
+	flags = append(flags, registerAggregationFlags()...)
 	flags = append(flags, registerLogFlags()...)
 	flags = append(flags, registerUtilityFlags()...)
 	flags = append(flags, registerInternalCollectorFlags()...)
@@ -138,6 +139,36 @@ func registerParserFlags() []cli.Flag {
 			Usage:    "How long an unrefreshed template stays usable",
 			Value:    config.DefaultParserTemplateTTL,
 			Category: "* Parser Options",
+		},
+	}
+}
+
+// registerAggregationFlags defines flags for the in-memory aggregation limits.
+func registerAggregationFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.DurationFlag{
+			Name:     "aggregation.entry-ttl",
+			Usage:    "How long an idle aggregation entry keeps its series",
+			Value:    config.DefaultAggregationEntryTTL,
+			Category: "* Aggregation Options",
+		},
+		&cli.IntFlag{
+			Name:     "aggregation.max-entries",
+			Usage:    "Entry bound per aggregation table; new keys past it fold into other",
+			Value:    config.DefaultAggregationMaxEntries,
+			Category: "* Aggregation Options",
+		},
+		&cli.IntFlag{
+			Name:     "aggregation.top-k",
+			Usage:    "Entries each table publishes as their own series; the rest fold into other",
+			Value:    config.DefaultAggregationTopK,
+			Category: "* Aggregation Options",
+		},
+		&cli.Int64Flag{
+			Name:     "aggregation.min-bytes",
+			Usage:    "Bytes below which an entry folds into other at scrape time (0 publishes all)",
+			Value:    config.DefaultAggregationMinBytes,
+			Category: "* Aggregation Options",
 		},
 	}
 }
