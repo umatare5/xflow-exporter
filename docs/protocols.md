@@ -163,7 +163,7 @@ The v5 header through byte 21, then the aggregation selector. The record length 
 | 13     | ToS and prefix                | 40           |
 | 14     | ToS, prefix and port          | 40           |
 
-Methods 1–5 and 9–14 open with the `dFlows`/`dPkts`/`dOctets` triple and place the flow instants at bytes 12 and 16. The Catalyst methods 6–8 lead with their address fields instead, carry no flow count of their own, and push the instants to 12, 16 and 20 respectively. Field offsets follow the flow-tools reference structures, mirrored in [netflow8.go](../internal/decoder/netflow8.go).
+Methods 1–5 and 9–14 open with the `dFlows`/`dPkts`/`dOctets` triple and place the flow instants at bytes 12 and 16. The Catalyst methods 6–8 lead with their address fields instead, carry no flow count of their own, and push the instants to 12, 16 and 20 respectively.
 
 ### Record layout
 
@@ -275,9 +275,6 @@ The header itself is fixed.
 | 8–11  | UNIX Seconds    | Export instant, seconds since the epoch         |
 | 12–15 | Sequence Number | Export packets sent, not flows                  |
 | 16–19 | Source ID       | The Observation Domain ID part of the cache key |
-
-> [!Note]
-> The v9 sequence number counts export packets, a change from the "total flows" the v5 and v8 headers carried. IPFIX changes it again, to data records.
 
 ### FlowSets
 
@@ -455,7 +452,7 @@ The enterprise bit is what makes an IPFIX field specifier variable in size.
 Catalyst 2960-X/XR, 2960-CX, 3560-CX and 4948E ship one sampled packet section per v9 or IPFIX record. Sections decode through the same header walk the sFlow decoder uses.
 
 - Elements: the deprecated v9 field 104 (`layer2packetSectionData`, the measured device behaviour), and IPFIX `dataLinkFrameSection` (315), `ipHeaderPacketSection` (313), `dataLinkFrameSize` (312).
-- Fields the device parsed itself win over the section, and one record reads as one sampled packet.
+- The section is walked only where the record carries neither address, so the device's own parse wins; the walk then supplies the addresses, protocol, TOS, ports and flags. One record reads as one sampled packet.
 - The 309/310 `samplingSize`/`samplingPopulation` options pair feeds the sampling correction.
 
 | Element                   | ID  | Carries                                     |

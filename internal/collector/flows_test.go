@@ -101,8 +101,8 @@ xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 0
 }
 
 // TestFlowCollector_MinBytesWithholdsMice pins the same contract for the byte
-// threshold: a mouse flow is withheld while it lives and reaches other only
-// once it is evicted.
+// threshold: a mouse flow keeps no series of its own and is not added to
+// other while it lives.
 func TestFlowCollector_MinBytesWithholdsMice(t *testing.T) {
 	t.Parallel()
 
@@ -121,6 +121,35 @@ func TestFlowCollector_MinBytesWithholdsMice(t *testing.T) {
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_bytes_total counter
 xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.1"} 5000
+xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 0
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_host_pair_bytes_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// TestFlowCollector_MinBytesAdmitsTheThresholdItself pins which side of the
+// byte threshold is inclusive. At or above keeps its own series, so an entry
+// reading exactly the threshold is published and the one byte below it is not.
+func TestFlowCollector_MinBytesAdmitsTheThresholdItself(t *testing.T) {
+	t.Parallel()
+
+	cfg := aggConfig()
+	cfg.MinBytes = 1000
+
+	agg := aggregator.New(cfg, aggregator.Modules{Hosts: true})
+	agg.Ingest([]flow.Record{
+		flowRecord("10.0.0.1", "10.0.0.9", 1000),
+		flowRecord("10.0.0.2", "10.0.0.9", 999),
+	})
+
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil)
+
+	expected := `
+# HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
+# TYPE xflow_host_pair_bytes_total counter
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.1"} 1000
 xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
@@ -478,8 +507,7 @@ func publishedHostPairs(t *testing.T, c prometheus.Collector) []string {
 
 // TestFlowCollector_ASNNamesRideTheirOwnSeries pins where the organization
 // goes. A database respelling a company must not break the counters it
-// touches, and the pair table is Top-K bounded while a database names every
-// AS there is -- so the name is published for the numbers the table holds and
+// touches, so the name is published for the numbers the pair series carry and
 // nowhere else.
 func TestFlowCollector_ASNNamesRideTheirOwnSeries(t *testing.T) {
 	t.Parallel()
@@ -498,7 +526,7 @@ func TestFlowCollector_ASNNamesRideTheirOwnSeries(t *testing.T) {
 	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), names)
 
 	expected := `
-# HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table holds
+# HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table publishes
 # TYPE xflow_asn_info gauge
 xflow_asn_info{asn="64500",organization="Example Networks"} 1
 `
@@ -506,6 +534,225 @@ xflow_asn_info{asn="64500",organization="Example Networks"} 1
 		t.Errorf("CollectAndCompare() mismatch: %v", err)
 	}
 }
+
+// TestFlowCollector_ASNNamesFollowTheTopKCut pins the naming series to the cut
+// the pair series take, rather than to the table behind it. The table runs to
+// --aggregation.max-entries and a database names every AS there is, so reading
+// it whole would publish a name for every AS below the cut -- each one a
+// series with nothing to join to, and the family orders of magnitude past the
+// one it describes. Both families are asserted because the property is a
+// join: what the numbers are matters only against the pairs carrying them.
+func TestFlowCollector_ASNNamesFollowTheTopKCut(t *testing.T) {
+	t.Parallel()
+
+	cfg := aggConfig()
+	cfg.TopK = 1
+
+	agg := aggregator.New(cfg, aggregator.Modules{ASNs: true})
+	records := make([]flow.Record, 0, 8)
+	for i := range 8 {
+		r := flowRecord(fmt.Sprintf("10.0.%d.1", i), fmt.Sprintf("10.1.%d.2", i), uint64(100+i))
+		r.SrcAS, r.DstAS = uint32(64500+i*2), uint32(64501+i*2)
+		records = append(records, r)
+	}
+	agg.Ingest(records)
+
+	names := func(as uint32) (string, bool) { return fmt.Sprintf("AS %d", as), true }
+	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, cfg, names)
+
+	// The heaviest pair is the last ingested, and it is the only one published.
+	expected := `
+# HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table publishes
+# TYPE xflow_asn_info gauge
+xflow_asn_info{asn="64514",organization="AS 64514"} 1
+xflow_asn_info{asn="64515",organization="AS 64515"} 1
+# HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
+# TYPE xflow_asn_pair_bytes_total counter
+xflow_asn_pair_bytes_total{dst_asn="64515",exporter="192.0.2.1",src_asn="64514"} 107
+xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_asn_info", "xflow_asn_pair_bytes_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// TestFlowCollector_ASNNamesReadTheSnapshotThePairsCameFrom is the regression
+// test for a name published for a pair that was not. The table moves while a
+// scrape runs -- the receiver goroutines ingest throughout it -- so a second
+// read of the source answers with a table the pair series never saw, and the
+// cut taken from it can name an AS no published pair carries.
+func TestFlowCollector_ASNNamesReadTheSnapshotThePairsCameFrom(t *testing.T) {
+	t.Parallel()
+
+	cfg := aggConfig()
+	cfg.TopK = 1
+
+	exporter := netip.MustParseAddr("192.0.2.1")
+	pair := aggregator.EntrySnapshot[aggregator.ASNKey]{
+		Key:    aggregator.ASNKey{Exporter: exporter, SrcAS: 64500, DstAS: 64501},
+		Totals: aggregator.Totals{Bytes: 5000, Packets: 5, Flows: 1},
+	}
+	// The same table one ingest later, with a heavier pair holding the only
+	// slot the cut has.
+	usurper := aggregator.EntrySnapshot[aggregator.ASNKey]{
+		Key:    aggregator.ASNKey{Exporter: exporter, SrcAS: 64600, DstAS: 64601},
+		Totals: aggregator.Totals{Bytes: 9000, Packets: 9, Flows: 1},
+	}
+
+	src := &movingASNs{reads: [][]aggregator.EntrySnapshot[aggregator.ASNKey]{
+		{pair},
+		{usurper, pair},
+	}}
+
+	names := func(as uint32) (string, bool) { return fmt.Sprintf("AS %d", as), true }
+	c := NewFlowCollector(src, config.Collectors{ASNs: true}, cfg, names)
+
+	expected := `
+# HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table publishes
+# TYPE xflow_asn_info gauge
+xflow_asn_info{asn="64500",organization="AS 64500"} 1
+xflow_asn_info{asn="64501",organization="AS 64501"} 1
+# HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
+# TYPE xflow_asn_pair_bytes_total counter
+xflow_asn_pair_bytes_total{dst_asn="64501",exporter="192.0.2.1",src_asn="64500"} 5000
+xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_asn_info", "xflow_asn_pair_bytes_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+	// The property is one read per scrape, not the shape of the stub: a stub
+	// that stopped moving would leave the assertion above passing over the
+	// defect it exists to catch.
+	if src.taken != 1 {
+		t.Errorf("source read %d times in one scrape, want 1", src.taken)
+	}
+}
+
+// TestFlowCollector_ASNNamesFollowTheByteThreshold pins the naming series to
+// the whole cut rather than to its Top-K half. --aggregation.min-bytes
+// withholds a pair as surely as the rank does, and a name published for one it
+// withheld would have nothing to join to.
+func TestFlowCollector_ASNNamesFollowTheByteThreshold(t *testing.T) {
+	t.Parallel()
+
+	cfg := aggConfig()
+	cfg.MinBytes = 1000
+
+	agg := aggregator.New(cfg, aggregator.Modules{ASNs: true})
+	heavy := flowRecord("10.0.0.1", "10.0.0.2", 5000)
+	heavy.SrcAS, heavy.DstAS = 64500, 64501
+	mouse := flowRecord("10.0.0.3", "10.0.0.4", 999)
+	mouse.SrcAS, mouse.DstAS = 64600, 64601
+	agg.Ingest([]flow.Record{heavy, mouse})
+
+	names := func(as uint32) (string, bool) { return fmt.Sprintf("AS %d", as), true }
+	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, cfg, names)
+
+	expected := `
+# HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table publishes
+# TYPE xflow_asn_info gauge
+xflow_asn_info{asn="64500",organization="AS 64500"} 1
+xflow_asn_info{asn="64501",organization="AS 64501"} 1
+# HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
+# TYPE xflow_asn_pair_bytes_total counter
+xflow_asn_pair_bytes_total{dst_asn="64501",exporter="192.0.2.1",src_asn="64500"} 5000
+xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_asn_info", "xflow_asn_pair_bytes_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// TestFlowCollector_ASNNameNoLabelCanHoldCostsItsOwnSeries pins what a
+// database string Prometheus refuses costs. An mmdb file is not validated for
+// UTF-8 when it is read, so the bytes reaching the label are the file's: they
+// cost the name its series and leave the pair counters, and every family
+// behind them, on the scrape.
+func TestFlowCollector_ASNNameNoLabelCanHoldCostsItsOwnSeries(t *testing.T) {
+	t.Parallel()
+
+	agg := aggregator.New(aggConfig(), aggregator.Modules{ASNs: true})
+	r := flowRecord("10.0.0.1", "10.0.0.2", 400)
+	r.SrcAS, r.DstAS = 64500, 64501
+	agg.Ingest([]flow.Record{r})
+
+	names := func(as uint32) (string, bool) {
+		if as == 64500 {
+			return "Example\xffNetworks", true
+		}
+		return "Example Peering", true
+	}
+	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), names)
+
+	expected := `
+# HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table publishes
+# TYPE xflow_asn_info gauge
+xflow_asn_info{asn="64501",organization="Example Peering"} 1
+# HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
+# TYPE xflow_asn_pair_bytes_total counter
+xflow_asn_pair_bytes_total{dst_asn="64501",exporter="192.0.2.1",src_asn="64500"} 400
+xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_asn_info", "xflow_asn_pair_bytes_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// movingASNs answers each AS-pair read with the next table in reads, the last
+// one standing for every read past it. Each answer is a copy, since a caller
+// sorts what it is given. Every other aggregation stays empty.
+type movingASNs struct {
+	reads [][]aggregator.EntrySnapshot[aggregator.ASNKey]
+	taken int
+}
+
+func (m *movingASNs) ASNs() ([]aggregator.EntrySnapshot[aggregator.ASNKey], aggregator.Totals) {
+	entries := m.reads[min(m.taken, len(m.reads)-1)]
+	m.taken++
+	return slices.Clone(entries), aggregator.Totals{}
+}
+
+func (m *movingASNs) Exporters() ([]aggregator.EntrySnapshot[aggregator.ExporterKey], aggregator.Totals) {
+	return nil, aggregator.Totals{}
+}
+
+func (m *movingASNs) Hosts() ([]aggregator.EntrySnapshot[aggregator.HostKey], aggregator.Totals) {
+	return nil, aggregator.Totals{}
+}
+
+func (m *movingASNs) Services() ([]aggregator.EntrySnapshot[aggregator.ServiceKey], aggregator.Totals) {
+	return nil, aggregator.Totals{}
+}
+
+func (m *movingASNs) Destinations() ([]aggregator.EntrySnapshot[aggregator.DestinationKey], aggregator.Totals) {
+	return nil, aggregator.Totals{}
+}
+
+func (m *movingASNs) TCPFlags() ([]aggregator.EntrySnapshot[aggregator.TCPFlagsKey], aggregator.Totals) {
+	return nil, aggregator.Totals{}
+}
+
+func (m *movingASNs) DSCP() ([]aggregator.EntrySnapshot[aggregator.DSCPKey], aggregator.Totals) {
+	return nil, aggregator.Totals{}
+}
+
+func (m *movingASNs) Applications() ([]aggregator.EntrySnapshot[aggregator.AppKey], aggregator.Totals) {
+	return nil, aggregator.Totals{}
+}
+
+func (m *movingASNs) Countries() ([]aggregator.EntrySnapshot[aggregator.CountryKey], aggregator.Totals) {
+	return nil, aggregator.Totals{}
+}
+
+func (m *movingASNs) Threats() ([]aggregator.EntrySnapshot[aggregator.ThreatKey], aggregator.Totals) {
+	return nil, aggregator.Totals{}
+}
+
+func (m *movingASNs) Health() []aggregator.TableHealth { return nil }
 
 // TestFlowCollector_ASNNamesAbsentWithoutADatabase pins the other half: with
 // no database to ask, the naming series is absent rather than empty.
@@ -538,7 +785,7 @@ func TestFlowCollector_ASNNamesSkipZero(t *testing.T) {
 	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), names)
 
 	expected := `
-# HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table holds
+# HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table publishes
 # TYPE xflow_asn_info gauge
 xflow_asn_info{asn="64500",organization="Example Networks"} 1
 `

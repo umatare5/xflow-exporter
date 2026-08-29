@@ -166,10 +166,11 @@ protocol cannot choose its senders.
 - **Vendor strings** — the interner holds at most 65536, each at most 255
   bytes. Past the entry bound a value is copied per occurrence, which costs an
   allocation and never a wrong reading. A string longer than the byte bound,
-  or one that is not valid UTF-8, is refused outright and counted in
-  `xflow_vendor_strings_refused_total`: the record then falls back to its
-  numbered `applicationId`, to its port name under `--enrich.services`, or to
-  no application series at all.
+  or one that is not valid UTF-8, is refused before the map is consulted, so
+  `xflow_vendor_strings_refused_total` counts it once per field carrying it
+  rather than once. A refused application name leaves the record falling back
+  to its numbered `applicationId`, to its port name under `--enrich.services`,
+  or to no application series at all.
 - **Announced applications** — the `applicationId` is a wire field, so each
   device may name at most 16384 of them, an order of magnitude above the
   NBAR2 database a real device announces. A refusal raises
@@ -203,7 +204,7 @@ NetFlow v9 and IPFIX data decode against templates cached per exporter address a
 A NetFlow-Lite record carries one sampled packet section instead of parsed flow fields, and decodes through the header walk the sFlow decoder uses.
 
 - **Elements** — the v9 mode's deprecated field 104 (layer2packetSectionData, the measured device behaviour), and IPFIX `dataLinkFrameSection` (315), `ipHeaderPacketSection` (313) and `dataLinkFrameSize` (312).
-- **Precedence** — fields the device parsed itself win: the section fills only what is still absent, and one record reads as one sampled packet.
+- **Precedence** — the section is walked only where the record carries neither address, so the device's own parse wins whole rather than field by field, and one record reads as one sampled packet.
 - **Padding** — a fixed-size v9 section is zero-padded, so a frame cut before its transport header reads zero ports from the padding — the one ambiguity a padded section cannot escape.
 
 ### Native histograms

@@ -145,16 +145,16 @@ const maxInternedStrings = 65536
 // maxVendorStringLength bounds one vendor string. The bound above counts
 // strings rather than their bytes, so a device exporting names as wide as its
 // datagram fills the interner with datagrams instead of names: 65536 of them
-// at the default receive size is 597 MiB, held for the life of the process.
+// at the default receive size is 576 MiB, held for the life of the process.
 // An NBAR2 name and the category beside it are tens of bytes.
 const maxVendorStringLength = 255
 
 // interner deduplicates the strings vendors embed in every record, so one
 // application name allocates once rather than per flow.
 type interner struct {
-	// refused counts the strings turned away as unrepresentable, so a
-	// record reading as its application number rather than its name is
-	// visible instead of silent.
+	// refused counts the string fields turned away as unrepresentable, one
+	// per occurrence rather than one per string: the refusal precedes the map,
+	// so a repeat has nowhere to be recognized.
 	refused atomic.Uint64
 
 	mu sync.RWMutex
@@ -184,11 +184,10 @@ func (i *interner) intern(value []byte) string {
 	// than hostile, and Prometheus cannot hold it as a label value. Refusing
 	// it here keeps it off the label path entirely, rather than leaving the
 	// collector to drop the entry it would have named. Refusing leaves the
-	// name unset,
-	// which the layers above fall back from: to the numbered applicationId
-	// where the record carries one, to the port name where the services
-	// enricher is on, and to no application series at all where neither
-	// knows -- never to a guessed or partial name.
+	// name unset, which the layers above fall back from: to the numbered
+	// applicationId where the record carries one, to the port name where the
+	// services enricher is on, and to no application series at all where
+	// neither knows -- never to a guessed or partial name.
 	if !utf8.Valid(trimmed) {
 		i.refused.Add(1)
 		return ""
@@ -214,7 +213,7 @@ func (i *interner) intern(value []byte) string {
 	return s
 }
 
-// refusedCount reports how many vendor strings were turned away.
+// refusedCount reports how many string fields were turned away.
 func (i *interner) refusedCount() uint64 {
 	return i.refused.Load()
 }

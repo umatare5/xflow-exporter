@@ -47,8 +47,6 @@ type Threat struct {
 	counters
 	paths []string
 
-	// set is swapped atomically, so a reload never blocks a lookup and a
-	// failed one leaves the previous snapshot serving.
 	set atomic.Pointer[threatSet]
 
 	reloads  atomic.Uint64

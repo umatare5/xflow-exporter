@@ -32,8 +32,9 @@ const (
 	// refuses: a zero-width field, a field count past the limit, or a
 	// specifier that does not fit its flowset.
 	ReasonInvalidTemplate = "invalid_template"
-	// ReasonReservedSet marks a flowset in the reserved 2-255 range, a
-	// dialect this exporter does not speak.
+	// ReasonReservedSet marks a set id its protocol leaves unassigned:
+	// 2-255 in v9; 0, 1 and 4-255 in IPFIX. Using one is a dialect this
+	// exporter does not speak.
 	ReasonReservedSet = "reserved_set"
 	// ReasonDomainLimit marks a datagram whose observation domain the
 	// exporter refused, the device being at its domain budget.
@@ -75,14 +76,17 @@ const (
 )
 
 // Decoder dispatches datagrams to the protocol parsers and accounts every
-// outcome. One Decoder serves every worker: the parsers are stateless until
-// the template protocols land, and the statistics are concurrency-safe.
+// outcome. One Decoder serves every worker: the NetFlow v5 and v8 parsers
+// hold no state, and the template store, the application tables, the
+// interner and the statistics are all concurrency-safe.
 type Decoder struct {
 	stats     *Stats
 	templates *templateStore
 	apps      *appTables
 	strings   *interner
-	// now is the clock flow timestamps are anchored with; a test pins it.
+	// now stamps the decode accounting and the exporter idle-sweep cutoff; a
+	// test pins it. Flow times are never taken from it: those come from the
+	// datagram.
 	now func() time.Time
 }
 
@@ -125,19 +129,26 @@ func (d *Decoder) SweepExporters() int {
 }
 
 // ExportersRefused reports how many datagrams the exporter budget left
-// unattributed, each one a device holding no counters of its own.
+// unattributed. One refused device sending steadily counts once per datagram,
+// so this follows that traffic rather than the device count.
 func (d *Decoder) ExportersRefused() uint64 {
 	return d.stats.refusedCount()
 }
 
-// DomainsRefused reports how many domains the per-exporter budget turned away.
+// DomainsRefused reports how many datagrams named a domain the per-exporter
+// budget turned away, each one discarded whole rather than decoded. One
+// refused domain named steadily counts once per datagram, so this follows that
+// loss rather than the domain count.
 func (d *Decoder) DomainsRefused() uint64 {
 	return d.templates.refused()
 }
 
-// VendorStringsRefused reports how many vendor strings were turned away as
-// unrepresentable, each one a record that falls back to its application
-// number, to its port name, or to no application series at all.
+// VendorStringsRefused reports how many exported string fields the interner
+// refused as unrepresentable. The refusal precedes its map, so one such name
+// counts once per field carrying it rather than once. A refused application
+// name leaves the record falling back to its numbered applicationId, to its
+// port name, or to no application series at all; a refused category costs
+// nothing published, no series carrying one.
 func (d *Decoder) VendorStringsRefused() uint64 {
 	return d.strings.refusedCount()
 }
@@ -163,26 +174,34 @@ func (d *Decoder) Stats() *Stats {
 // the extended slice. The outcome is accounted either way, so the returned
 // error is for the debug log alone.
 func (d *Decoder) Decode(exporter netip.Addr, payload []byte, dst []flow.Record) ([]flow.Record, error) {
+	// The device is resolved once, before anything is parsed, and every
+	// accounting call below writes through that one resolution. A refusal is
+	// counted at the resolution, and a v9 datagram carries an accounting call
+	// per flowset, so resolving per call would let a sender set the increment
+	// by the number of flowsets it chose to pack.
+	at := d.now()
+	es := d.stats.exporter(exporter, at)
+
 	version, err := sniffVersion(payload)
 	if err != nil {
-		d.stats.countError(exporter, flow.VersionUnknown, err.Reason(), d.now())
+		es.countError(flow.VersionUnknown, err.Reason())
 		return dst, err
 	}
 
 	before := len(dst)
-	dst, err = d.decodeVersion(version, exporter, payload, dst)
+	dst, err = d.decodeVersion(version, exporter, es, payload, dst)
 	if err != nil {
-		d.stats.countError(exporter, version, err.Reason(), d.now())
+		es.countError(version, err.Reason())
 		return dst[:before], err
 	}
 
-	d.stats.countFlows(exporter, version, len(dst)-before, d.now())
+	es.countFlows(version, len(dst)-before, at)
 	return dst, nil
 }
 
 // decodeVersion routes one sniffed datagram to its parser.
 func (d *Decoder) decodeVersion(
-	version flow.Version, exporter netip.Addr, payload []byte, dst []flow.Record,
+	version flow.Version, exporter netip.Addr, es *ExporterStats, payload []byte, dst []flow.Record,
 ) ([]flow.Record, *decodeError) {
 	switch version {
 	case flow.VersionNetFlowV5:
@@ -190,19 +209,13 @@ func (d *Decoder) decodeVersion(
 	case flow.VersionNetFlowV8:
 		return decodeNetFlowV8(exporter, payload, dst)
 	case flow.VersionNetFlowV9:
-		issue := func(reason string) {
-			d.stats.countError(exporter, flow.VersionNetFlowV9, reason, d.now())
-		}
+		issue := func(reason string) { es.countError(flow.VersionNetFlowV9, reason) }
 		return d.decodeNetFlowV9(exporter, payload, dst, issue)
 	case flow.VersionIPFIX:
-		issue := func(reason string) {
-			d.stats.countError(exporter, flow.VersionIPFIX, reason, d.now())
-		}
+		issue := func(reason string) { es.countError(flow.VersionIPFIX, reason) }
 		return d.decodeIPFIX(exporter, payload, dst, issue)
 	case flow.VersionSFlowV5:
-		issue := func(reason string) {
-			d.stats.countError(exporter, flow.VersionSFlowV5, reason, d.now())
-		}
+		issue := func(reason string) { es.countError(flow.VersionSFlowV5, reason) }
 		return d.decodeSFlowV5(exporter, payload, dst, issue)
 	case flow.VersionUnknown:
 		return dst, &decodeError{reason: ReasonUnsupportedVersion, detail: "unknown version"}

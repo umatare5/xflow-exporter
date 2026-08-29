@@ -27,7 +27,7 @@ func TestStats_ExportersAreBounded(t *testing.T) {
 	s := newStats()
 	now := time.Now()
 	for i := range maxExporters + 1000 {
-		s.countError(spoofedAddr(i), flow.VersionUnknown, ReasonUnsupportedVersion, now)
+		s.exporter(spoofedAddr(i), now).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
 	}
 
 	if got := len(s.Snapshot()); got != maxExporters {
@@ -46,12 +46,12 @@ func TestStats_RefusedExporterPublishesNothing(t *testing.T) {
 	s := newStats()
 	now := time.Now()
 	for i := range maxExporters {
-		s.countError(spoofedAddr(i), flow.VersionUnknown, ReasonUnsupportedVersion, now)
+		s.exporter(spoofedAddr(i), now).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
 	}
 
 	beyond := netip.MustParseAddr("203.0.113.9")
-	s.countFlows(beyond, flow.VersionNetFlowV9, 5, now)
-	s.countError(beyond, flow.VersionNetFlowV9, ReasonMalformed, now)
+	s.exporter(beyond, now).countFlows(flow.VersionNetFlowV9, 5, now)
+	s.exporter(beyond, now).countError(flow.VersionNetFlowV9, ReasonMalformed)
 
 	for _, snap := range s.Snapshot() {
 		if snap.Exporter == beyond {
@@ -71,7 +71,7 @@ func TestStats_SweepOnlyRunsUnderPressure(t *testing.T) {
 	s := newStats()
 	long := time.Now().Add(-time.Hour)
 	for i := range 100 {
-		s.countError(spoofedAddr(i), flow.VersionUnknown, ReasonUnsupportedVersion, long)
+		s.exporter(spoofedAddr(i), long).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
 	}
 
 	if evicted := s.sweepIdle(time.Now().UnixNano()); evicted != 0 {
@@ -91,7 +91,7 @@ func TestStats_SweepAtTheBudgetReclaims(t *testing.T) {
 	s := newStats()
 	long := time.Now().Add(-time.Hour)
 	for i := range maxExporters {
-		s.countError(spoofedAddr(i), flow.VersionUnknown, ReasonUnsupportedVersion, long)
+		s.exporter(spoofedAddr(i), long).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
 	}
 
 	if evicted := s.sweepIdle(time.Now().UnixNano()); evicted != maxExporters {
@@ -100,7 +100,7 @@ func TestStats_SweepAtTheBudgetReclaims(t *testing.T) {
 
 	// The slot is available again, which is what the sweep is for.
 	fresh := netip.MustParseAddr("203.0.113.9")
-	s.countFlows(fresh, flow.VersionNetFlowV9, 1, time.Now())
+	s.exporter(fresh, time.Now()).countFlows(flow.VersionNetFlowV9, 1, time.Now())
 	if got := len(s.Snapshot()); got != 1 {
 		t.Errorf("held %d devices after the sweep, want the one that arrived", got)
 	}
@@ -117,12 +117,12 @@ func TestStats_SweepReadsTheLastDatagramNotTheLastDecode(t *testing.T) {
 	s := newStats()
 	long := time.Now().Add(-time.Hour)
 	for i := range maxExporters - 1 {
-		s.countError(spoofedAddr(i), flow.VersionUnknown, ReasonUnsupportedVersion, long)
+		s.exporter(spoofedAddr(i), long).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
 	}
 
 	// Erroring now, never decoded: seen, and must survive the sweep.
 	erroring := netip.MustParseAddr("203.0.113.9")
-	s.countError(erroring, flow.VersionNetFlowV9, ReasonMalformed, time.Now())
+	s.exporter(erroring, time.Now()).countError(flow.VersionNetFlowV9, ReasonMalformed)
 
 	s.sweepIdle(time.Now().Add(-time.Minute).UnixNano())
 
@@ -140,6 +140,37 @@ func TestStats_SweepReadsTheLastDatagramNotTheLastDecode(t *testing.T) {
 	}
 }
 
+// TestStats_SweepReadsEveryDatagramNotJustTheFirst pins which datagram
+// freshness is taken from once a device is known. The sweep only runs at the
+// budget, which is where a spoof burst puts the table, and a device admitted
+// before that burst has been exporting throughout it. Were admission the one
+// thing that set the clock, the sweep that reclaims the burst would take the
+// live fleet with it and leave the freed slots to whoever sends next.
+func TestStats_SweepReadsEveryDatagramNotJustTheFirst(t *testing.T) {
+	t.Parallel()
+
+	s := newStats()
+	long := time.Now().Add(-time.Hour)
+	for i := range maxExporters - 1 {
+		s.exporter(spoofedAddr(i), long).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
+	}
+
+	// Admitted an hour ago alongside the burst, exporting ever since.
+	active := netip.MustParseAddr("203.0.113.9")
+	s.exporter(active, long).countFlows(flow.VersionNetFlowV9, 1, long)
+	s.exporter(active, time.Now()).countFlows(flow.VersionNetFlowV9, 1, time.Now())
+
+	if evicted := s.sweepIdle(time.Now().Add(-time.Minute).UnixNano()); evicted != maxExporters-1 {
+		t.Errorf("swept %d devices, want the %d silent since the burst", evicted, maxExporters-1)
+	}
+	for _, snap := range s.Snapshot() {
+		if snap.Exporter == active {
+			return
+		}
+	}
+	t.Error("a device that exported a moment ago was swept, want it kept on its last datagram")
+}
+
 // TestStats_BoundHoldsUnderConcurrentWorkers covers the admission decision
 // read outside the write lock. The count under the lock stays the authority,
 // so the budget is exact however many workers race for the last slots.
@@ -149,7 +180,7 @@ func TestStats_BoundHoldsUnderConcurrentWorkers(t *testing.T) {
 	s := newStats()
 	now := time.Now()
 	for i := range maxExporters - 1 {
-		s.countError(spoofedAddr(i), flow.VersionUnknown, ReasonUnsupportedVersion, now)
+		s.exporter(spoofedAddr(i), now).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
 	}
 
 	// Released together, so every worker reads the budget before any of them
@@ -162,7 +193,8 @@ func TestStats_BoundHoldsUnderConcurrentWorkers(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			s.countError(spoofedAddr(maxExporters+i), flow.VersionUnknown, ReasonUnsupportedVersion, now)
+			es := s.exporter(spoofedAddr(maxExporters+i), now)
+			es.countError(flow.VersionUnknown, ReasonUnsupportedVersion)
 		}()
 	}
 	close(start)
@@ -188,7 +220,7 @@ func TestDecoder_SweepExportersUsesTheTemplateTTL(t *testing.T) {
 
 	long := base.Add(-2 * config.DefaultParserTemplateTTL)
 	for i := range maxExporters {
-		d.stats.countError(spoofedAddr(i), flow.VersionUnknown, ReasonUnsupportedVersion, long)
+		d.stats.exporter(spoofedAddr(i), long).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
 	}
 
 	if evicted := d.SweepExporters(); evicted != maxExporters {
@@ -231,7 +263,7 @@ func TestStats_BothBudgetGatesRefuse(t *testing.T) {
 		s := newStats()
 		now := time.Now()
 		for i := range maxExporters {
-			s.countError(spoofedAddr(i), flow.VersionUnknown, ReasonUnsupportedVersion, now)
+			s.exporter(spoofedAddr(i), now).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
 		}
 		// The mirrored count lies low, as a worker that read it before the
 		// last slot went sees it. Only the count under the lock can refuse.
@@ -244,4 +276,52 @@ func TestStats_BothBudgetGatesRefuse(t *testing.T) {
 			t.Errorf("held %d devices, want the budget of %d", got, maxExporters)
 		}
 	})
+}
+
+// TestDecoder_RefusalCountsTheDatagramNotTheFlowSet pins the unit the refusal
+// counter is published in. Decode resolves the device once, so a refused
+// datagram is one increment whatever it carries; resolving per accounting call
+// instead handed the sender the increment, four bytes of flowset header buying
+// one more. The admitted half is the other edge: per-flowset error counters
+// must not collapse into one to get there.
+func TestDecoder_RefusalCountsTheDatagramNotTheFlowSet(t *testing.T) {
+	t.Parallel()
+
+	sender := netip.MustParseAddr("203.0.113.9")
+	datagram := v9Packet(1, fixtureV9ODID,
+		flowSet(minDataSetID, make([]byte, 4)),
+		flowSet(minDataSetID+1, make([]byte, 4)),
+		flowSet(minDataSetID+2, make([]byte, 4)),
+		flowSet(minDataSetID+3, make([]byte, 4)),
+	)
+
+	admitted := newTestDecoder()
+	if _, err := admitted.Decode(sender, datagram, nil); err != nil {
+		t.Fatalf("Decode() error = %v, want the datagram itself accepted", err)
+	}
+	var missing uint64
+	for _, e := range admitted.Stats().Snapshot()[0].Errors {
+		if e.Reason == ReasonMissingTemplate {
+			missing = e.Count
+		}
+	}
+	if missing != 4 {
+		t.Fatalf("an admitted device counted %d missing templates, want one per flowset", missing)
+	}
+
+	refusing := newTestDecoder()
+	now := time.Now()
+	for i := range maxExporters {
+		refusing.stats.exporter(spoofedAddr(i), now).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
+	}
+	if got := refusing.ExportersRefused(); got != 0 {
+		t.Fatalf("ExportersRefused() = %d at the budget, want none until it is exceeded", got)
+	}
+
+	if _, err := refusing.Decode(sender, datagram, nil); err != nil {
+		t.Fatalf("Decode() error = %v, want the datagram itself accepted", err)
+	}
+	if got := refusing.ExportersRefused(); got != 1 {
+		t.Errorf("ExportersRefused() = %d for one datagram of four flowsets, want 1", got)
+	}
 }

@@ -19,8 +19,9 @@ type Reloader interface {
 }
 
 // New creates a new HTTP server with metrics and health endpoints. Config.Validate
-// rejects every telemetryPath that http.ServeMux would panic on, apart from the root,
-// which is handled below.
+// rejects every telemetryPath that http.ServeMux would panic on except two: the root,
+// which is handled below, and config.ReloadPath, which conflicts only when a non-nil
+// reloader registers it.
 //
 // reloader is wired to the management endpoint when it is non-nil, which is
 // what --web.enable-lifecycle decides. The endpoint is a write, so it stays

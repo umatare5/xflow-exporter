@@ -12,7 +12,7 @@ USAGE:
    xflow-exporter [global options]
 
 VERSION:
-   0.5.0
+   dev
 
 GLOBAL OPTIONS:
    --dry-run                    Validate configuration without starting the server
@@ -27,12 +27,12 @@ GLOBAL OPTIONS:
 
    # Collector Options
 
-   --collector.applications   Enable application metrics from AVC, App-ID or applicationId
-   --collector.asns           Enable AS pair metrics from device-exported AS numbers
+   --collector.applications   Enable application metrics from AVC, App-ID, applicationId or --enrich.services
+   --collector.asns           Enable AS pair metrics, from device-exported numbers or --enrich.asn-database
    --collector.countries      Enable country pair metrics, which need --enrich.country-database
    --collector.destinations   Enable destination address with protocol and port metrics
    --collector.distributions  Enable flow size and duration native histograms
-   --collector.dscp           Enable DSCP class metrics, for devices that export the TOS byte
+   --collector.dscp           Enable DSCP class metrics, from the TOS byte or the exported code point
    --collector.exporters      Enable per-device traffic metrics
    --collector.hosts          Enable source-destination address pair metrics
    --collector.services       Enable address pair with protocol and port metrics
@@ -50,8 +50,8 @@ GLOBAL OPTIONS:
 
    --aggregation.entry-ttl duration  How long an idle aggregation entry keeps its series (default: 15m0s)
    --aggregation.max-entries int     Entry bound per aggregation table, folding new keys into other past it (default: 100000)
-   --aggregation.min-bytes int       Bytes below which an entry folds into other at scrape time (0 publishes all) (default: 0)
-   --aggregation.top-k int           Entries each table publishes as their own series, folding the rest into other (default: 1000)
+   --aggregation.min-bytes int       Bytes below which an entry is withheld at scrape time (0 publishes all) (default: 0)
+   --aggregation.top-k int           Entries each table publishes as their own series, the rest withheld (default: 1000)
 
    * Internal Collector Options
 
@@ -70,7 +70,7 @@ GLOBAL OPTIONS:
    --receiver.buffer-bytes int                              UDP socket receive buffer size in bytes (0 keeps the OS default) (default: 4194304)
    --receiver.max-packet-size int                           Largest datagram in bytes kept whole, dropping larger ones (default: 9216)
    --receiver.queue-size int                                Datagrams buffered between the read loops and the decoders (default: 8192)
-   --receiver.workers int                                   Decode workers consuming the queue (0 sizes to the CPU count) (default: 0)
+   --receiver.workers int                                   Decode workers consuming the queue (0 sizes to GOMAXPROCS) (default: 0)
 
    * Remote Write Options
 

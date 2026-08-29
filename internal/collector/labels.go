@@ -1,7 +1,8 @@
 // Package collector provides collectors for xflow-exporter.
+// This file holds the label names the aggregation and self-monitoring
+// collectors share, so two families cannot drift apart on a spelling.
 package collector
 
-// Label constants used across collectors for Prometheus metrics.
 const (
 	labelExporter = "exporter" // Source address of the exporting device
 	labelListener = "listener" // Configured receiver listen address

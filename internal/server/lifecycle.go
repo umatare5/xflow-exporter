@@ -83,7 +83,6 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		Threats:      cfg.Collectors.Threats,
 	}
 
-	// Create and setup collector manager
 	collectorMgr := collector.NewCollector(cfg)
 	collectorMgr.Setup(version)
 	collectorMgr.RegisterReceiverCollector(recv)
@@ -150,8 +149,8 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		sweepDomains(ctx, dec, cfg.Parser.TemplateTTL)
 	}()
 
-	// Decode workers consume the queue. Records are decoded and accounted,
-	// then discarded until the aggregator lands.
+	// Decode workers consume the queue. Each record is enriched, then fed to
+	// the aggregation tables and the distributions.
 	workers := cfg.Receiver.Workers
 	if workers == 0 {
 		workers = runtime.GOMAXPROCS(0)
@@ -184,7 +183,6 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		close(remoteDone)
 	}
 
-	// Create and run server lifecycle manager
 	serverMgr := NewLifecycleManager(collectorMgr.Registry(), cfg, chain)
 	err = serverMgr.Run(ctx)
 
@@ -339,7 +337,6 @@ func decodeLoop(
 // Run starts the HTTP server and handles graceful shutdown.
 // It blocks until the server is shut down or an error occurs.
 func (lm *LifecycleManager) Run(ctx context.Context) error {
-	// Setup graceful shutdown context
 	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -349,7 +346,6 @@ func (lm *LifecycleManager) Run(ctx context.Context) error {
 	stopHangup := lm.watchHangup(ctx)
 	defer stopHangup()
 
-	// Start server in goroutine
 	errCh := make(chan error, 1)
 	go func() {
 		slog.Info("HTTP server listening", "addr", lm.server.Addr)
@@ -358,7 +354,6 @@ func (lm *LifecycleManager) Run(ctx context.Context) error {
 		}
 	}()
 
-	// Wait for shutdown signal or server error
 	select {
 	case <-ctx.Done():
 		slog.Info("Shutdown signal received")
@@ -366,7 +361,6 @@ func (lm *LifecycleManager) Run(ctx context.Context) error {
 		return err
 	}
 
-	// Graceful shutdown with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 

@@ -8,7 +8,6 @@ dist: tmp/dist
 
 # Build destination
 github_urls:
-  # set to true if you use a self-signed certificate
   skip_tls_verify: false
 
 before:
@@ -119,7 +118,7 @@ release:
     - [CHANGELOG](https://github.com/umatare5/xflow-exporter/blob/{{ .Tag }}/CHANGELOG.md)
     - [Container Registry](https://github.com/umatare5/xflow-exporter/pkgs/container/xflow-exporter)
 
-# Generate checksums for source archives
+# Checksums for the release archives
 checksum:
   name_template: "{{ .ProjectName }}-v{{ .Version }}_checksums.txt"
 

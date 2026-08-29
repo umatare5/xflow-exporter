@@ -24,7 +24,7 @@ The repository includes a ready to use `Dockerfile`. To build a new Docker image
 make image
 ```
 
-This cross-compiles a Linux binary into `./tmp/image`, then builds from that directory because the `Dockerfile` expects the binary at the context root. The image is tagged `$USER/xflow-exporter` and declares ports 10052 and 2055/udp without publishing them, so publish them with `docker run -p`. Released images are pushed to `ghcr.io/umatare5/xflow-exporter` by GoReleaser instead.
+This cross-compiles a Linux binary into `./tmp/image/linux/<arch>`, then builds from `./tmp/image` because the `Dockerfile` expects the GoReleaser context layout, `linux/<arch>/xflow-exporter` beside `LICENSE` and `NOTICE`. The image is tagged `$USER/xflow-exporter` and declares ports 10052 and 2055/udp without publishing them, so publish them with `docker run -p`. Released images are pushed to `ghcr.io/umatare5/xflow-exporter` by GoReleaser instead.
 
 ## Release
 
@@ -34,7 +34,7 @@ To release a new version, follow these steps:
 2. Update the version in the `VERSION` file.
 3. Submit a pull request with both files.
 
-Merging that pull request is the whole release. A push to `main` touching `VERSION` runs the release workflow, which tags the commit and publishes the release in the same run.
+Merging that pull request starts the release. A push to `main` touching `VERSION` runs the release workflow, which tags the commit, pushes the container images and uploads the artifacts to a draft release. Publishing that draft from the Releases page completes it — the images are public before the draft is, so discarding the draft does not withdraw them. A prerelease tag pushes no image at all, so the draft it leaves carries the archives alone.
 
 The workflow also accepts a manual run from the Actions tab. That is for the release a path filter could not reach, the first one above all: the push that creates a branch carries nothing to compare paths against.
 

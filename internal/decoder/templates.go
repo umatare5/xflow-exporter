@@ -35,8 +35,10 @@ type templateField struct {
 	enterprise uint32
 }
 
-// template is one compiled template. Fields are immutable after compilation;
-// refreshedAt moves under the domain lock on every re-announcement.
+// template is one compiled template. Every field, refreshedAt included, is
+// fixed before the store publishes it: a re-announcement swaps in a new
+// template under the domain lock rather than restamping this one, which is
+// what lets lookup hand its pointer out past the lock.
 type template struct {
 	fields []templateField
 	// recordLen is the fixed record length the fields sum to. When
@@ -100,8 +102,9 @@ type templateStore struct {
 	// perExporter counts each device's live domains against its budget.
 	perExporter map[netip.Addr]int
 
-	// domainsRefused counts the domains the budget turned away, so the loss
-	// is visible rather than silent.
+	// domainsRefused counts the datagrams the budget turned away, one per
+	// datagram naming a domain past it, so the loss is visible rather than
+	// silent.
 	domainsRefused atomic.Uint64
 
 	maxFields int
@@ -182,7 +185,7 @@ func (s *templateStore) sweep() int {
 	return s.sweepDomains(s.now().Add(-s.ttl).UnixNano())
 }
 
-// refused reports how many domains the budget turned away.
+// refused reports how many datagrams the budget turned away.
 func (s *templateStore) refused() uint64 {
 	return s.domainsRefused.Load()
 }

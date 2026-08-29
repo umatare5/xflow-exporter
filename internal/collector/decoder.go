@@ -75,12 +75,12 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		),
 		domainsRefusedDesc: prometheus.NewDesc(
 			"xflow_domains_refused_total",
-			"Observation domains refused since process start, the exporter being at its domain budget",
+			"Datagrams discarded since process start, the exporter being at its observation domain budget",
 			nil, nil,
 		),
 		stringsRefusedDesc: prometheus.NewDesc(
 			"xflow_vendor_strings_refused_total",
-			"Vendor strings refused since process start, leaving the application numbered, port-named or absent",
+			"Vendor string fields refused since process start, counted per occurrence rather than per string",
 			nil, nil,
 		),
 		appsRefusedDesc: prometheus.NewDesc(

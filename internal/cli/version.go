@@ -1,4 +1,5 @@
-// Package cli handles the execution of the CLI application.
+// Package cli provides the CLI implementation.
+// This file holds the version string the linker stamps at build time.
 package cli
 
 var version = "dev"

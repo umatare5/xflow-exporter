@@ -1,8 +1,10 @@
 // Package collector provides collectors for xflow-exporter.
 // This file publishes the aggregation tables. Every family carries bytes,
-// packets and flows; the series whose labels all read "other" carries what
-// the entry bound folded at ingest, which is the only traffic no series of
-// this family has ever published.
+// packets and flows; the series whose labels all read "other" carries what the
+// entry bound folded at ingest, and nothing else. The tail the Top-K and
+// min-bytes cuts leave below the published prefix reaches no series either: it
+// is not added to other, and an entry evicted before it ever rises into the cut
+// takes its totals with it.
 package collector
 
 import (
@@ -85,7 +87,8 @@ type FlowCollector struct {
 	src     FlowSource
 	modules config.Collectors
 	topK    int
-	// minBytes folds an entry below it into other at scrape time.
+	// minBytes withholds an entry below it at scrape time. Its totals reach
+	// no series, other included.
 	minBytes uint64
 
 	exporters    familyDescs
@@ -166,7 +169,7 @@ func NewFlowCollector(
 			[]string{labelExporter, labelSrcASN, labelDstASN})
 		c.asnInfoDesc = prometheus.NewDesc(
 			"xflow_asn_info",
-			"Always 1, carrying what a database calls each AS the pair table holds",
+			"Always 1, carrying what a database calls each AS the pair table publishes",
 			[]string{labelASN, labelOrg}, nil,
 		)
 	}
@@ -227,11 +230,6 @@ func (c *FlowCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 // Collect implements prometheus.Collector by reading the aggregator.
-//
-// The health series go first. A label value the wire controls can panic the
-// metric that renders it, and the recovery costs the scrape everything this
-// collector had not yet emitted -- so the counters an operator would notice
-// the loss by must not be queued behind the tables that can raise it.
 func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
 	c.collectHealth(ch)
 
@@ -254,8 +252,8 @@ func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
 		collectFamily(c, ch, &c.dscp, c.src.DSCP, dscpLabels)
 	}
 	if c.modules.ASNs {
-		collectFamily(c, ch, &c.asns, c.src.ASNs, asnLabels)
-		c.collectASNNames(ch)
+		cut := collectFamily(c, ch, &c.asns, c.src.ASNs, asnLabels)
+		c.collectASNNames(ch, cut)
 	}
 	if c.modules.Applications {
 		collectFamily(c, ch, &c.applications, c.src.Applications, appLabels)
@@ -292,9 +290,24 @@ func collectFamily[K comparable](
 	c *FlowCollector, ch chan<- prometheus.Metric, descs *familyDescs,
 	read func() ([]aggregator.EntrySnapshot[K], aggregator.Totals),
 	labels func(K) []string,
-) {
+) []aggregator.EntrySnapshot[K] {
 	entries, fold := read()
 
+	cut := published(c, entries)
+	for _, e := range cut {
+		descs.emit(ch, e.Totals, labels(e.Key)...)
+	}
+
+	descs.emit(ch, fold, otherLabels(labels)...)
+	return cut
+}
+
+// published sorts a table's entries and returns the ones that keep their own
+// labels. Both tests fail monotonically down the sorted slice, so the cut is a
+// prefix of it and anything reading the published set can take it whole.
+func published[K comparable](
+	c *FlowCollector, entries []aggregator.EntrySnapshot[K],
+) []aggregator.EntrySnapshot[K] {
 	// The largest entries by bytes keep their own series, the older entry
 	// winning a tie. The order has to be total: a comparison that returns
 	// zero leaves the sort free to place either first, and the snapshot
@@ -316,12 +329,11 @@ func collectFamily[K comparable](
 	})
 
 	for i, e := range entries {
-		if i < c.topK && e.Bytes >= c.minBytes {
-			descs.emit(ch, e.Totals, labels(e.Key)...)
+		if i >= c.topK || e.Bytes < c.minBytes {
+			return entries[:i]
 		}
 	}
-
-	descs.emit(ch, fold, otherLabels(labels)...)
+	return entries
 }
 
 // otherLabels builds the all-other label set of one family, sized by probing
@@ -376,20 +388,29 @@ func dscpLabels(k aggregator.DSCPKey) []string {
 }
 
 // collectASNNames publishes what a database calls each AS the pair table
-// holds. The name rides its own series rather than the counters': a database
-// respelling a company would otherwise break every counter it touches, and
-// the pair table is Top-K bounded while a database names every AS there is.
-// An AS no lookup resolved carries no name and so no series, which a join
-// shows by finding nothing to join to.
-func (c *FlowCollector) collectASNNames(ch chan<- prometheus.Metric) {
+// publishes. The name rides its own series rather than the counters': a
+// database respelling a company would otherwise break every counter it
+// touches. An AS no lookup resolved carries no name and so no series, which a
+// join shows by finding nothing to join to.
+//
+// The cut arrives from the caller rather than being taken again here. The
+// table moves under a scrape, so a second read answers with one the pair
+// series never saw, and the cut of that read names an AS no published pair
+// carries. The table below the cut runs to --aggregation.max-entries besides,
+// while a database names every AS there is.
+func (c *FlowCollector) collectASNNames(
+	ch chan<- prometheus.Metric, cut []aggregator.EntrySnapshot[aggregator.ASNKey],
+) {
 	if c.asnNames == nil {
 		return
 	}
 
-	entries, _ := c.src.ASNs()
-	named := make(map[uint32]struct{}, len(entries))
-	for _, e := range entries {
-		for _, as := range [2]uint32{e.Key.SrcAS, e.Key.DstAS} {
+	// Every published pair names two AS numbers, before deduplication.
+	const asnsPerPair = 2
+
+	named := make(map[uint32]struct{}, asnsPerPair*len(cut))
+	for _, e := range cut {
+		for _, as := range [asnsPerPair]uint32{e.Key.SrcAS, e.Key.DstAS} {
 			if as == 0 {
 				continue
 			}
@@ -402,8 +423,16 @@ func (c *FlowCollector) collectASNNames(ch chan<- prometheus.Metric) {
 			if !ok {
 				continue
 			}
-			ch <- prometheus.MustNewConstMetric(c.asnInfoDesc, prometheus.GaugeValue, 1,
+			// A database string reaches the label unchecked: the mmdb reader
+			// validates UTF-8 only in Verify. Dropping the one name Prometheus
+			// cannot hold costs its own series, where the panic
+			// MustNewConstMetric would raise costs every family behind it.
+			m, err := prometheus.NewConstMetric(c.asnInfoDesc, prometheus.GaugeValue, 1,
 				strconv.FormatUint(uint64(as), 10), org)
+			if err != nil {
+				continue
+			}
+			ch <- m
 		}
 	}
 }

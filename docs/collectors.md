@@ -1,6 +1,6 @@
 # Collectors
 
-Every module is disabled by default and enabled per `--collector.<module>` flag. With none enabled the exporter receives, decodes and counts flows in the health series, and publishes no traffic series.
+Every module is disabled by default and enabled per `--collector.<module>` flag, underscores in the name spelled as hyphens: `tcp_flags` takes `--collector.tcp-flags`. With none enabled the exporter receives, decodes and counts flows in the health series, and publishes no traffic series.
 
 ## Traffic Metrics
 
@@ -24,7 +24,7 @@ Each table family carries three metrics sharing one label set: `_bytes_total` an
 - `exporter` — the device's UDP source address, IPv4-mapped addresses unmapped.
 - `port` — the destination port: the service side of the conversation as exported.
 - `proto` — the conventional protocol name for the common IANA numbers, the number itself otherwise.
-- `src_asn`/`dst_asn` — as exported, where `0` is a device that did not know the AS and no database placed the address. A record with neither AS feeds no entry. Where `--enrich.asn-database` is set, `xflow_asn_info{asn,organization}` names each AS the table holds, on its own series: a database respelling a company would otherwise break every counter it touches, and the table is Top-K bounded while a database names every AS there is. An AS no lookup resolved carries no name, which a join shows by finding nothing to join to.
+- `src_asn`/`dst_asn` — as exported, where `0` is a device that did not know the AS and no database placed the address. A record with neither AS feeds no entry. Where `--enrich.asn-database` is set, `xflow_asn_info{asn,organization}` names each AS the published pairs carry, on its own series: a database respelling a company would otherwise break every counter it touches. It follows the same cut those pairs take, the table behind that cut running to `--aggregation.max-entries` while a database names every AS there is. An AS no lookup resolved carries no name, which a join shows by finding nothing to join to.
 - `application` — the device-announced AVC name, the inline vendor string, or the `engine:selector` split of `applicationId` when only the number is known. `--enrich.services` fills it from the transport port where none of those exist.
 - `src_country`/`dst_country` — ISO codes from `--enrich.country-database`, `private` for an address on a LAN and `unknown` for a routable one the database could not place. Private means what Go's `netip` means by it, RFC 1918 and the IPv6 unique local range and nothing wider: shared address space, loopback and link-local have no country either but are not private, and naming them so would be the guess this distinction exists to avoid. A record neither side of which resolved feeds no entry.
 - `address`/`direction` — a single address a threat list names and the side it was seen on. Only flagged addresses appear, so the table holds what is worth acting on rather than one entry per address seen.
@@ -58,11 +58,11 @@ These series describe the exporter itself. They have no module flag.
 | `xflow_last_flow_timestamp_seconds`                 | Gauge   | Unix time of the exporter's last decode              |
 | `xflow_templates`                                   | Gauge   | Unexpired templates per domain and `type`            |
 | `xflow_sequence_missed_total`                       | Counter | Export packets lost per domain                       |
-| `xflow_sampling_rate`                               | Gauge   | Declared sampling rate, absent until one arrives     |
-| `xflow_domains_refused_total`                       | Counter | Observation domains refused at the per-device budget |
-| `xflow_vendor_strings_refused_total`                | Counter | Vendor strings refused as unrepresentable            |
+| `xflow_sampling_rate`                               | Gauge   | Declared rate per domain, absent until one arrives   |
+| `xflow_domains_refused_total`                       | Counter | Datagrams discarded at the per-device domain budget  |
+| `xflow_vendor_strings_refused_total`                | Counter | Unrepresentable string fields, counted per field     |
 | `xflow_applications_refused_total`                  | Counter | Announcements refused at the per-device app budget   |
-| `xflow_exporters_refused_total`                     | Counter | Attributions refused at the process exporter budget  |
+| `xflow_exporters_refused_total`                     | Counter | Datagrams left unattributed at the exporter budget   |
 | `xflow_aggregation_entries`                         | Gauge   | Entries held per `aggregation` table                 |
 | `xflow_aggregation_evictions_total`                 | Counter | Idle entries evicted per `aggregation`               |
 | `xflow_aggregation_overflow_records_total`          | Counter | Records folded into `other` by the entry bound       |
@@ -75,6 +75,18 @@ These series describe the exporter itself. They have no module flag.
 | `xflow_remote_write_failures_total`                 | Counter | Writes that failed                                   |
 | `xflow_remote_write_samples_total`                  | Counter | Samples shipped, one per series per write            |
 | `xflow_remote_write_last_success_timestamp_seconds` | Gauge   | Unix time of the last accepted write                 |
+
+### Observation domains
+
+`xflow_templates`, `xflow_sequence_missed_total` and `xflow_sampling_rate`
+carry `exporter`, `version` and `odid`. A domain is that triple, not the
+identifier alone: the three protocols number their domains independently, so
+one number from one device names as many domains as it speaks protocols.
+
+`odid` is short for what each protocol calls the field, because they do not
+agree — NetFlow v9 says Source ID, IPFIX says Observation Domain ID, sFlow
+says sub-agent id. Spelling out any one of them would put that protocol's word
+on a series whose `version` names another.
 
 ### Reason values
 

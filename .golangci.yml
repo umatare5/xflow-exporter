@@ -4,7 +4,7 @@ version: "2"
 # 1. Execution settings
 ########################
 run:
-  timeout: 5m                      # Keep the original timeout
+  timeout: 5m
   tests: true                      # Analyze *_test.go files as well
   issues-exit-code: 1              # Fail CI if any issue is found
 
@@ -241,7 +241,7 @@ formatters:
       sections:
         - standard
         - default
-        - prefix(github.com/umatare5)  # Adjust to your module root
+        - prefix(github.com/umatare5)
     gofumpt:
       extra:
         group-params: true

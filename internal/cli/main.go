@@ -14,7 +14,7 @@ import (
 	"github.com/umatare5/xflow-exporter/internal/server"
 )
 
-// NewApp creates a new CLI application.
+// NewApp builds the CLI application, runs it against os.Args and exits the process on failure.
 func NewApp() *cli.Command {
 	cmd := &cli.Command{
 		Name:    "xflow-exporter",
@@ -126,7 +126,7 @@ func registerReceiverFlags() []cli.Flag {
 		},
 		&cli.IntFlag{
 			Name:     "receiver.workers",
-			Usage:    "Decode workers consuming the queue (0 sizes to the CPU count)",
+			Usage:    "Decode workers consuming the queue (0 sizes to GOMAXPROCS)",
 			Value:    config.DefaultReceiverWorkers,
 			Category: "* Receiver Options",
 		},
@@ -168,13 +168,13 @@ func registerAggregationFlags() []cli.Flag {
 		},
 		&cli.IntFlag{
 			Name:     "aggregation.top-k",
-			Usage:    "Entries each table publishes as their own series, folding the rest into other",
+			Usage:    "Entries each table publishes as their own series, the rest withheld",
 			Value:    config.DefaultAggregationTopK,
 			Category: "* Aggregation Options",
 		},
 		&cli.Int64Flag{
 			Name:     "aggregation.min-bytes",
-			Usage:    "Bytes below which an entry folds into other at scrape time (0 publishes all)",
+			Usage:    "Bytes below which an entry is withheld at scrape time (0 publishes all)",
 			Value:    config.DefaultAggregationMinBytes,
 			Category: "* Aggregation Options",
 		},
@@ -216,19 +216,19 @@ func registerCollectorFlags() []cli.Flag {
 		},
 		&cli.BoolFlag{
 			Name:        "collector.dscp",
-			Usage:       "Enable DSCP class metrics, for devices that export the TOS byte",
+			Usage:       "Enable DSCP class metrics, from the TOS byte or the exported code point",
 			Category:    "# Collector Options",
 			HideDefault: true,
 		},
 		&cli.BoolFlag{
 			Name:        "collector.asns",
-			Usage:       "Enable AS pair metrics from device-exported AS numbers",
+			Usage:       "Enable AS pair metrics, from device-exported numbers or --enrich.asn-database",
 			Category:    "# Collector Options",
 			HideDefault: true,
 		},
 		&cli.BoolFlag{
 			Name:        "collector.applications",
-			Usage:       "Enable application metrics from AVC, App-ID or applicationId",
+			Usage:       "Enable application metrics from AVC, App-ID, applicationId or --enrich.services",
 			Category:    "# Collector Options",
 			HideDefault: true,
 		},

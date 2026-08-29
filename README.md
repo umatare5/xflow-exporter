@@ -20,7 +20,7 @@ This exporter receives flow records from on-premises network devices and serves 
 
 ## Architecture
 
-Prometheus is pull-based, while flow export is push-based. This exporter is the bridge between the two: devices push flow datagrams into it, and Prometheus pulls aggregates out of it.
+Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it.
 
 ```mermaid
 flowchart TB
@@ -71,16 +71,19 @@ NetFlow v5/v8/v9, NetFlow-Lite, IPFIX and sFlow v5, over plaintext UDP. See [doc
 
 Each data collector is enabled per module:
 
-| Module                      | Publishes                                        |
-| :-------------------------- | :----------------------------------------------- |
-| `--collector.exporters`     | Per-device traffic by `exporter` and `version`   |
-| `--collector.hosts`         | Traffic per source-destination address pair      |
-| `--collector.services`      | Traffic per address pair, protocol and port      |
-| `--collector.asns`          | Traffic per AS pair from device-exported numbers |
-| `--collector.applications`  | Traffic per AVC / App-ID / applicationId name    |
-| `--collector.countries`     | Traffic per country pair, needs a geo database   |
-| `--collector.threats`       | Traffic per flagged address, needs a list file   |
-| `--collector.distributions` | Flow size and duration native histograms         |
+| Module                      | Publishes                                          |
+| :-------------------------- | :------------------------------------------------- |
+| `--collector.exporters`     | Per-device traffic by `exporter` and `version`     |
+| `--collector.hosts`         | Traffic per source-destination address pair        |
+| `--collector.services`      | Traffic per address pair, protocol and port        |
+| `--collector.destinations`  | Traffic per destination address, protocol and port |
+| `--collector.tcp-flags`     | Traffic per TCP control-bit profile                |
+| `--collector.dscp`          | Traffic per DSCP class from the exported TOS byte  |
+| `--collector.asns`          | Traffic per AS pair from device-exported numbers   |
+| `--collector.applications`  | Traffic per AVC / App-ID / applicationId name      |
+| `--collector.countries`     | Traffic per country pair from a country database   |
+| `--collector.threats`       | Traffic per flagged address, needs a list file     |
+| `--collector.distributions` | Flow size and duration native histograms           |
 
 Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from its port, and `--enrich.asn-database`, `--enrich.country-database` and `--enrich.threat-file` read files held locally. See [docs/README.md](docs/README.md#enrichment).
 
