@@ -54,18 +54,25 @@ scrape_configs:
     #     - xflow_dscp_packets_total
     #
     # metric_relabel_configs:
-    #   # Keep the busiest services and let the rest go. Note what this cannot
-    #   # do: it selects by label, never by rank, so the "busiest" has to be
+    #   # Shed the chattiest services and keep the rest. Note what this cannot
+    #   # do: it selects by label, never by rank, so the ones to shed have to be
     #   # spelled as a label match rather than as a number.
     #   - source_labels: [__name__, port]
-    #     regex: "xflow_service_.*;(80|443|53|22)"
-    #     action: keep
+    #     regex: "xflow_service_.*;(137|138|1900|5353)"
+    #     action: drop
     #
-    # A drop rule written against the fold will remove it. Every aggregation
-    # family carries one series whose labels all read "other", holding what the
-    # entry bound rejected at ingest -- the only record of traffic no other
-    # series of that family has ever published. A rule matching exporter="other"
-    # or src="other" deletes it and leaves every sum() short with nothing in the
-    # data to say so.
+    # Written as a drop and not a keep on purpose. A keep is evaluated against
+    # every sample of the scrape, not against the family it names, so a keep
+    # written for one family deletes all the others -- the self-monitoring
+    # series every alerting rule here reads included. Nothing reports it: up
+    # stays 1, the scrape still succeeds, and the alerts are simply silent from
+    # then on.
+    #
+    # A rule written against the fold will remove it, and so will a keep that
+    # merely fails to name it. Every aggregation family carries one series whose
+    # labels all read "other", holding what the entry bound rejected at ingest
+    # -- the only record of traffic no other series of that family has ever
+    # published. A rule matching exporter="other" or src="other" deletes it and
+    # leaves every sum() short with nothing in the data to say so.
     #
     # sample_limit: 100000

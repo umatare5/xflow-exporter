@@ -35,13 +35,6 @@
       "depNameTemplate": "prometheus/prometheus",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v(?<version>.+)$"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^\\.github/workflows/govulncheck\\.yml$/"],
-      "matchStrings": ["golang\\.org/x/vuln/cmd/govulncheck@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
-      "depNameTemplate": "golang.org/x/vuln",
-      "datasourceTemplate": "go"
     }
   ]
 }

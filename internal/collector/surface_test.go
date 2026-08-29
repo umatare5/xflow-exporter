@@ -140,7 +140,12 @@ func gatherFamilies(t *testing.T, appName string) []*dto.MetricFamily {
 	neighbor.AppName = neighborApplication
 	neighbor.DstPort = 22
 	agg.Ingest([]flow.Record{r, neighbor})
-	c.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation)
+	c.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation, func(as uint32) (string, bool) {
+		if as == 64500 {
+			return "Example Networks", true
+		}
+		return "", false
+	})
 
 	families, err := c.Registry().Gather()
 	if err != nil {
@@ -211,7 +216,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	r.Start = time.Unix(1_756_300_000, 0)
 	r.End = r.Start.Add(15 * time.Second)
 	agg.Ingest([]flow.Record{r})
-	c.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation)
+	c.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation, nil)
 
 	dist := c.RegisterDistributions()
 	dist.Observe([]flow.Record{r})

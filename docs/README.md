@@ -61,12 +61,12 @@ Every source is off by default and enabled per `--enrich.*` flag.
 
 The sources are these.
 
-| Flag                    | Fills                                    |
-| :---------------------- | :--------------------------------------- |
-| `--enrich.services`     | The application, from the transport port |
-| `--enrich.asn-database` | The AS numbers, from a MaxMind-format DB |
+| Flag                        | Fills                                    |
+| :-------------------------- | :--------------------------------------- |
+| `--enrich.services`         | The application, from the transport port |
+| `--enrich.asn-database`     | The AS numbers, from a MaxMind-format DB |
 | `--enrich.country-database` | The ISO country codes, from the same     |
-| `--enrich.threat-file`  | A flag on addresses a list file names    |
+| `--enrich.threat-file`      | A flag on addresses a list file names    |
 
 A database path that cannot be opened fails startup rather than enriching
 nothing in silence. Neither database ships with this exporter: point the flags
@@ -176,11 +176,19 @@ protocol cannot choose its senders.
   `xflow_applications_refused_total` and leaves that application numbered
   rather than named; the ones already announced keep resolving and keep
   refreshing.
+- **Exporting devices** — the source address is the sender's own claim, so the
+  process holds decode statistics for at most 65536 devices. A refusal raises
+  `xflow_exporters_refused_total` and leaves that device without statistics:
+  its datagrams still decode and still reach every aggregation table, but
+  reach no `xflow_flows_total`, `xflow_decode_errors_total` or
+  `xflow_last_flow_timestamp_seconds`.
+- **Idle devices** — swept on the template TTL, but only once that budget is
+  reached. Below it a device that has gone silent keeps its freshness series,
+  which is the one thing an alert on silence has to read.
 
-Maps keyed by the source address alone — the decode statistics, the
-per-device application tables, the distribution histograms — are bounded by
-restricting the receiver to permitted senders. See
-[SECURITY.md](../SECURITY.md).
+Maps keyed by the source address alone — the per-device application tables,
+the distribution histograms — are bounded by restricting the receiver to
+permitted senders. See [SECURITY.md](../SECURITY.md).
 
 ### Templates
 

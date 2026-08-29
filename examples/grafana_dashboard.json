@@ -2163,7 +2163,7 @@
     {
       "type": "timeseries",
       "title": "Refusals",
-      "description": "Bounds the wire cannot exceed. Each is a device, or an attacker, being held to a budget: a refused announcement is a name that falls back to its number, a refused domain is one the per-device budget turned away.",
+      "description": "Bounds the wire cannot exceed. Each is a device, or an attacker, being held to a budget: a refused announcement is a name that falls back to its number, a refused domain is one the per-device budget turned away, a refused exporter is a device the process budget turned away, leaving its datagrams out of every per-device series.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -2208,6 +2208,17 @@
           "legendFormat": "vendor strings",
           "range": true,
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "rate(xflow_exporters_refused_total[$rollup_interval])",
+          "legendFormat": "exporters",
+          "range": true,
+          "refId": "D"
         }
       ],
       "fieldConfig": {

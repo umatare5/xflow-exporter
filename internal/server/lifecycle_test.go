@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
@@ -123,5 +124,47 @@ func TestStartAndServe_WithImmediateCancel(t *testing.T) {
 
 	if err := server.StartAndServe(ctx, cfg, "test-version"); err != nil {
 		t.Errorf("StartAndServe() with canceled context returned error: %v", err)
+	}
+}
+
+// TestLifecycleManager_RunReturnsWhenTheServerCannotListen is the regression
+// test for a process that hung instead of reporting why. The SIGHUP watcher's
+// release waited on the context, and the cancel that ends that context is
+// deferred before it, so it ran after -- leaving the exporter alive with no
+// HTTP listener, no error logged, and the receive socket still held, which is
+// what a replacement instance needs. Nothing restarts a process that has not
+// exited.
+//
+// A taken port is the everyday way in, so the test takes one.
+func TestLifecycleManager_RunReturnsWhenTheServerCannotListen(t *testing.T) {
+	t.Parallel()
+
+	held, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen() error = %v", err)
+	}
+	defer held.Close()
+
+	port := held.Addr().(*net.TCPAddr).Port
+	cfg := &config.Config{
+		Web: config.Web{
+			ListenAddress: "127.0.0.1",
+			ListenPort:    port,
+			TelemetryPath: config.DefaultTelemetryPath,
+		},
+	}
+
+	mgr := server.NewLifecycleManager(prometheus.NewRegistry(), cfg, &stubReloader{})
+
+	returned := make(chan error, 1)
+	go func() { returned <- mgr.Run(context.Background()) }()
+
+	select {
+	case err := <-returned:
+		if err == nil {
+			t.Error("Run() = nil, want the listen failure reported")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() never returned after the server failed to listen")
 	}
 }

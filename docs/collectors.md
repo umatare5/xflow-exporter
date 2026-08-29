@@ -24,7 +24,7 @@ Each table family carries three metrics sharing one label set: `_bytes_total` an
 - `exporter` — the device's UDP source address, IPv4-mapped addresses unmapped.
 - `port` — the destination port: the service side of the conversation as exported.
 - `proto` — the conventional protocol name for the common IANA numbers, the number itself otherwise.
-- `src_asn`/`dst_asn` — as exported, where `0` is a device that did not know the AS and no database placed the address. A record with neither AS feeds no entry.
+- `src_asn`/`dst_asn` — as exported, where `0` is a device that did not know the AS and no database placed the address. A record with neither AS feeds no entry. Where `--enrich.asn-database` is set, `xflow_asn_info{asn,organization}` names each AS the table holds, on its own series: a database respelling a company would otherwise break every counter it touches, and the table is Top-K bounded while a database names every AS there is. An AS no lookup resolved carries no name, which a join shows by finding nothing to join to.
 - `application` — the device-announced AVC name, the inline vendor string, or the `engine:selector` split of `applicationId` when only the number is known. `--enrich.services` fills it from the transport port where none of those exist.
 - `src_country`/`dst_country` — ISO codes from `--enrich.country-database`, `private` for an address on a LAN and `unknown` for a routable one the database could not place. Private means what Go's `netip` means by it, RFC 1918 and the IPv6 unique local range and nothing wider: shared address space, loopback and link-local have no country either but are not private, and naming them so would be the guess this distinction exists to avoid. A record neither side of which resolved feeds no entry.
 - `address`/`direction` — a single address a threat list names and the side it was seen on. Only flagged addresses appear, so the table holds what is worth acting on rather than one entry per address seen.
@@ -47,21 +47,22 @@ These series describe the exporter itself. They have no module flag.
 | Metric                                              | Type    | Description                                          |
 | :-------------------------------------------------- | :------ | :--------------------------------------------------- |
 | `xflow_build_info`                                  | Gauge   | Exporter version in the `version` label, always 1    |
-| `xflow_receiver_packets_total`                      | Counter | Datagrams received per `listener`, dropped included  |
+| `xflow_receiver_packets_total`                      | Counter | Datagrams read per `listener`, drops included        |
 | `xflow_receiver_bytes_total`                        | Counter | Payload bytes received per `listener`                |
 | `xflow_receiver_read_errors_total`                  | Counter | Socket read failures per `listener`                  |
-| `xflow_receiver_dropped_packets_total`              | Counter | Drops per `listener` and `reason` before decoding    |
-| `xflow_receiver_queue_length`                       | Gauge   | Datagrams waiting between read loops and decoders    |
+| `xflow_receiver_dropped_packets_total`              | Counter | Pre-decode drops per `listener` and `reason`         |
+| `xflow_receiver_queue_length`                       | Gauge   | Datagrams queued ahead of the decoders               |
 | `xflow_receiver_queue_capacity`                     | Gauge   | Bound of that queue                                  |
 | `xflow_flows_total`                                 | Counter | Records decoded per `exporter` and `version`         |
 | `xflow_decode_errors_total`                         | Counter | Rejections per `exporter`, `version` and `reason`    |
-| `xflow_last_flow_timestamp_seconds`                 | Gauge   | Unix time of the exporter's last decoded datagram    |
+| `xflow_last_flow_timestamp_seconds`                 | Gauge   | Unix time of the exporter's last decode              |
 | `xflow_templates`                                   | Gauge   | Unexpired templates per domain and `type`            |
 | `xflow_sequence_missed_total`                       | Counter | Export packets lost per domain                       |
 | `xflow_sampling_rate`                               | Gauge   | Declared sampling rate, absent until one arrives     |
 | `xflow_domains_refused_total`                       | Counter | Observation domains refused at the per-device budget |
 | `xflow_vendor_strings_refused_total`                | Counter | Vendor strings refused as unrepresentable            |
 | `xflow_applications_refused_total`                  | Counter | Announcements refused at the per-device app budget   |
+| `xflow_exporters_refused_total`                     | Counter | Attributions refused at the process exporter budget  |
 | `xflow_aggregation_entries`                         | Gauge   | Entries held per `aggregation` table                 |
 | `xflow_aggregation_evictions_total`                 | Counter | Idle entries evicted per `aggregation`               |
 | `xflow_aggregation_overflow_records_total`          | Counter | Records folded into `other` by the entry bound       |

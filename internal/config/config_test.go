@@ -594,3 +594,39 @@ func TestIsValidLogFormat(t *testing.T) {
 		})
 	}
 }
+
+// TestValidate_ListenAddressNamesAnInterface pins the rule the receiver
+// address already carried and the listen address did not. The port is a flag
+// of its own here, so a value carrying one joins to host:port:port and binds
+// nothing -- and until the listen failure was made to report itself, a
+// configuration this accepted left the process running with no HTTP listener.
+func TestValidate_ListenAddressNamesAnInterface(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		address string
+		wantErr bool
+	}{
+		{address: "", wantErr: false},
+		{address: "0.0.0.0", wantErr: false},
+		{address: "127.0.0.1", wantErr: false},
+		{address: "::1", wantErr: false},
+		{address: "not-an-address", wantErr: true},
+		{address: "0.0.0.0:10052", wantErr: true},
+		{address: "127.0.0.1:", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.address, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := validConfig()
+			cfg.Web.ListenAddress = tt.address
+
+			err := cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}

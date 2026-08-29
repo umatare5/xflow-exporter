@@ -95,6 +95,10 @@ type FlowCollector struct {
 	tcpFlags     familyDescs
 	dscp         familyDescs
 	asns         familyDescs
+	// asnNames answers what a database calls an AS, nil where no ASN
+	// database is enabled.
+	asnNames     func(uint32) (string, bool)
+	asnInfoDesc  *prometheus.Desc
 	applications familyDescs
 	countries    familyDescs
 	threats      familyDescs
@@ -105,9 +109,14 @@ type FlowCollector struct {
 }
 
 // NewFlowCollector creates a collector over the aggregator.
-func NewFlowCollector(src FlowSource, modules config.Collectors, agg config.Aggregation) *FlowCollector {
+// asnNames answers what a database calls an AS. It is nil where no ASN
+// database is enabled, and the naming series is then absent rather than empty.
+func NewFlowCollector(
+	src FlowSource, modules config.Collectors, agg config.Aggregation, asnNames func(uint32) (string, bool),
+) *FlowCollector {
 	c := &FlowCollector{
 		src:      src,
+		asnNames: asnNames,
 		modules:  modules,
 		topK:     agg.TopK,
 		minBytes: uint64(agg.MinBytes), //nolint:gosec // Validate rejects negatives.
@@ -155,6 +164,11 @@ func NewFlowCollector(src FlowSource, modules config.Collectors, agg config.Aggr
 	if modules.ASNs {
 		c.asns = newFamilyDescs("xflow_asn_pair", "AS pair",
 			[]string{labelExporter, labelSrcASN, labelDstASN})
+		c.asnInfoDesc = prometheus.NewDesc(
+			"xflow_asn_info",
+			"Always 1, carrying what a database calls each AS the pair table holds",
+			[]string{labelASN, labelOrg}, nil,
+		)
 	}
 	if modules.Applications {
 		c.applications = newFamilyDescs("xflow_application", "application",
@@ -194,6 +208,9 @@ func (c *FlowCollector) Describe(ch chan<- *prometheus.Desc) {
 	}
 	if c.modules.ASNs {
 		c.asns.describe(ch)
+		if c.asnInfoDesc != nil {
+			ch <- c.asnInfoDesc
+		}
 	}
 	if c.modules.Applications {
 		c.applications.describe(ch)
@@ -238,6 +255,7 @@ func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 	if c.modules.ASNs {
 		collectFamily(c, ch, &c.asns, c.src.ASNs, asnLabels)
+		c.collectASNNames(ch)
 	}
 	if c.modules.Applications {
 		collectFamily(c, ch, &c.applications, c.src.Applications, appLabels)
@@ -357,6 +375,39 @@ func dscpLabels(k aggregator.DSCPKey) []string {
 	return []string{k.Exporter.String(), dscpName(k.DSCP)}
 }
 
+// collectASNNames publishes what a database calls each AS the pair table
+// holds. The name rides its own series rather than the counters': a database
+// respelling a company would otherwise break every counter it touches, and
+// the pair table is Top-K bounded while a database names every AS there is.
+// An AS no lookup resolved carries no name and so no series, which a join
+// shows by finding nothing to join to.
+func (c *FlowCollector) collectASNNames(ch chan<- prometheus.Metric) {
+	if c.asnNames == nil {
+		return
+	}
+
+	entries, _ := c.src.ASNs()
+	named := make(map[uint32]struct{}, len(entries))
+	for _, e := range entries {
+		for _, as := range [2]uint32{e.Key.SrcAS, e.Key.DstAS} {
+			if as == 0 {
+				continue
+			}
+			if _, done := named[as]; done {
+				continue
+			}
+			named[as] = struct{}{}
+
+			org, ok := c.asnNames(as)
+			if !ok {
+				continue
+			}
+			ch <- prometheus.MustNewConstMetric(c.asnInfoDesc, prometheus.GaugeValue, 1,
+				strconv.FormatUint(uint64(as), 10), org)
+		}
+	}
+}
+
 func asnLabels(k aggregator.ASNKey) []string {
 	return []string{
 		k.Exporter.String(),
@@ -463,8 +514,16 @@ func tcpFlagNames(flags uint8) string {
 	return b.String()
 }
 
-// dscpNames maps the code points RFC 2474, 2597 and 3246 assign to a class.
-// A point outside them is a local convention this exporter cannot name.
+// dscpNames holds every code point the IANA registry names.
+//
+// An unnamed point is not thereby a local convention. Only pool 2, the xxxx11
+// points, is reserved for experimental or local use; elsewhere an unnamed
+// point is unassigned standards space, where a name invented here would
+// collide with a later registration. The unnamed traffic a campus actually
+// carries is neither: 2, 4 and 5 are what a stack still marking the byte the
+// way RFC 791 read it produces, and they mean maximize throughput, minimize
+// delay, and both delay and reliability. Nothing on the wire separates that
+// reading from a DiffServ one, so the number stands rather than a guess.
 var dscpNames = map[uint8]string{
 	0: "cs0", 8: "cs1", 16: "cs2", 24: "cs3",
 	32: "cs4", 40: "cs5", 48: "cs6", 56: "cs7",
@@ -472,7 +531,7 @@ var dscpNames = map[uint8]string{
 	18: "af21", 20: "af22", 22: "af23",
 	26: "af31", 28: "af32", 30: "af33",
 	34: "af41", 36: "af42", 38: "af43",
-	44: "voice-admit", 46: "ef",
+	1: "le", 44: "voice-admit", 45: "nqb", 46: "ef",
 }
 
 // dscpName renders the code point as the class it names, the number

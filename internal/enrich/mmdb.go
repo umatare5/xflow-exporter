@@ -6,6 +6,7 @@ package enrich
 import (
 	"fmt"
 	"net/netip"
+	"sync"
 	"sync/atomic"
 
 	"github.com/oschwald/maxminddb-golang/v2"
@@ -68,9 +69,22 @@ func (s *mmdbSource) close() error {
 
 // asnRecord is the shape the ASN databases publish. The field names are what
 // both MaxMind GeoLite2-ASN and the DB-IP equivalent record.
+//
+// The organization is a display string rather than an identifier: one release
+// spells a company one way and the next respells it. It never keys a counter
+// for that reason, and travels on its own series where a respelling churns
+// the name and leaves the traffic continuous.
 type asnRecord struct {
-	Number uint32 `maxminddb:"autonomous_system_number"`
+	Number       uint32 `maxminddb:"autonomous_system_number"`
+	Organization string `maxminddb:"autonomous_system_organization"`
 }
+
+// maxASNNames bounds the names held. A database names every autonomous system
+// on the internet, and a sender choosing its own source addresses decides
+// which of them this process is asked about; the names a link actually needs
+// are the handful its own traffic resolves. Past the bound an AS goes unnamed,
+// which the joined series shows by having no name to join to.
+const maxASNNames = 65536
 
 // countryRecord is the shape the country and city databases publish. The ISO
 // code is what this exporter labels with: a country name is a display string
@@ -93,6 +107,47 @@ type ASN struct {
 	counters
 	mmdb   mmdbSource
 	lookup func(netip.Addr) (uint32, bool)
+
+	// namesMu guards the names the decode workers fill and a scrape reads.
+	namesMu sync.RWMutex
+	names   map[uint32]string
+}
+
+// note records what the database calls one autonomous system. An empty name
+// is not one, and does not clear the name held: a refreshed file that carries
+// none for an AS it places is the partial refresh a failed reload already
+// answers by leaving the previous database serving.
+func (a *ASN) note(as uint32, org string) {
+	if org == "" {
+		return
+	}
+
+	a.namesMu.RLock()
+	unchanged := a.names[as] == org
+	a.namesMu.RUnlock()
+	if unchanged {
+		return
+	}
+
+	a.namesMu.Lock()
+	defer a.namesMu.Unlock()
+	if a.names == nil {
+		a.names = make(map[uint32]string)
+	}
+	if _, held := a.names[as]; !held && len(a.names) >= maxASNNames {
+		return
+	}
+	a.names[as] = org
+}
+
+// Organization reports what the database calls one autonomous system, and
+// false where no lookup has resolved it.
+func (a *ASN) Organization(as uint32) (string, bool) {
+	a.namesMu.RLock()
+	defer a.namesMu.RUnlock()
+
+	org, ok := a.names[as]
+	return org, ok
 }
 
 // NewASN opens the ASN database at path.
@@ -181,6 +236,7 @@ func (a *ASN) lookupDB(addr netip.Addr) (uint32, bool) {
 	if record.Number == 0 {
 		return 0, false
 	}
+	a.note(record.Number, record.Organization)
 	return record.Number, true
 }
 
