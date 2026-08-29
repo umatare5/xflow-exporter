@@ -56,7 +56,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		return err
 	}
 
-	dec := decoder.New()
+	dec := decoder.New(cfg.Parser)
 
 	// Create and setup collector manager
 	collectorMgr := collector.NewCollector(cfg)

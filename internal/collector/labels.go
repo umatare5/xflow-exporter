@@ -7,4 +7,6 @@ const (
 	labelListener = "listener" // Configured receiver listen address
 	labelReason   = "reason"   // Reason a counter is keyed by
 	labelVersion  = "version"  // Wire protocol a datagram or record arrived in
+	labelODID     = "odid"     // Observation Domain ID (v9 Source ID) within an exporter
+	labelType     = "type"     // Kind a gauge is keyed by
 )

@@ -3,6 +3,8 @@ package decoder
 import (
 	"net/netip"
 	"testing"
+
+	"github.com/umatare5/xflow-exporter/internal/config"
 )
 
 // FuzzDecode asserts that no datagram, however broken, panics the decoder or
@@ -17,11 +19,17 @@ func FuzzDecode(f *testing.F) {
 	f.Add(append(buildV8Header(1, 1), make([]byte, 28)...))
 	f.Add(append(buildV8Header(8, 1), make([]byte, 44)...))
 	f.Add(append(buildV8Header(14, 2), make([]byte, 80)...))
+	f.Add(v9Packet(1, fixtureV9ODID, fixtureV9Template()))
+	f.Add(v9Packet(2, fixtureV9ODID, fixtureV9Template(), flowSet(fixtureV9TemplateID, fixtureV9DataRecord())))
+	f.Add(v9Packet(3, fixtureV9ODID, flowSet(2, []byte{0, 0, 0, 0})))
 
 	exporter := netip.MustParseAddr("192.0.2.99")
 
 	f.Fuzz(func(t *testing.T, payload []byte) {
-		d := New()
+		d := New(config.Parser{
+			MaxFieldsPerTemplate: config.DefaultParserMaxFieldsPerTemplate,
+			TemplateTTL:          config.DefaultParserTemplateTTL,
+		})
 
 		records, err := d.Decode(exporter, payload, nil)
 		if err != nil && len(records) != 0 {

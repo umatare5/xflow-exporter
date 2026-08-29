@@ -51,6 +51,7 @@ func registerFlags() []cli.Flag {
 	flags := []cli.Flag{}
 	flags = append(flags, registerWebFlags()...)
 	flags = append(flags, registerReceiverFlags()...)
+	flags = append(flags, registerParserFlags()...)
 	flags = append(flags, registerLogFlags()...)
 	flags = append(flags, registerUtilityFlags()...)
 	flags = append(flags, registerInternalCollectorFlags()...)
@@ -119,6 +120,24 @@ func registerReceiverFlags() []cli.Flag {
 			Usage:    "Decode workers consuming the queue (0 sizes to the CPU count)",
 			Value:    config.DefaultReceiverWorkers,
 			Category: "* Receiver Options",
+		},
+	}
+}
+
+// registerParserFlags defines flags for the protocol parser limits.
+func registerParserFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.IntFlag{
+			Name:     "parser.max-fields-per-template",
+			Usage:    "Most fields one NetFlow v9 or IPFIX template may declare",
+			Value:    config.DefaultParserMaxFieldsPerTemplate,
+			Category: "* Parser Options",
+		},
+		&cli.DurationFlag{
+			Name:     "parser.template-ttl",
+			Usage:    "How long an unrefreshed template stays usable",
+			Value:    config.DefaultParserTemplateTTL,
+			Category: "* Parser Options",
 		},
 	}
 }

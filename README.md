@@ -24,11 +24,13 @@ This exporter receives traffic flow records from on-premises network devices —
 | :------------------------------ | :-------- |
 | NetFlow v5 (incl. J-Flow v5)    | Supported |
 | NetFlow v8 (incl. J-Flow v8)    | Supported |
-| NetFlow v9 (incl. FNF, J-Flow)  | Planned   |
+| NetFlow v9 (incl. FNF, J-Flow)  | Supported |
 | IPFIX / NetFlow v10             | Planned   |
 | sFlow v5                        | Planned   |
 
 NetFlow v8 covers all fourteen aggregation methods of aggregation export version 2. A v8 record is pre-aggregated on the router, so it carries only its method's dimensions and the rest stay absent.
+
+NetFlow v9 templates are cached per exporter address and Observation Domain ID together, as RFC 7011 requires, so two domains reusing one template ID never corrupt each other. A template is refused when it declares a zero-width field or more than `--parser.max-fields-per-template` fields, and expires after `--parser.template-ttl` without a re-announcement. Options templates feed the sampling rate, which is stamped onto decoded records and published as `xflow_sampling_rate`.
 
 Transport is plaintext UDP. DTLS is not supported: no shipping network OS exports flows over DTLS, and Go has no production DTLS 1.3 implementation yet.
 
@@ -61,6 +63,11 @@ GLOBAL OPTIONS:
    --receiver.max-packet-size int                           Largest datagram in bytes kept whole; larger ones are dropped (default: 9216)
    --receiver.queue-size int                                Datagrams buffered between the read loops and the decoders (default: 8192)
    --receiver.workers int                                   Decode workers consuming the queue (0 sizes to the CPU count) (default: 0)
+
+   * Parser Options
+
+   --parser.max-fields-per-template int  Most fields one NetFlow v9 or IPFIX template may declare (default: 128)
+   --parser.template-ttl duration        How long an unrefreshed template stays usable (default: 30m0s)
 ```
 
 Every listener accepts every supported protocol, identified per datagram, so one port can carry NetFlow and IPFIX together and an sFlow deployment adds `--receiver.address :6343` rather than a mode switch. On Linux the read loops use `recvmmsg` batching; other platforms read one datagram per call, so performance figures are Linux figures.
@@ -91,10 +98,13 @@ These series describe the exporter itself. They have no module and no collector 
 | `xflow_flows_total`                    | Counter | Records decoded per `exporter` and `version`         |
 | `xflow_decode_errors_total`            | Counter | Rejections per `exporter`, `version` and `reason`    |
 | `xflow_last_flow_timestamp_seconds`    | Gauge   | Unix time of the exporter's last decoded datagram    |
+| `xflow_templates`                      | Gauge   | Unexpired templates per `exporter`, `odid`, `type`   |
+| `xflow_sequence_missed_total`          | Counter | Export packets lost per `exporter` and `odid`        |
+| `xflow_sampling_rate`                  | Gauge   | Declared sampling rate, absent until one arrives     |
 
 On `xflow_receiver_dropped_packets_total`, `reason` is `queue_full` for a burst the queue could not absorb and `truncated` for a datagram larger than `--receiver.max-packet-size`. Both series are seeded at 0, so a first drop is a rise on a series that was already there.
 
-On `xflow_decode_errors_total`, `reason` is `unsupported_version` for a datagram no decoder claims, `malformed` for one whose claimed structure does not fit its bytes, and `unsupported_aggregation` for a NetFlow v8 aggregation method outside the fourteen this exporter knows. Exporter-labeled series appear on a device's first datagram: a push protocol cannot know its senders in advance.
+On `xflow_decode_errors_total`, `reason` is `unsupported_version` for a datagram no decoder claims, `malformed` for one whose claimed structure does not fit its bytes, and `unsupported_aggregation` for a NetFlow v8 aggregation method outside the fourteen this exporter knows. The template protocols add `missing_template`, expected after a restart until each device re-announces; `invalid_template` for an announcement the limits refuse; and `reserved_set` for a flowset in the reserved 2-255 range. Exporter-labeled series appear on a device's first datagram: a push protocol cannot know its senders in advance.
 
 Alert on freshness with `time() - xflow_last_flow_timestamp_seconds`: a device that goes silent stops moving its timestamp while every counter freezes, and nothing else can tell that from a healthy quiet network.
 

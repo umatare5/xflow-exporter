@@ -3,6 +3,8 @@
 package collector
 
 import (
+	"strconv"
+
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/umatare5/xflow-exporter/internal/decoder"
@@ -11,6 +13,7 @@ import (
 // DecoderSource is what this collector reads from the decode stage.
 type DecoderSource interface {
 	Stats() *decoder.Stats
+	Domains() []decoder.DomainSnapshot
 }
 
 // DecoderCollector reports what the decoders made of the received datagrams.
@@ -22,6 +25,10 @@ type DecoderCollector struct {
 	flowsDesc    *prometheus.Desc
 	errorsDesc   *prometheus.Desc
 	lastFlowDesc *prometheus.Desc
+
+	templatesDesc *prometheus.Desc
+	seqMissedDesc *prometheus.Desc
+	samplingDesc  *prometheus.Desc
 }
 
 // NewDecoderCollector creates a collector reporting decode outcomes.
@@ -43,6 +50,21 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 			"Unix time the exporter's last datagram decoded, absent until one has",
 			[]string{labelExporter}, nil,
 		),
+		templatesDesc: prometheus.NewDesc(
+			"xflow_templates",
+			"Unexpired templates held per exporter, observation domain and kind",
+			[]string{labelExporter, labelODID, labelType}, nil,
+		),
+		seqMissedDesc: prometheus.NewDesc(
+			"xflow_sequence_missed_total",
+			"Export packets the sequence numbers say were lost, per observation domain",
+			[]string{labelExporter, labelODID}, nil,
+		),
+		samplingDesc: prometheus.NewDesc(
+			"xflow_sampling_rate",
+			"Packet sampling rate the domain's options declared, absent until one arrives",
+			[]string{labelExporter, labelODID}, nil,
+		),
 	}
 }
 
@@ -51,6 +73,9 @@ func (c *DecoderCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.flowsDesc
 	ch <- c.errorsDesc
 	ch <- c.lastFlowDesc
+	ch <- c.templatesDesc
+	ch <- c.seqMissedDesc
+	ch <- c.samplingDesc
 }
 
 // Collect implements prometheus.Collector by reading the decode counters.
@@ -77,6 +102,40 @@ func (c *DecoderCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				c.lastFlowDesc, prometheus.GaugeValue,
 				float64(snap.LastFlowUnixNano)/nanosPerSecond, exporter)
+		}
+	}
+
+	c.collectDomains(ch)
+}
+
+// The template kinds published in the type label.
+const (
+	templateKindData    = "template"
+	templateKindOptions = "options_template"
+)
+
+// collectDomains reports the per-observation-domain state.
+func (c *DecoderCollector) collectDomains(ch chan<- prometheus.Metric) {
+	for _, domain := range c.src.Domains() {
+		exporter := domain.Exporter.String()
+		odid := strconv.FormatUint(uint64(domain.ODID), 10)
+
+		ch <- prometheus.MustNewConstMetric(
+			c.templatesDesc, prometheus.GaugeValue,
+			float64(domain.Templates), exporter, odid, templateKindData)
+		ch <- prometheus.MustNewConstMetric(
+			c.templatesDesc, prometheus.GaugeValue,
+			float64(domain.OptionsTemplates), exporter, odid, templateKindOptions)
+		ch <- prometheus.MustNewConstMetric(
+			c.seqMissedDesc, prometheus.CounterValue,
+			float64(domain.SequenceMissed), exporter, odid)
+
+		// A domain that has not declared a rate has no series: a zero here
+		// would read as sampling switched off rather than unknown.
+		if domain.SamplingRate > 0 {
+			ch <- prometheus.MustNewConstMetric(
+				c.samplingDesc, prometheus.GaugeValue,
+				float64(domain.SamplingRate), exporter, odid)
 		}
 	}
 }

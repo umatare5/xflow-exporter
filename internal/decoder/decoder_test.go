@@ -6,8 +6,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/umatare5/xflow-exporter/internal/config"
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
+
+// newTestDecoder builds a decoder with the default parser limits.
+func newTestDecoder() *Decoder {
+	return New(config.Parser{
+		MaxFieldsPerTemplate: config.DefaultParserMaxFieldsPerTemplate,
+		TemplateTTL:          config.DefaultParserTemplateTTL,
+	})
+}
 
 func TestSniffVersion(t *testing.T) {
 	t.Parallel()
@@ -48,7 +57,7 @@ func TestDecoder_DecodeAccountsSuccess(t *testing.T) {
 	t.Parallel()
 
 	at := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
-	d := New()
+	d := newTestDecoder()
 	d.now = func() time.Time { return at }
 
 	records, err := d.Decode(testExporter, buildV5Packet(2), nil)
@@ -81,7 +90,7 @@ func TestDecoder_DecodeAccountsSuccess(t *testing.T) {
 func TestDecoder_DecodeAccountsRejections(t *testing.T) {
 	t.Parallel()
 
-	d := New()
+	d := newTestDecoder()
 
 	// A structurally broken v5 datagram.
 	broken := buildV5Packet(1)
@@ -115,12 +124,11 @@ func TestDecoder_DecodeAccountsRejections(t *testing.T) {
 func TestDecoder_DecodeRejectsSniffedButUnimplementedVersions(t *testing.T) {
 	t.Parallel()
 
-	d := New()
+	d := newTestDecoder()
 
 	payloads := map[string][]byte{
-		"netflow_v9": {0x00, 0x09, 0x00, 0x00},
-		"ipfix":      {0x00, 0x0A, 0x00, 0x10},
-		"sflow_v5":   {0x00, 0x00, 0x00, 0x05},
+		"ipfix":    {0x00, 0x0A, 0x00, 0x10},
+		"sflow_v5": {0x00, 0x00, 0x00, 0x05},
 	}
 
 	for version, payload := range payloads {
@@ -153,7 +161,7 @@ func TestDecoder_DecodeRejectsSniffedButUnimplementedVersions(t *testing.T) {
 func TestDecoder_DecodeTruncatesPartialAppends(t *testing.T) {
 	t.Parallel()
 
-	d := New()
+	d := newTestDecoder()
 
 	records, _ := d.Decode(testExporter, buildV5Packet(2), nil)
 	if len(records) != 2 {
@@ -175,7 +183,7 @@ func TestDecoder_DecodeTruncatesPartialAppends(t *testing.T) {
 func TestStats_ExporterIsSharedAcrossVersions(t *testing.T) {
 	t.Parallel()
 
-	d := New()
+	d := newTestDecoder()
 	other := netip.MustParseAddr("192.0.2.2")
 
 	if _, err := d.Decode(testExporter, buildV5Packet(1), nil); err != nil {

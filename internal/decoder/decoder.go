@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/umatare5/xflow-exporter/internal/config"
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
@@ -23,6 +24,17 @@ const (
 	// ReasonUnsupportedAggregation marks a NetFlow v8 datagram whose
 	// aggregation method this exporter does not know.
 	ReasonUnsupportedAggregation = "unsupported_aggregation"
+	// ReasonMissingTemplate marks a data flowset whose template has not
+	// arrived, which is expected after a restart until the device
+	// re-announces its templates.
+	ReasonMissingTemplate = "missing_template"
+	// ReasonInvalidTemplate marks a template announcement this exporter
+	// refuses: a zero-width field, a field count past the limit, or a
+	// specifier that does not fit its flowset.
+	ReasonInvalidTemplate = "invalid_template"
+	// ReasonReservedSet marks a flowset in the reserved 2-255 range, a
+	// dialect this exporter does not speak.
+	ReasonReservedSet = "reserved_set"
 )
 
 // decodeError carries the reason a datagram was rejected, for the error
@@ -63,17 +75,24 @@ const (
 // outcome. One Decoder serves every worker: the parsers are stateless until
 // the template protocols land, and the statistics are concurrency-safe.
 type Decoder struct {
-	stats *Stats
+	stats     *Stats
+	templates *templateStore
 	// now is the clock flow timestamps are anchored with; a test pins it.
 	now func() time.Time
 }
 
-// New creates a decoder.
-func New() *Decoder {
+// New creates a decoder enforcing the given parser limits.
+func New(cfg config.Parser) *Decoder {
 	return &Decoder{
-		stats: newStats(),
-		now:   time.Now,
+		stats:     newStats(),
+		templates: newTemplateStore(cfg),
+		now:       time.Now,
 	}
+}
+
+// Domains returns the per-observation-domain state for the metrics collector.
+func (d *Decoder) Domains() []DomainSnapshot {
+	return d.templates.snapshot()
 }
 
 // Stats returns the decode statistics for the metrics collector.
@@ -111,7 +130,12 @@ func (d *Decoder) decodeVersion(
 		return decodeNetFlowV5(exporter, payload, dst)
 	case flow.VersionNetFlowV8:
 		return decodeNetFlowV8(exporter, payload, dst)
-	case flow.VersionNetFlowV9, flow.VersionIPFIX, flow.VersionSFlowV5:
+	case flow.VersionNetFlowV9:
+		issue := func(reason string) {
+			d.stats.exporter(exporter).countError(flow.VersionNetFlowV9, reason)
+		}
+		return d.decodeNetFlowV9(exporter, payload, dst, issue)
+	case flow.VersionIPFIX, flow.VersionSFlowV5:
 		// Sniffed but not parsed yet: each lands in its own milestone, and
 		// until then the datagram is rejected rather than half-read.
 		return dst, &decodeError{

@@ -8,8 +8,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	"github.com/umatare5/xflow-exporter/internal/config"
 	"github.com/umatare5/xflow-exporter/internal/decoder"
 )
+
+// newTestDecoder builds a decoder with the default parser limits.
+func newTestDecoder() *decoder.Decoder {
+	return decoder.New(config.Parser{
+		MaxFieldsPerTemplate: config.DefaultParserMaxFieldsPerTemplate,
+		TemplateTTL:          config.DefaultParserTemplateTTL,
+	})
+}
 
 // buildV5 crafts a minimal one-record NetFlow v5 datagram for driving the
 // decoder the collector under test reads.
@@ -25,7 +34,7 @@ func buildV5() []byte {
 func TestDecoderCollector_Describe(t *testing.T) {
 	t.Parallel()
 
-	c := NewDecoderCollector(decoder.New())
+	c := NewDecoderCollector(newTestDecoder())
 
 	ch := make(chan *prometheus.Desc, 8)
 	go func() {
@@ -37,15 +46,15 @@ func TestDecoderCollector_Describe(t *testing.T) {
 	for range ch {
 		count++
 	}
-	if count != 3 {
-		t.Errorf("Describe() emitted %d descriptors, want 3", count)
+	if count != 6 {
+		t.Errorf("Describe() emitted %d descriptors, want 6", count)
 	}
 }
 
 func TestDecoderCollector_EmptyUntilTraffic(t *testing.T) {
 	t.Parallel()
 
-	c := NewDecoderCollector(decoder.New())
+	c := NewDecoderCollector(newTestDecoder())
 
 	if got := testutil.CollectAndCount(c); got != 0 {
 		t.Errorf("CollectAndCount() = %d series before any datagram, want 0", got)
@@ -55,7 +64,7 @@ func TestDecoderCollector_EmptyUntilTraffic(t *testing.T) {
 func TestDecoderCollector_ReportsOutcomes(t *testing.T) {
 	t.Parallel()
 
-	d := decoder.New()
+	d := newTestDecoder()
 	exporter := netip.MustParseAddr("192.0.2.10")
 
 	if _, err := d.Decode(exporter, buildV5(), nil); err != nil {
@@ -86,11 +95,60 @@ xflow_flows_total{exporter="192.0.2.10",version="netflow_v5"} 1
 	}
 }
 
+// buildV9TemplateOnly crafts a v9 datagram announcing one two-field template
+// so the domain series gain a subject.
+func buildV9TemplateOnly() []byte {
+	return []byte{
+		0x00, 0x09, 0x00, 0x01, // version 9, count 1
+		0x00, 0x00, 0x00, 0x00, // sysUptime
+		0x68, 0x00, 0x00, 0x00, // unix_secs
+		0x00, 0x00, 0x00, 0x05, // sequence 5
+		0x00, 0x00, 0x01, 0x00, // source id 256
+		// template flowset: id 0, length 16, template 300 with two fields
+		0x00, 0x00, 0x00, 0x10,
+		0x01, 0x2C, 0x00, 0x02,
+		0x00, 0x01, 0x00, 0x04, // IN_BYTES(4)
+		0x00, 0x02, 0x00, 0x04, // IN_PKTS(4)
+	}
+}
+
+func TestDecoderCollector_ReportsDomainState(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	exporter := netip.MustParseAddr("192.0.2.20")
+
+	if _, err := d.Decode(exporter, buildV9TemplateOnly(), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+
+	c := NewDecoderCollector(d)
+
+	expected := `
+# HELP xflow_sequence_missed_total Export packets the sequence numbers say were lost, per observation domain
+# TYPE xflow_sequence_missed_total counter
+xflow_sequence_missed_total{exporter="192.0.2.20",odid="256"} 0
+# HELP xflow_templates Unexpired templates held per exporter, observation domain and kind
+# TYPE xflow_templates gauge
+xflow_templates{exporter="192.0.2.20",odid="256",type="options_template"} 0
+xflow_templates{exporter="192.0.2.20",odid="256",type="template"} 1
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_templates", "xflow_sequence_missed_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+
+	// No options arrived, so no sampling rate series exists.
+	if got := testutil.CollectAndCount(c, "xflow_sampling_rate"); got != 0 {
+		t.Errorf("sampling rate series = %d, want 0 until a rate arrives", got)
+	}
+}
+
 func TestCollector_RegisterDecoderCollector(t *testing.T) {
 	t.Parallel()
 
 	c := NewCollector(testConfig())
-	c.RegisterDecoderCollector(decoder.New())
+	c.RegisterDecoderCollector(newTestDecoder())
 
 	// The registry accepts the collector; series appear with traffic.
 	if _, err := c.Registry().Gather(); err != nil {

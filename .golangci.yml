@@ -214,9 +214,9 @@ linters:
       - path: ^cmd/
         linters:
           - mnd          # Allow magic numbers for CLI configuration
-      - path: ^internal/decoder/netflow8\.go$
+      - path: ^internal/decoder/netflow(8|9)\.go$
         linters:
-          - mnd          # The flow-tools record lengths and method numbers are the data of this file
+          - mnd          # Wire record lengths, method numbers and field widths are the data of these files
       - path: ^internal/server/
         linters:
           - errcheck     # Allow ignoring write errors in HTTP handlers
