@@ -96,6 +96,12 @@ type Record struct {
 	// table options, or carried inline where the vendor exports strings.
 	AppName     string
 	AppCategory string
+
+	// SrcCountry and DstCountry are ISO codes filled by enrichment. No flow
+	// protocol exports them, so they are empty unless a country database is
+	// enabled and knew the address.
+	SrcCountry string
+	DstCountry string
 }
 
 // Duration returns the flow duration, and false when the record did not carry

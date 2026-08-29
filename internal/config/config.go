@@ -123,6 +123,7 @@ type Collectors struct {
 	Services      bool `json:"services"`
 	ASNs          bool `json:"asns"`
 	Applications  bool `json:"applications"`
+	Countries     bool `json:"countries"`
 	Distributions bool `json:"distributions"`
 }
 
@@ -130,7 +131,9 @@ type Collectors struct {
 // off by default: enrichment fills dimensions that then key their own series,
 // so enabling one is a deliberate choice about cardinality.
 type Enrichment struct {
-	Services bool `json:"services"`
+	Services        bool   `json:"services"`
+	ASNDatabase     string `json:"asn_database"`
+	CountryDatabase string `json:"country_database"`
 }
 
 // Log holds logging configuration.
@@ -172,7 +175,9 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			MinBytes:   cmd.Int64("aggregation.min-bytes"),
 		},
 		Enrichment: Enrichment{
-			Services: cmd.Bool("enrich.services"),
+			Services:        cmd.Bool("enrich.services"),
+			ASNDatabase:     cmd.String("enrich.asn-database"),
+			CountryDatabase: cmd.String("enrich.country-database"),
 		},
 		Collectors: Collectors{
 			Exporters:     cmd.Bool("collector.exporters"),
@@ -180,6 +185,7 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			Services:      cmd.Bool("collector.services"),
 			ASNs:          cmd.Bool("collector.asns"),
 			Applications:  cmd.Bool("collector.applications"),
+			Countries:     cmd.Bool("collector.countries"),
 			Distributions: cmd.Bool("collector.distributions"),
 		},
 		Log: Log{

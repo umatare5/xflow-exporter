@@ -20,11 +20,12 @@ type Modules struct {
 	Services     bool
 	ASNs         bool
 	Applications bool
+	Countries    bool
 }
 
 // Any reports whether any aggregation is enabled.
 func (m Modules) Any() bool {
-	return m.Exporters || m.Hosts || m.Services || m.ASNs || m.Applications
+	return m.Exporters || m.Hosts || m.Services || m.ASNs || m.Applications || m.Countries
 }
 
 // Table keys. Label values are derived from these at scrape time.
@@ -59,6 +60,15 @@ type ASNKey struct {
 	DstAS    uint32
 }
 
+// CountryKey keys the country-pair aggregation. The codes are ISO two-letter
+// spellings filled by enrichment, so the table needs a country database to
+// hold anything.
+type CountryKey struct {
+	Exporter netip.Addr
+	Src      string
+	Dst      string
+}
+
 // AppKey keys the application aggregation. Name is the resolved or inline
 // application name, or the numbered identifier where no name is known.
 type AppKey struct {
@@ -76,6 +86,7 @@ type Aggregator struct {
 	services  *table[ServiceKey]
 	asns      *table[ASNKey]
 	apps      *table[AppKey]
+	countries *table[CountryKey]
 
 	// now is pinned by tests.
 	now func() time.Time
@@ -102,6 +113,9 @@ func New(cfg config.Aggregation, modules Modules) *Aggregator {
 	}
 	if modules.Applications {
 		a.apps = newTable[AppKey](cfg.MaxEntries)
+	}
+	if modules.Countries {
+		a.countries = newTable[CountryKey](cfg.MaxEntries)
 	}
 	return a
 }
@@ -160,6 +174,13 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 			a.apps.add(AppKey{Exporter: r.Exporter, Name: name},
 				bytes, packets, r.Flows, now)
 		}
+	}
+
+	// A record neither side of which resolved to a country feeds nothing:
+	// a pair of empty codes is absence rather than a place.
+	if a.countries != nil && (r.SrcCountry != "" || r.DstCountry != "") {
+		a.countries.add(CountryKey{Exporter: r.Exporter, Src: r.SrcCountry, Dst: r.DstCountry},
+			bytes, packets, r.Flows, now)
 	}
 }
 
@@ -230,7 +251,7 @@ func (t *table[K]) stats() (idle, folds uint64) {
 }
 
 // tableCount is how many aggregations exist, sizing the walk below.
-const tableCount = 5
+const tableCount = 6
 
 // tables returns the enabled tables keyed by their aggregation label value.
 func (a *Aggregator) tables() map[string]sweepable {
@@ -249,6 +270,9 @@ func (a *Aggregator) tables() map[string]sweepable {
 	}
 	if a.apps != nil {
 		tables["applications"] = a.apps
+	}
+	if a.countries != nil {
+		tables["countries"] = a.countries
 	}
 	return tables
 }
@@ -318,4 +342,12 @@ func (a *Aggregator) Applications() ([]EntrySnapshot[AppKey], Totals) {
 		return nil, Totals{}
 	}
 	return a.apps.snapshot()
+}
+
+// Countries reads the country-pair table.
+func (a *Aggregator) Countries() ([]EntrySnapshot[CountryKey], Totals) {
+	if a.countries == nil {
+		return nil, Totals{}
+	}
+	return a.countries.snapshot()
 }

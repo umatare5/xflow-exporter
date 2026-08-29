@@ -66,6 +66,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		Services:     cfg.Collectors.Services,
 		ASNs:         cfg.Collectors.ASNs,
 		Applications: cfg.Collectors.Applications,
+		Countries:    cfg.Collectors.Countries,
 	}
 
 	// Create and setup collector manager
@@ -86,8 +87,14 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	}
 
 	// Enrichment runs before anything reads a record, so a dimension it
-	// fills reaches the aggregation tables and the histograms alike.
-	chain := buildEnrichmentChain(cfg.Enrichment)
+	// fills reaches the aggregation tables and the histograms alike. A
+	// database that cannot be opened fails startup: an exporter that quietly
+	// enriched nothing would be indistinguishable from one whose database
+	// knew nothing.
+	chain, err := buildEnrichmentChain(cfg.Enrichment)
+	if err != nil {
+		return err
+	}
 	if chain.Enabled() {
 		collectorMgr.RegisterEnrichmentCollector(chain)
 		defer chain.Close()
@@ -138,7 +145,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 
 	// Create and run server lifecycle manager
 	serverMgr := NewLifecycleManager(collectorMgr.Registry(), cfg)
-	err := serverMgr.Run(ctx)
+	err = serverMgr.Run(ctx)
 
 	cancel()
 	<-receiverDone
@@ -151,14 +158,28 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 // buildEnrichmentChain assembles the enabled enrichment sources in the order
 // they are applied. Order matters where two sources fill one dimension: the
 // first to know wins, and every source leaves a device reading alone.
-func buildEnrichmentChain(cfg config.Enrichment) *enrich.Chain {
+func buildEnrichmentChain(cfg config.Enrichment) (*enrich.Chain, error) {
 	var enrichers []enrich.Enricher
 
 	if cfg.Services {
 		enrichers = append(enrichers, enrich.NewServices())
 	}
+	if cfg.ASNDatabase != "" {
+		asn, err := enrich.NewASN(cfg.ASNDatabase)
+		if err != nil {
+			return nil, err
+		}
+		enrichers = append(enrichers, asn)
+	}
+	if cfg.CountryDatabase != "" {
+		country, err := enrich.NewCountry(cfg.CountryDatabase)
+		if err != nil {
+			return nil, err
+		}
+		enrichers = append(enrichers, country)
+	}
 
-	return enrich.NewChain(enrichers...)
+	return enrich.NewChain(enrichers...), nil
 }
 
 // sweepDomains drops idle observation domains until ctx ends. The interval is

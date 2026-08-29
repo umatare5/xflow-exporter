@@ -78,9 +78,10 @@ Each data collector is enabled per module:
 | `--collector.services`      | Traffic per address pair, protocol and port      |
 | `--collector.asns`          | Traffic per AS pair from device-exported numbers |
 | `--collector.applications`  | Traffic per AVC / App-ID / applicationId name    |
+| `--collector.countries`     | Traffic per country pair, needs a country database   |
 | `--collector.distributions` | Flow size and duration native histograms         |
 
-Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from the transport port. See [docs/README.md](docs/README.md#enrichment).
+Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from its port, and `--enrich.asn-database` and `--enrich.country-database` read MaxMind-format files held locally. See [docs/README.md](docs/README.md#enrichment).
 
 The operational knobs live under `--receiver.*`, `--parser.*` and `--aggregation.*`. On Linux the read loops use `recvmmsg` batching — other platforms read one datagram per call.
 
@@ -96,14 +97,15 @@ The exporter serves three endpoints:
 
 This exporter aggregates flows into six modules, documented in [docs/collectors.md](docs/collectors.md):
 
-| Module          | Metric family (representative)  | Labels                        |
-| :-------------- | :------------------------------ | :---------------------------- |
-| `exporters`     | `xflow_exporter_bytes_total`    | `exporter,version`            |
-| `hosts`         | `xflow_host_pair_bytes_total`   | `exporter,src,dst`            |
-| `services`      | `xflow_service_bytes_total`     | `exporter,src,dst,proto,port` |
-| `asns`          | `xflow_asn_pair_bytes_total`    | `exporter,src_asn,dst_asn`    |
-| `applications`  | `xflow_application_bytes_total` | `exporter,application`        |
-| `distributions` | `xflow_flow_bytes`              | `exporter` — native histogram |
+| Module          | Metric family (representative)   | Labels                             |
+| :-------------- | :------------------------------- | :--------------------------------- |
+| `exporters`     | `xflow_exporter_bytes_total`     | `exporter,version`                 |
+| `hosts`         | `xflow_host_pair_bytes_total`    | `exporter,src,dst`                 |
+| `services`      | `xflow_service_bytes_total`      | `exporter,src,dst,proto,port`      |
+| `asns`          | `xflow_asn_pair_bytes_total`     | `exporter,src_asn,dst_asn`         |
+| `applications`  | `xflow_application_bytes_total`  | `exporter,application`             |
+| `countries`     | `xflow_country_pair_bytes_total` | `exporter,src_country,dst_country` |
+| `distributions` | `xflow_flow_bytes`               | `exporter` — native histogram      |
 
 See [docs/README.md](docs/README.md) for the absence, folding, eviction and sampling-correction semantics every module shares.
 
@@ -184,4 +186,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the `make` targets, the Docker build,
 
 ## Licence
 
-[MIT](LICENSE). The binary statically links Apache-2.0, MIT and BSD 3-Clause dependencies, whose notices are reproduced in [NOTICE](NOTICE) and shipped alongside `LICENSE` in every release archive and container image.
+[MIT](LICENSE). The binary statically links Apache-2.0, MIT, ISC and BSD 3-Clause dependencies, whose notices are reproduced in [NOTICE](NOTICE) and shipped alongside `LICENSE` in every release archive and container image.

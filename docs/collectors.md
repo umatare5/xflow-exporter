@@ -6,13 +6,14 @@ Every module is disabled by default and enabled per `--collector.<module>` flag.
 
 Each table family carries three metrics sharing one label set: `_bytes_total` and `_packets_total` are sampling-corrected counters, `_flows_total` counts flow records as exported. The `other` series of each family folds the tail — see [Counter semantics](README.md#counter-semantics).
 
-| Module         | Family prefix       | Labels                        |
-| :------------- | :------------------ | :---------------------------- |
-| `exporters`    | `xflow_exporter`    | `exporter,version`            |
-| `hosts`        | `xflow_host_pair`   | `exporter,src,dst`            |
-| `services`     | `xflow_service`     | `exporter,src,dst,proto,port` |
-| `asns`         | `xflow_asn_pair`    | `exporter,src_asn,dst_asn`    |
-| `applications` | `xflow_application` | `exporter,application`        |
+| Module         | Family prefix        | Labels                             |
+| :------------- | :------------------- | :--------------------------------- |
+| `exporters`    | `xflow_exporter`     | `exporter,version`                 |
+| `hosts`        | `xflow_host_pair`    | `exporter,src,dst`                 |
+| `services`     | `xflow_service`      | `exporter,src,dst,proto,port`      |
+| `asns`         | `xflow_asn_pair`     | `exporter,src_asn,dst_asn`         |
+| `applications` | `xflow_application`  | `exporter,application`             |
+| `countries`    | `xflow_country_pair` | `exporter,src_country,dst_country` |
 
 ### Label semantics
 
@@ -20,7 +21,8 @@ Each table family carries three metrics sharing one label set: `_bytes_total` an
 - `port` — the destination port: the service side of the conversation as exported.
 - `proto` — the conventional protocol name for the common IANA numbers, the number itself otherwise.
 - `src_asn`/`dst_asn` — as exported, where `0` is a device that did not know the AS. A record with neither AS feeds no entry.
-- `application` — the device-announced AVC name, the inline vendor string, or the `engine:selector` split of `applicationId` when only the number is known.
+- `application` — the device-announced AVC name, the inline vendor string, or the `engine:selector` split of `applicationId` when only the number is known. `--enrich.services` fills it from the transport port where none of those exist.
+- `src_country`/`dst_country` — ISO codes from `--enrich.country-database`, `unknown` for a side the database could not place. A record neither side of which resolved feeds no entry.
 - The `exporters` family publishes unfolded: its cardinality is the fleet's, which no Top-K needs to guard.
 
 ## Distributions

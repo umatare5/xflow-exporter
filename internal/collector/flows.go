@@ -25,6 +25,7 @@ type FlowSource interface {
 	Services() ([]aggregator.EntrySnapshot[aggregator.ServiceKey], aggregator.Totals)
 	ASNs() ([]aggregator.EntrySnapshot[aggregator.ASNKey], aggregator.Totals)
 	Applications() ([]aggregator.EntrySnapshot[aggregator.AppKey], aggregator.Totals)
+	Countries() ([]aggregator.EntrySnapshot[aggregator.CountryKey], aggregator.Totals)
 	Health() []aggregator.TableHealth
 }
 
@@ -74,6 +75,7 @@ type FlowCollector struct {
 	services     familyDescs
 	asns         familyDescs
 	applications familyDescs
+	countries    familyDescs
 
 	entriesDesc   *prometheus.Desc
 	evictionsDesc *prometheus.Desc
@@ -124,6 +126,10 @@ func NewFlowCollector(src FlowSource, modules config.Collectors, agg config.Aggr
 		c.applications = newFamilyDescs("xflow_application", "application",
 			[]string{labelExporter, labelApplication})
 	}
+	if modules.Countries {
+		c.countries = newFamilyDescs("xflow_country_pair", "country pair",
+			[]string{labelExporter, labelSrcCountry, labelDstCountry})
+	}
 
 	return c
 }
@@ -144,6 +150,9 @@ func (c *FlowCollector) Describe(ch chan<- *prometheus.Desc) {
 	}
 	if c.modules.Applications {
 		c.applications.describe(ch)
+	}
+	if c.modules.Countries {
+		c.countries.describe(ch)
 	}
 	ch <- c.entriesDesc
 	ch <- c.evictionsDesc
@@ -166,6 +175,9 @@ func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 	if c.modules.Applications {
 		collectFamily(c, ch, &c.applications, c.src.Applications, appLabels)
+	}
+	if c.modules.Countries {
+		collectFamily(c, ch, &c.countries, c.src.Countries, countryLabels)
 	}
 
 	c.collectHealth(ch)
@@ -264,6 +276,21 @@ func asnLabels(k aggregator.ASNKey) []string {
 
 func appLabels(k aggregator.AppKey) []string {
 	return []string{k.Exporter.String(), k.Name}
+}
+
+// countryLabels renders a country pair. A side the database could not place
+// reads as unknown rather than as an empty label, which Prometheus cannot
+// tell from a label that was never set.
+func countryLabels(k aggregator.CountryKey) []string {
+	return []string{k.Exporter.String(), countryLabel(k.Src), countryLabel(k.Dst)}
+}
+
+// countryLabel spells one side of a pair.
+func countryLabel(code string) string {
+	if code == "" {
+		return "unknown"
+	}
+	return code
 }
 
 // protocolNames maps the common IANA protocol numbers to their conventional

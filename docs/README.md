@@ -59,6 +59,19 @@ Every source is off by default and enabled per `--enrich.*` flag.
   source made of the records it saw: `filled`, `unknown` where it knew
   nothing, `skipped` where the device had already carried the dimension.
 
+The sources are these.
+
+| Flag                        | Fills                                    |
+| :-------------------------- | :--------------------------------------- |
+| `--enrich.services`         | The application, from the transport port |
+| `--enrich.asn-database`     | The AS numbers, from a MaxMind-format DB |
+| `--enrich.country-database` | The ISO country codes, from the same     |
+
+A database path that cannot be opened fails startup rather than enriching
+nothing in silence. Neither database ships with this exporter: point the
+flags at a GeoLite2 or DB-IP file you already hold. Lookups are local, so no
+address leaves the host.
+
 ### Bounded state
 
 Every map keyed by data the wire controls carries a bound, because a push

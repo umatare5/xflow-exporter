@@ -33,6 +33,8 @@ func parseFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "collector.internal.go-runtime"},
 		&cli.BoolFlag{Name: "collector.internal.process"},
 		&cli.BoolFlag{Name: "enrich.services"},
+		&cli.StringFlag{Name: "enrich.asn-database"},
+		&cli.StringFlag{Name: "enrich.country-database"},
 		&cli.BoolFlag{Name: "dry-run"},
 	}
 }

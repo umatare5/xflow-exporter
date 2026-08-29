@@ -243,3 +243,38 @@ func TestDistributions_ObserveWithholdsAbsentDurations(t *testing.T) {
 		}
 	}
 }
+
+// TestFlowCollector_CountryPairs covers the family enrichment feeds, and the
+// spelling of a side no database could place.
+func TestFlowCollector_CountryPairs(t *testing.T) {
+	t.Parallel()
+
+	modules := config.Collectors{Countries: true}
+	agg := aggregator.New(aggConfig(), aggregator.Modules{Countries: true})
+
+	placed := flowRecord("10.0.0.1", "10.0.0.2", 700)
+	placed.SrcCountry, placed.DstCountry = "JP", "US"
+
+	// A flow leaving a private network: the internal side belongs nowhere.
+	partial := flowRecord("10.0.0.3", "10.0.0.4", 300)
+	partial.DstCountry = "US"
+
+	// Neither side placed: this one must feed no series at all.
+	unplaced := flowRecord("10.0.0.5", "10.0.0.6", 900)
+
+	agg.Ingest([]flow.Record{placed, partial, unplaced})
+
+	c := NewFlowCollector(agg, modules, aggConfig())
+
+	expected := `
+# HELP xflow_country_pair_bytes_total Sampling-corrected bytes per country pair, other folds the rest
+# TYPE xflow_country_pair_bytes_total counter
+xflow_country_pair_bytes_total{dst_country="US",exporter="192.0.2.1",src_country="JP"} 700
+xflow_country_pair_bytes_total{dst_country="US",exporter="192.0.2.1",src_country="unknown"} 300
+xflow_country_pair_bytes_total{dst_country="other",exporter="other",src_country="other"} 0
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_country_pair_bytes_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}

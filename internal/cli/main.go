@@ -209,6 +209,12 @@ func registerCollectorFlags() []cli.Flag {
 			HideDefault: true,
 		},
 		&cli.BoolFlag{
+			Name:        "collector.countries",
+			Usage:       "Enable country pair metrics, which need --enrich.country-database",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
 			Name:        "collector.distributions",
 			Usage:       "Enable flow size and duration native histograms",
 			Category:    "# Collector Options",
@@ -225,6 +231,22 @@ func registerEnrichmentFlags() []cli.Flag {
 			Usage:       "Name the application from the transport port where the device named none",
 			Category:    "# Enrichment Options",
 			HideDefault: true,
+		},
+		&cli.StringFlag{
+			Name:     "enrich.asn-database",
+			Usage:    "Path to a MaxMind-format ASN database, filling the AS numbers a device omits",
+			Category: "# Enrichment Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
+		},
+		&cli.StringFlag{
+			Name:     "enrich.country-database",
+			Usage:    "Path to a MaxMind-format country database, filling the ISO codes for --collector.countries",
+			Category: "# Enrichment Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
 		},
 	}
 }
