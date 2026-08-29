@@ -2,9 +2,6 @@
 tmp/
 vendor/
 
-# Test data files
-testdata/
-
 # Build artifacts
 *.exe
 *.dll

@@ -199,7 +199,7 @@ func TestProtocolName(t *testing.T) {
 	}{
 		{1, "icmp"},
 		{2, "igmp"},
-		{4, "ipip"},
+		{4, "ipv4"},
 		{6, "tcp"},
 		{17, "udp"},
 		{41, "ipv6"},

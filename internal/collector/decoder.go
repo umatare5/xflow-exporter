@@ -17,6 +17,7 @@ type DecoderSource interface {
 	DomainsRefused() uint64
 	VendorStringsRefused() uint64
 	ApplicationsRefused() uint64
+	ExportersRefused() uint64
 }
 
 // DecoderCollector reports what the decoders made of the received datagrams.
@@ -29,12 +30,13 @@ type DecoderCollector struct {
 	errorsDesc   *prometheus.Desc
 	lastFlowDesc *prometheus.Desc
 
-	templatesDesc      *prometheus.Desc
-	seqMissedDesc      *prometheus.Desc
-	samplingDesc       *prometheus.Desc
-	domainsRefusedDesc *prometheus.Desc
-	stringsRefusedDesc *prometheus.Desc
-	appsRefusedDesc    *prometheus.Desc
+	templatesDesc        *prometheus.Desc
+	seqMissedDesc        *prometheus.Desc
+	samplingDesc         *prometheus.Desc
+	domainsRefusedDesc   *prometheus.Desc
+	exportersRefusedDesc *prometheus.Desc
+	stringsRefusedDesc   *prometheus.Desc
+	appsRefusedDesc      *prometheus.Desc
 }
 
 // NewDecoderCollector creates a collector reporting decode outcomes.
@@ -58,18 +60,18 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		),
 		templatesDesc: prometheus.NewDesc(
 			"xflow_templates",
-			"Unexpired templates held per exporter, observation domain and kind",
-			[]string{labelExporter, labelODID, labelType}, nil,
+			"Unexpired templates held per exporter, protocol, observation domain and kind",
+			[]string{labelExporter, labelVersion, labelODID, labelType}, nil,
 		),
 		seqMissedDesc: prometheus.NewDesc(
 			"xflow_sequence_missed_total",
-			"Export packets the sequence numbers say were lost, per observation domain",
-			[]string{labelExporter, labelODID}, nil,
+			"Export packets the sequence numbers say were lost, per protocol and observation domain",
+			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
 		samplingDesc: prometheus.NewDesc(
 			"xflow_sampling_rate",
 			"Packet sampling rate the domain's options declared, absent until one arrives",
-			[]string{labelExporter, labelODID}, nil,
+			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
 		domainsRefusedDesc: prometheus.NewDesc(
 			"xflow_domains_refused_total",
@@ -86,6 +88,11 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 			"Application announcements refused since process start, the exporter being at its application budget",
 			nil, nil,
 		),
+		exportersRefusedDesc: prometheus.NewDesc(
+			"xflow_exporters_refused_total",
+			"Datagrams left unattributed since process start, the process being at its exporter budget",
+			nil, nil,
+		),
 	}
 }
 
@@ -100,6 +107,7 @@ func (c *DecoderCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.domainsRefusedDesc
 	ch <- c.stringsRefusedDesc
 	ch <- c.appsRefusedDesc
+	ch <- c.exportersRefusedDesc
 }
 
 // Collect implements prometheus.Collector by reading the decode counters.
@@ -139,6 +147,8 @@ func (c *DecoderCollector) Collect(ch chan<- prometheus.Metric) {
 		c.stringsRefusedDesc, prometheus.CounterValue, float64(c.src.VendorStringsRefused()))
 	ch <- prometheus.MustNewConstMetric(
 		c.appsRefusedDesc, prometheus.CounterValue, float64(c.src.ApplicationsRefused()))
+	ch <- prometheus.MustNewConstMetric(
+		c.exportersRefusedDesc, prometheus.CounterValue, float64(c.src.ExportersRefused()))
 }
 
 // The template kinds published in the type label.
@@ -151,24 +161,25 @@ const (
 func (c *DecoderCollector) collectDomains(ch chan<- prometheus.Metric) {
 	for _, domain := range c.src.Domains() {
 		exporter := domain.Exporter.String()
+		version := domain.Version.String()
 		odid := strconv.FormatUint(uint64(domain.ODID), 10)
 
 		ch <- prometheus.MustNewConstMetric(
 			c.templatesDesc, prometheus.GaugeValue,
-			float64(domain.Templates), exporter, odid, templateKindData)
+			float64(domain.Templates), exporter, version, odid, templateKindData)
 		ch <- prometheus.MustNewConstMetric(
 			c.templatesDesc, prometheus.GaugeValue,
-			float64(domain.OptionsTemplates), exporter, odid, templateKindOptions)
+			float64(domain.OptionsTemplates), exporter, version, odid, templateKindOptions)
 		ch <- prometheus.MustNewConstMetric(
 			c.seqMissedDesc, prometheus.CounterValue,
-			float64(domain.SequenceMissed), exporter, odid)
+			float64(domain.SequenceMissed), exporter, version, odid)
 
 		// A domain that has not declared a rate has no series: a zero here
 		// would read as sampling switched off rather than unknown.
 		if domain.SamplingRate > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				c.samplingDesc, prometheus.GaugeValue,
-				float64(domain.SamplingRate), exporter, odid)
+				float64(domain.SamplingRate), exporter, version, odid)
 		}
 	}
 }

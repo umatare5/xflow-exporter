@@ -28,14 +28,13 @@ nft add rule inet filter input udp dport 2055 drop
 
 ## What leaves the host
 
-Nothing. Every enrichment source reads a file on local disk, and the exporter
-holds no credential for any external service. Fetching the threat lists and
-the MaxMind databases is a separate job the operator runs, so no address seen
-in a flow is ever sent anywhere.
+Nothing, unless `--remote-write.url` is set. That flag enables the Remote Write 2.0 client, which gathers the registry every `--remote-write.interval` (default 60 seconds) and sends its counters and gauges to the configured endpoint. Label sets can carry monitored IP addresses, so a write carries what a scrape exposes — point it only at a store trusted with flow data.
 
-`--web.enable-lifecycle` exposes `/-/reload`, which re-reads those files. It
-is unauthenticated, like the metrics endpoint, so keep it on a controlled
-path. It is off by default, and a `SIGHUP` reloads without exposing anything.
+When remote write is enabled, the exporter holds that endpoint's credentials: `--remote-write.username` and `--remote-write.password` (or `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD`) send basic auth, and `--remote-write.header` attaches arbitrary request headers, which can carry a bearer token. Validation accepts a plain `http://` URL without a warning, and basic auth over it travels in cleartext, so use `https://` on any path that is not fully trusted.
+
+Every enrichment source reads a file on local disk, and a lookup sends no address anywhere. Fetching the threat lists and the MaxMind databases is a separate job the operator runs.
+
+`--web.enable-lifecycle` exposes `/-/reload`, which re-reads those files. It is unauthenticated, like the metrics endpoint, so keep it on a controlled path. It is off by default, and a `SIGHUP` reloads without exposing anything.
 
 ## Out of scope
 

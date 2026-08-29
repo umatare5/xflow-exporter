@@ -868,7 +868,7 @@ func TestDecodeIPFIX_TCPControlBitsAtTwoOctets(t *testing.T) {
 	}{
 		{"control bits alone", 0x0012, 0x12},
 		{"the data offset above them", 0x5012, 0x12},
-		{"the nonce sum above them", 0x0112, 0x12},
+		{"a bit above them the reduced form cannot carry", 0x0112, 0x12},
 		{"no bit set", 0x0000, 0x00},
 	}
 

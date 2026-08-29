@@ -390,11 +390,14 @@ func countryLabel(code string) string {
 }
 
 // protocolNames maps the common IANA protocol numbers to their conventional
-// names; anything else renders as its number.
+// names; anything else renders as its number. A conventional name the registry
+// assigns to a different number is not one of them: "ipip" names 4 on Linux
+// and is the registry's keyword for 94, so a filter written from the registry
+// would select traffic that is not what it asked for.
 var protocolNames = map[uint8]string{
 	1:   "icmp",
 	2:   "igmp",
-	4:   "ipip",
+	4:   "ipv4",
 	6:   "tcp",
 	17:  "udp",
 	41:  "ipv6",
@@ -419,8 +422,7 @@ func protocolName(protocol uint8) string {
 }
 
 // tcpFlagBits names each control bit from the low bit up, which is the order
-// every packet tool prints them in and the reverse of the header's own
-// drawing.
+// tcpdump prints them in and the reverse of the header's own drawing.
 var tcpFlagBits = [8]struct {
 	mask uint8
 	name string

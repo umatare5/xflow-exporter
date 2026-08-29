@@ -2,11 +2,14 @@
 
 FROM scratch
 
+# dockers_v2 lays the build context out as linux/<arch>/<binary>
+ARG TARGETPLATFORM
+
 # Copy ca-certificates for HTTPS requests from enrichment modules
 COPY --from=alpine:latest@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Copy the pre-built binary from GoReleaser
-COPY xflow-exporter /xflow-exporter
+COPY $TARGETPLATFORM/xflow-exporter /xflow-exporter
 
 # extra_files in .goreleaser.yml is what puts these in the build context
 COPY LICENSE NOTICE /

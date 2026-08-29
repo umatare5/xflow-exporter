@@ -14,3 +14,58 @@ scrape_configs:
   - job_name: "xflow"
     static_configs:
       - targets: [localhost:10052]
+
+    # Three ways to bound what this exporter costs the reader, from the reader's
+    # side alone. They act at different points and only the first one narrows
+    # what crosses the wire.
+    #
+    #   params: name[]           the exporter encodes only the families named,
+    #                            so a body of several thousand samples becomes
+    #                            a handful. Each family arrives whole, its
+    #                            entry-bound fold included.
+    #   metric_relabel_configs   the scrape happens in full and the drop is
+    #                            applied on arrival, so the wire and the
+    #                            exporter's scrape cost are unchanged. What it
+    #                            buys is selection by label, which name[] has
+    #                            no way to express.
+    #   sample_limit             a circuit breaker, not a limiter. Exceeding it
+    #                            fails the whole scrape and the target reads
+    #                            up == 0; nothing is stored, so it protects the
+    #                            store by losing the window rather than by
+    #                            trimming it.
+    #
+    # The address-keyed families are where cardinality accumulates:
+    # xflow_host_pair_*, xflow_service_*, xflow_destination_* and xflow_threat_*
+    # turn their Top-K over as talkers come and go. The dimensional ones --
+    # xflow_asn_pair_*, xflow_application_*, xflow_country_pair_*,
+    # xflow_tcp_flags_* and xflow_dscp_* -- stay flat, and the self-monitoring
+    # families are bounded by the fleet.
+    #
+    # params:
+    #   name[]:
+    #     - xflow_build_info
+    #     - xflow_flows_total
+    #     - xflow_decode_errors_total
+    #     - xflow_receiver_dropped_packets_total
+    #     - xflow_last_flow_timestamp_seconds
+    #     - xflow_sampling_rate
+    #     - xflow_asn_pair_packets_total
+    #     - xflow_application_packets_total
+    #     - xflow_dscp_packets_total
+    #
+    # metric_relabel_configs:
+    #   # Keep the busiest services and let the rest go. Note what this cannot
+    #   # do: it selects by label, never by rank, so the "busiest" has to be
+    #   # spelled as a label match rather than as a number.
+    #   - source_labels: [__name__, port]
+    #     regex: "xflow_service_.*;(80|443|53|22)"
+    #     action: keep
+    #
+    # A drop rule written against the fold will remove it. Every aggregation
+    # family carries one series whose labels all read "other", holding what the
+    # entry bound rejected at ingest -- the only record of traffic no other
+    # series of that family has ever published. A rule matching exporter="other"
+    # or src="other" deletes it and leaves every sum() short with nothing in the
+    # data to say so.
+    #
+    # sample_limit: 100000

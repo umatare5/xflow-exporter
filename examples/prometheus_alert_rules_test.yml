@@ -108,7 +108,7 @@ tests:
 
   - interval: 1m
     input_series:
-      - series: 'xflow_sequence_missed_total{job="xflow",instance="localhost:10052",exporter="192.0.2.1",odid="256"}'
+      - series: 'xflow_sequence_missed_total{job="xflow",instance="localhost:10052",exporter="192.0.2.1",version="netflow_v9",odid="256"}'
         values: "0+0x10 0+2x20"
     alert_rule_test:
       - eval_time: 10m
@@ -121,7 +121,7 @@ tests:
       - expr: ALERTS{alertname="XflowSequenceLoss", alertstate="firing"}
         eval_time: 20m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowSequenceLoss", alertstate="firing", exporter="192.0.2.1", instance="localhost:10052", job="xflow", odid="256", severity="warning"}'
+          - labels: 'ALERTS{alertname="XflowSequenceLoss", alertstate="firing", exporter="192.0.2.1", instance="localhost:10052", job="xflow", odid="256", severity="warning", version="netflow_v9"}'
             value: 1
 
   - interval: 1m

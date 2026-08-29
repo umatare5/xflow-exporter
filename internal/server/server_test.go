@@ -238,3 +238,37 @@ func TestServer_HTTPMethods(t *testing.T) {
 		})
 	}
 }
+
+// TestServer_MetricsHonoursTheNameFilter pins the one control a reader has
+// over what crosses the wire. The name[] parameter comes from promhttp rather
+// than from this package, so nothing here would otherwise notice a handler
+// wrapped for logging or authentication dropping the query string -- and the
+// bundled scrape configuration tells an operator the control is there.
+func TestServer_MetricsHonoursTheNameFilter(t *testing.T) {
+	t.Parallel()
+
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(prometheus.NewGauge(prometheus.GaugeOpts{Name: "xflow_wanted", Help: "wanted"}))
+	reg.MustRegister(prometheus.NewGauge(prometheus.GaugeOpts{Name: "xflow_unwanted", Help: "unwanted"}))
+	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil)
+
+	req := httptest.NewRequest(http.MethodGet, config.DefaultTelemetryPath+"?name%5B%5D=xflow_wanted", http.NoBody)
+	req.Header.Set("Accept", "application/openmetrics-text; version=1.0.0; charset=utf-8")
+	w := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "xflow_wanted") {
+		t.Errorf("body does not carry the selected family:\n%s", body)
+	}
+	if strings.Contains(body, "xflow_unwanted") {
+		t.Errorf("body carries a family name[] did not select:\n%s", body)
+	}
+	if !strings.HasSuffix(body, "# EOF\n") {
+		t.Errorf("body does not end in the OpenMetrics terminator:\n%s", body)
+	}
+}

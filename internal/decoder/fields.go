@@ -226,9 +226,12 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 	case fieldTCPFlags:
 		// The element is unsigned16 and the octet form is reduced-size
 		// encoding of it, so an exporter that declines to reduce is
-		// conformant. RFC 9565 puts the control bits in the low octet and
-		// tells a collector to ignore what sits above them, which is a mask:
-		// refusing the value would drop the eight bits reported alongside.
+		// conformant. RFC 9565 puts the control bits in the low octet; above
+		// them sit the data offset, which it says to ignore, and four bits a
+		// collector reading the reduced form is told to assume nothing about.
+		// Masking is what that reduced form does, so it is the reading both
+		// encodings agree on -- and refusing the value would drop the eight
+		// bits reported alongside.
 		if v, ok := beUint16(value); ok {
 			r.TCPFlags = uint8(v & math.MaxUint8)
 			r.TCPFlagsReported = true

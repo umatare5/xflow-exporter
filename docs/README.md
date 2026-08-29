@@ -72,7 +72,7 @@ A database path that cannot be opened fails startup rather than enriching
 nothing in silence. Neither database ships with this exporter: point the flags
 at a GeoLite2 or DB-IP file you already hold, or let
 `scripts/fetch-enrichment-data.sh databases` fetch one. Database lookups are
-local, so no address leaves the host.
+local, so a lookup sends no address anywhere.
 
 An anycast or large cloud prefix carries no country worth reading. A lab in
 Japan reaching Cloudflare over AS 13335 measured `src_country="CA"`, which is
@@ -82,7 +82,7 @@ continent depending on who asks. Read `xflow_country_pair_*` as the country
 the prefix is registered in, and do not reconcile it with a transit bill.
 
 Nothing here reaches a network. The exporter reads files and never fetches
-them, so no address ever leaves the host and no credential is configured.
+them, so enrichment sends no address anywhere and holds no credential.
 
 ### Threat lists
 
@@ -94,10 +94,11 @@ is repeatable so several published lists combine into one set.
   file. `fetch-enrichment-data.sh databases` fetches the ASN and country
   databases beside them, from DB-IP unless `MAXMIND_LICENSE_KEY` is set. Run
   it from cron and reload afterwards.
-- **A refreshed database needs a restart, a refreshed list does not.** The
-  mmdb enrichers open their reader once at startup and implement no reload,
-  so `/-/reload` passes over them and reports success having re-read only the
-  lists. Paths come from `THREAT_FILE`, `ASN_DATABASE` and `COUNTRY_DATABASE`.
+- **One reload covers the lists and the databases alike.** `/-/reload` and
+  `SIGHUP` re-read every enrichment source, each mmdb reader being replaced
+  whole rather than reopened in place, so no restart is needed to pick a
+  refreshed file up. Paths come from `THREAT_FILE`, `ASN_DATABASE` and
+  `COUNTRY_DATABASE`.
 - **A failed fetch leaves the previous file alone.** The script checks that
   each body names an address rather than trusting the status, since an empty
   response and an access-denied page both arrive as a `200`, and it refuses to
@@ -183,7 +184,7 @@ restricting the receiver to permitted senders. See
 
 ### Templates
 
-NetFlow v9 and IPFIX data decode against templates cached per exporter address and Observation Domain ID together, per RFC 7011.
+NetFlow v9 and IPFIX data decode against templates cached per exporter address and Observation Domain ID together, per RFC 7011, and per protocol besides: three decoders number their domains independently, so that pair alone does not name one.
 
 - **Startup** — `missing_template` rejections are expected after a restart until each device re-announces. A device that never does keeps the counter rising, which is the signal to check its template refresh configuration.
 - **Limits** — a template with a zero-width fixed field, more than `--parser.max-fields-per-template` fields, or specifiers that overrun their set is refused as `invalid_template`.

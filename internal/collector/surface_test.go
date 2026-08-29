@@ -234,7 +234,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	// options template announcing a sampler, and the remote write instant
 	// needs a client that has written, whose counters the package keeps
 	// unexported. Changing the surface is meant to change this number.
-	const wantFamilies = 58
+	const wantFamilies = 59
 	if len(families) != wantFamilies {
 		t.Fatalf("gathered %d families, want %d: the lint below covers only what is registered",
 			len(families), wantFamilies)

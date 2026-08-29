@@ -49,9 +49,9 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(xflow_exporter_bytes_total, exporter)",
+        "definition": "label_values(xflow_flows_total, exporter)",
         "query": {
-          "query": "label_values(xflow_exporter_bytes_total, exporter)",
+          "query": "label_values(xflow_flows_total, exporter)",
           "refId": "exporter"
         },
         "includeAll": true,
@@ -67,7 +67,8 @@
           ]
         },
         "sort": 1,
-        "hide": 0
+        "hide": 0,
+        "regex": "/^(?!other$).*/"
       }
     ]
   },
@@ -339,7 +340,7 @@
         },
         "colorMode": "value",
         "graphMode": "none",
-        "textMode": "auto",
+        "textMode": "name",
         "justifyMode": "auto",
         "orientation": "auto"
       }
@@ -374,7 +375,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: p/s",
+          "unit": "count:p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -438,7 +439,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: p/s",
+          "unit": "count:p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -495,7 +496,7 @@
           },
           "editorMode": "code",
           "expr": "rate(xflow_decode_errors_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])",
-          "legendFormat": "{{reason}} — {{exporter}} {{version}}",
+          "legendFormat": "{{reason}} \u2014 {{exporter}} {{version}}",
           "range": true,
           "refId": "A"
         }
@@ -559,7 +560,7 @@
           },
           "editorMode": "code",
           "expr": "rate(xflow_sequence_missed_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])",
-          "legendFormat": "{{exporter}} odid {{odid}}",
+          "legendFormat": "{{exporter}} {{version}} odid {{odid}}",
           "range": true,
           "refId": "A"
         }
@@ -623,7 +624,7 @@
           },
           "editorMode": "code",
           "expr": "xflow_templates{exporter=~\"$exporter\",exporter!=\"other\"}",
-          "legendFormat": "{{type}} — odid {{odid}}",
+          "legendFormat": "{{type}} \u2014 {{version}} odid {{odid}}",
           "range": true,
           "refId": "A"
         }
@@ -707,7 +708,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: p/s",
+          "unit": "count:p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -828,7 +829,7 @@
           },
           "editorMode": "code",
           "expr": "xflow_sampling_rate{exporter=~\"$exporter\",exporter!=\"other\"}",
-          "legendFormat": "{{exporter}} odid {{odid}}",
+          "legendFormat": "{{exporter}} {{version}} odid {{odid}}",
           "range": true,
           "refId": "A"
         }
@@ -1091,7 +1092,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: p/s",
+          "unit": "count:p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1155,7 +1156,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: p/s",
+          "unit": "count:p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1232,7 +1233,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: p/s",
+          "unit": "count:p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1289,14 +1290,14 @@
           },
           "editorMode": "code",
           "expr": "topk(10, sum by (exporter, src_asn, dst_asn) (rate(xflow_asn_pair_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
-          "legendFormat": "AS{{src_asn}} → AS{{dst_asn}}",
+          "legendFormat": "AS{{src_asn}} \u2192 AS{{dst_asn}}",
           "range": true,
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: p/s",
+          "unit": "count:p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1360,7 +1361,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: p/s",
+          "unit": "count:p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1417,14 +1418,14 @@
           },
           "editorMode": "code",
           "expr": "topk(10, sum by (exporter, src, dst) (rate(xflow_host_pair_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
-          "legendFormat": "{{src}} → {{dst}}",
+          "legendFormat": "{{src}} \u2192 {{dst}}",
           "range": true,
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: p/s",
+          "unit": "count:p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1488,7 +1489,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: p/s",
+          "unit": "count:p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1545,14 +1546,14 @@
           },
           "editorMode": "code",
           "expr": "topk(10, sum by (exporter, src_country, dst_country) (rate(xflow_country_pair_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
-          "legendFormat": "{{src_country}} → {{dst_country}}",
+          "legendFormat": "{{src_country}} \u2192 {{dst_country}}",
           "range": true,
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: p/s",
+          "unit": "count:p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1616,7 +1617,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: p/s",
+          "unit": "count:p/s",
           "min": 0,
           "custom": {
             "drawStyle": "line",
@@ -1750,7 +1751,7 @@
           },
           "editorMode": "code",
           "expr": "topk(10, sum by (exporter, src_asn, dst_asn) (rate(xflow_asn_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))) * 8",
-          "legendFormat": "AS{{src_asn}} → AS{{dst_asn}}",
+          "legendFormat": "AS{{src_asn}} \u2192 AS{{dst_asn}}",
           "range": true,
           "refId": "A"
         }

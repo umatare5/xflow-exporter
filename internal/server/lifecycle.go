@@ -247,6 +247,11 @@ func sweepDomains(ctx context.Context, dec *decoder.Decoder, ttl time.Duration) 
 			if evicted := dec.SweepDomains(); evicted > 0 {
 				slog.Debug("Swept idle observation domains", "evicted", evicted)
 			}
+			// Only once the exporter budget is reached, so a device that has
+			// simply gone quiet keeps the freshness series that says so.
+			if evicted := dec.SweepExporters(); evicted > 0 {
+				slog.Debug("Swept idle exporters", "evicted", evicted)
+			}
 		}
 	}
 }

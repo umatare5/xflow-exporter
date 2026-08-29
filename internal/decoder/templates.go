@@ -343,10 +343,13 @@ func (d *domainState) counts(now time.Time, ttl time.Duration) (data, options in
 	return data, options
 }
 
-// DomainSnapshot is one observation domain's state at one instant.
+// DomainSnapshot is one observation domain's state at one instant. Version
+// travels with the pair because three decoders number their domains
+// independently, so an exporter and an Observation Domain ID do not name one.
 type DomainSnapshot struct {
 	Exporter         netip.Addr
 	ODID             uint32
+	Version          flow.Version
 	Templates        int
 	OptionsTemplates int
 	SequenceMissed   uint64
@@ -366,6 +369,7 @@ func (s *templateStore) snapshot() []DomainSnapshot {
 		snapshots = append(snapshots, DomainSnapshot{
 			Exporter:         key.exporter,
 			ODID:             key.odid,
+			Version:          key.proto,
 			Templates:        data,
 			OptionsTemplates: options,
 			SequenceMissed:   d.sequenceMissed.Load(),
