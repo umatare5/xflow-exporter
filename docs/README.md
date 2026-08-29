@@ -1,12 +1,12 @@
 # Documentation
 
-Reference pages for xflow-exporter. The [README](../README.md) covers getting flows received and scraped, and these pages carry the full metric catalogue and the behaviour every module shares.
+Reference pages for xflow-exporter. The [README](../README.md) covers getting flows received and scraped, and these pages carry the traffic-metric catalogue and the behaviour every module shares.
 
-| Page                              | Focus                                     |
-| :-------------------------------- | :---------------------------------------- |
-| [Protocols](protocols.md)         | Per-protocol behaviour and limits         |
-| [Collectors](collectors.md)       | Every metric family and its labels        |
-| [Configuration](configuration.md) | Flags and defaults, as `--help` prints    |
+| Page                              | Focus                                   |
+| :-------------------------------- | :-------------------------------------- |
+| [Protocols](protocols.md)         | Per-protocol behaviour and limits       |
+| [Collectors](collectors.md)       | The traffic modules and their labels    |
+| [Configuration](configuration.md) | Flags and defaults, as `--help` prints  |
 
 ## Technical Information
 
@@ -17,6 +17,7 @@ Flow export is push, Prometheus is pull, and this exporter bridges the two. The 
 - **Scrapes never wait** — a scrape reads the aggregation tables as they are, while flow datagrams keep accumulating between scrapes.
 - **No target to probe** — there is no `up`-style reachability toward a push sender, so per-device freshness is `xflow_last_flow_timestamp_seconds` instead.
 - **Naming** — RFC 7011 calls the device the "exporter", and the `exporter` label follows that reading: it always names the device.
+- **Tuning** — the receive path is bounded under `--receiver.*`, `--parser.*` and `--aggregation.*`. On Linux the read loops use `recvmmsg` batching; other platforms read one datagram per call.
 
 ### Absence
 
@@ -72,7 +73,7 @@ A database path that cannot be opened fails startup rather than enriching
 nothing in silence. Neither database ships with this exporter: point the flags
 at a GeoLite2 or DB-IP file you already hold, or let
 `scripts/fetch-enrichment-data.sh databases` fetch one. Database lookups are
-local, so a lookup sends no address anywhere.
+local, so a lookup sends no address anywhere and enrichment holds no credential of its own.
 
 An anycast or large cloud prefix carries no country worth reading. A lab in
 Japan reaching Cloudflare over AS 13335 measured `src_country="CA"`, which is
@@ -188,13 +189,47 @@ Maps keyed by the source address alone — the per-device application tables,
 the distribution histograms — are bounded by restricting the receiver to
 permitted senders. See [SECURITY.md](../SECURITY.md).
 
+### Reason values
+
+Two health counters carry a `reason` label drawn from a closed set, so a rule may enumerate them.
+
+`xflow_decode_errors_total` names what the decoder refused rather than where it stopped:
+
+| Reason                    | Meaning                                        |
+| :------------------------ | :--------------------------------------------- |
+| `unsupported_version`     | A datagram no decoder claims                   |
+| `malformed`               | A structure that does not fit its bytes        |
+| `unsupported_aggregation` | A NetFlow v8 method outside the fourteen known |
+| `missing_template`        | A v9/IPFIX template that has not arrived yet   |
+| `invalid_template`        | A template announcement the parser refuses     |
+| `reserved_set`            | A set id its protocol leaves unassigned        |
+| `domain_limit`            | An observation domain past the device's budget |
+
+`xflow_receiver_dropped_packets_total` names one of two, both counted before any decoder reads the datagram:
+
+| Reason       | Meaning                                             |
+| :----------- | :-------------------------------------------------- |
+| `queue_full` | A burst the queue could not absorb                  |
+| `truncated`  | A datagram larger than `--receiver.max-packet-size` |
+
 ### Templates
 
 NetFlow v9 and IPFIX data decode against templates cached per exporter address, protocol and Observation Domain ID together — [Protocols](protocols.md#netflow-v9-and-ipfix) carries the scope rationale, the refusal conditions and the expiry rule.
 
+- **A domain is a triple** — `xflow_templates`, `xflow_sequence_missed_total` and `xflow_sampling_rate` carry `exporter`, `version` and `odid` together, because the three protocols number their domains independently and one number from one device names as many domains as it speaks protocols.
+- **`odid` is short for what each protocol calls the field**, because they do not agree: NetFlow v9 says Source ID, IPFIX says Observation Domain ID and sFlow says sub-agent id, so spelling out any one of them would put that protocol's word on a series whose `version` names another.
+
 ### Packet sections
 
 A NetFlow-Lite record carries one sampled packet section instead of parsed flow fields, and decodes through the header walk the sFlow decoder uses — [Protocols](protocols.md#netflow-lite) carries the elements, the precedence and the padding ambiguity.
+
+### Remote write
+
+`--remote-write.url` ships the registry's counters and gauges to a Remote Write 2.0 endpoint, for the deployments a scrape cannot reach, alongside or instead of `/metrics`.
+
+- **Cardinality is the caller's to bound.** `--aggregation.top-k` bounds what is live at any instant, not what a long-term store accumulates: the address-keyed families turn their Top-K over as talkers come and go, measured at 5.3× the live series count per hour for `xflow_service_*` on a quiet link, and before the ordering fix that removed the share of it a byte tie was causing, while the dimensional families (`asns`, `applications`, `tcp_flags`, `dscp`, `countries`) stay flat at 1.0×.
+- **Aggregate before shipping** — reduce the address-keyed families with recording rules, or drop them with `write_relabel_configs`. Neither `--remote-write.url` nor a scrape filters anything of its own accord.
+- **Observability** — `xflow_remote_write_sends_total`, `_failures_total`, `_samples_total` and `xflow_remote_write_last_success_timestamp_seconds` appear only while the flag is set.
 
 ### Native histograms
 
@@ -203,3 +238,10 @@ A NetFlow-Lite record carries one sampled packet section instead of parsed flow 
 - **Scraping** — Prometheus v3.8+ with `scrape_native_histograms: true`, which [examples/prometheus.yml](../examples/prometheus.yml) sets. Without it the scrape negotiates the classic text exposition, which carries a `_count`, a `_sum` and one `+Inf` bucket.
 - **Duration** — observed only where the record carried both flow instants: sFlow samples and clock-less templates contribute size but no duration.
 - **Remote write does not carry them.** Remote Write 2.0 sends a histogram as its own message, and reducing one to a single sample would be a value nobody measured, so `--remote-write.url` ships the counters and gauges alone. Distributions are scrape-only.
+
+### Dashboards
+
+[examples/grafana_dashboard.json](../examples/grafana_dashboard.json) covers reception and decoding, throughput per device, the Top-K composition views, the aggregation tables and the enrichment sources, with the data source and the devices as variables.
+
+- **Panels rank by packets, not bytes.** Both are sampled estimates, and a byte figure adds the variance of the packet-size distribution on top of the counting error, so read volume as a proportion and take an exact figure from the device's SNMP interface counters.
+- **The composition panels rank; they do not total.** Entries below `--aggregation.top-k` publish nothing, and `other` carries only what the entry bound folded at ingest. Every panel carries its own description.

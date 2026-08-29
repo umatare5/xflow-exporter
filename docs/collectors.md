@@ -1,112 +1,151 @@
 # Collectors
 
-Every module is disabled by default and enabled per `--collector.<module>` flag, underscores in the name spelled as hyphens: `tcp_flags` takes `--collector.tcp-flags`. With none enabled the exporter receives, decodes and counts flows in the health series, and publishes no traffic series.
+Every module is disabled by default and enabled per `--collector.<module>` flag, underscores in the name spelled as hyphens: `tcp_flags` takes `--collector.tcp-flags`. With none enabled the exporter still receives, decodes and counts flows in the [health series](../README.md#exporter-health-metrics), and publishes no traffic series.
 
-## Traffic Metrics
+## Metrics
 
-Each table family carries three metrics sharing one label set: `_bytes_total` and `_packets_total` are sampling-corrected counters, `_flows_total` counts flow records as exported. The `other` series of each family carries what the entry bound folded at ingest — see [Counter semantics](README.md#counter-semantics).
+| Module         | Metric                             | Type    | Description                                         |
+| :------------- | :--------------------------------- | :------ | :-------------------------------------------------- |
+| `exporters`    | `xflow_exporter_bytes_total`       | Counter | Sampling-corrected bytes per exporter and version   |
+| `exporters`    | `xflow_exporter_packets_total`     | Counter | Sampling-corrected packets per exporter and version |
+| `exporters`    | `xflow_exporter_flows_total`       | Counter | Flow records as exported per exporter and version   |
+| `hosts`        | `xflow_host_pair_bytes_total`      | Counter | Sampling-corrected bytes per address pair           |
+| `hosts`        | `xflow_host_pair_packets_total`    | Counter | Sampling-corrected packets per address pair         |
+| `hosts`        | `xflow_host_pair_flows_total`      | Counter | Flow records as exported per address pair           |
+| `services`     | `xflow_service_bytes_total`        | Counter | Sampling-corrected bytes per service five-tuple     |
+| `services`     | `xflow_service_packets_total`      | Counter | Sampling-corrected packets per service five-tuple   |
+| `services`     | `xflow_service_flows_total`        | Counter | Flow records as exported per service five-tuple     |
+| `destinations` | `xflow_destination_bytes_total`    | Counter | Sampling-corrected bytes per destination service    |
+| `destinations` | `xflow_destination_packets_total`  | Counter | Sampling-corrected packets per destination service  |
+| `destinations` | `xflow_destination_flows_total`    | Counter | Flow records as exported per destination service    |
+| `tcp_flags`    | `xflow_tcp_flags_bytes_total`      | Counter | Sampling-corrected bytes per control-bit profile    |
+| `tcp_flags`    | `xflow_tcp_flags_packets_total`    | Counter | Sampling-corrected packets per control-bit profile  |
+| `tcp_flags`    | `xflow_tcp_flags_flows_total`      | Counter | Flow records as exported per control-bit profile    |
+| `dscp`         | `xflow_dscp_bytes_total`           | Counter | Sampling-corrected bytes per DSCP class             |
+| `dscp`         | `xflow_dscp_packets_total`         | Counter | Sampling-corrected packets per DSCP class           |
+| `dscp`         | `xflow_dscp_flows_total`           | Counter | Flow records as exported per DSCP class             |
+| `asns`         | `xflow_asn_pair_bytes_total`       | Counter | Sampling-corrected bytes per AS pair                |
+| `asns`         | `xflow_asn_pair_packets_total`     | Counter | Sampling-corrected packets per AS pair              |
+| `asns`         | `xflow_asn_pair_flows_total`       | Counter | Flow records as exported per AS pair                |
+| `asns`         | `xflow_asn_info`                   | Gauge   | Always 1, naming an AS a published pair carries     |
+| `applications` | `xflow_application_bytes_total`    | Counter | Sampling-corrected bytes per application            |
+| `applications` | `xflow_application_packets_total`  | Counter | Sampling-corrected packets per application          |
+| `applications` | `xflow_application_flows_total`    | Counter | Flow records as exported per application            |
+| `countries`    | `xflow_country_pair_bytes_total`   | Counter | Sampling-corrected bytes per country pair           |
+| `countries`    | `xflow_country_pair_packets_total` | Counter | Sampling-corrected packets per country pair         |
+| `countries`    | `xflow_country_pair_flows_total`   | Counter | Flow records as exported per country pair           |
+| `threats`      | `xflow_threat_bytes_total`         | Counter | Sampling-corrected bytes per flagged address        |
+| `threats`      | `xflow_threat_packets_total`       | Counter | Sampling-corrected packets per flagged address      |
+| `threats`      | `xflow_threat_flows_total`         | Counter | Flow records as exported per flagged address        |
 
-| Module          | Family prefix        | Labels                             |
-| :-------------- | :------------------- | :--------------------------------- |
-| `exporters`     | `xflow_exporter`     | `exporter,version`                 |
-| `hosts`         | `xflow_host_pair`    | `exporter,src,dst`                 |
-| `services`      | `xflow_service`      | `exporter,src,dst,proto,port`      |
-| `destinations`  | `xflow_destination`  | `exporter,dst,proto,port`          |
-| `tcp_flags`     | `xflow_tcp_flags`    | `exporter,flags`                   |
-| `dscp`          | `xflow_dscp`         | `exporter,dscp`                    |
-| `asns`          | `xflow_asn_pair`     | `exporter,src_asn,dst_asn`         |
-| `applications`  | `xflow_application`  | `exporter,application`             |
-| `countries`     | `xflow_country_pair` | `exporter,src_country,dst_country` |
-| `threats`       | `xflow_threat`       | `exporter,address,direction`       |
+## Labels
 
-### Label semantics
+Every family carries `exporter`, and the labels beside it name the dimension its module aggregates on. That set is the table's key, so two records sharing it share one entry.
 
-- `exporter` — the device's UDP source address, IPv4-mapped addresses unmapped.
-- `port` — the destination port: the service side of the conversation as exported.
-- `proto` — the conventional protocol name for the common IANA numbers, the number itself otherwise.
-- `src_asn`/`dst_asn` — as exported, where `0` is a device that did not know the AS and no database placed the address. A record with neither AS feeds no entry. Where `--enrich.asn-database` is set, `xflow_asn_info{asn,organization}` names each AS the published pairs carry, on its own series: a database respelling a company would otherwise break every counter it touches. It follows the same cut those pairs take, the table behind that cut running to `--aggregation.max-entries` while a database names every AS there is. An AS no lookup resolved carries no name, which a join shows by finding nothing to join to.
-- `application` — the device-announced AVC name, the inline vendor string, or the `engine:selector` split of `applicationId` when only the number is known. `--enrich.services` fills it from the transport port where none of those exist.
-- `src_country`/`dst_country` — ISO codes from `--enrich.country-database`, `private` for an address on a LAN and `unknown` for a side it could not place — an address the database holds no country for, or no address at all on that side. Private means what Go's `netip` means by it, RFC 1918 and the IPv6 unique local range and nothing wider: shared address space, loopback and link-local have no country either but are not private, and naming them so would be the guess this distinction exists to avoid. A record neither side of which resolved feeds no entry.
-- `address`/`direction` — a single address a threat list names and the side it was seen on. Only flagged addresses appear, so the table holds what is worth acting on rather than one entry per address seen.
-- `flags` — the TCP control bits the flow's packets ORed together, rendered as names from the low bit up (`syn`, `syn,ack`, `fin,psh,ack`). Only TCP records feed it, and only those from a device that exported the field. A segment setting no bit is a NULL scan rather than a gap, so it keys `none` rather than being dropped.
-- `dscp` — the top six bits of the TOS byte as the class they name, the number otherwise. A record built on `match ipv4 dscp` exports the code point alone as IE 195 instead of the byte, which reads the same here; the byte wins where a template carries both, carrying the ECN bits with it. Admission keys on whether the device reported either, not on the value: `cs0` is best-effort traffic and belongs in the table, while a device that exports neither feeds nothing.
-- `destinations` is `services` without the source, so one entry reads as what a service received rather than who reached it. It is directional: an ingress-only pair of observation points keys the two directions of a conversation separately, so it is not a host total. Query-side folding of `services` matches it only while every source stays inside the Top-K cut, which a service reached by more sources than `--aggregation.top-k` does not.
-- The `exporters` family takes no scrape-time cut — neither Top-K nor min-bytes applies: its cardinality is the fleet's.
+**`exporter`**
 
-## Distributions
+the device's UDP source address, IPv4-mapped addresses unmapped.
 
-| Metric                        | Type             | Description                                     |
-| :---------------------------- | :--------------- | :---------------------------------------------- |
-| `xflow_flow_bytes`            | Native histogram | Sampling-corrected bytes per flow record        |
-| `xflow_flow_duration_seconds` | Native histogram | Duration where the record carried both instants |
+**`version`**
 
-## Exporter Health Metrics
+the protocol a record arrived in, carried by the `exporters` family alone: `netflow_v5`, `netflow_v8`, `netflow_v9`, `ipfix` or `sflow_v5`.
 
-These series describe the exporter itself. They have no module flag. The aggregation series appear only while a collector module is enabled; the enrichment, threat and remote-write series only while their `--enrich.*` source or `--remote-write.url` is set.
+- NetFlow-Lite is NetFlow v9 on the wire and reads `netflow_v9`, the packet section it carries being a record shape rather than a version of its own.
 
-| Metric                                              | Type    | Description                                          |
-| :-------------------------------------------------- | :------ | :--------------------------------------------------- |
-| `xflow_build_info`                                  | Gauge   | Exporter version in the `version` label, always 1    |
-| `xflow_receiver_packets_total`                      | Counter | Datagrams read per `listener`, drops included        |
-| `xflow_receiver_bytes_total`                        | Counter | Payload bytes received per `listener`                |
-| `xflow_receiver_read_errors_total`                  | Counter | Socket read failures per `listener`                  |
-| `xflow_receiver_dropped_packets_total`              | Counter | Pre-decode drops per `listener` and `reason`         |
-| `xflow_receiver_queue_length`                       | Gauge   | Datagrams queued ahead of the decoders               |
-| `xflow_receiver_queue_capacity`                     | Gauge   | Bound of that queue                                  |
-| `xflow_flows_total`                                 | Counter | Records decoded per `exporter` and `version`         |
-| `xflow_decode_errors_total`                         | Counter | Rejections per `exporter`, `version` and `reason`    |
-| `xflow_last_flow_timestamp_seconds`                 | Gauge   | Unix time of the exporter's last decode              |
-| `xflow_templates`                                   | Gauge   | Unexpired templates per domain and `type`            |
-| `xflow_sequence_missed_total`                       | Counter | Export packets lost per domain                       |
-| `xflow_sampling_rate`                               | Gauge   | Declared rate per domain, absent until one arrives   |
-| `xflow_domains_refused_total`                       | Counter | Datagrams discarded at the per-device domain budget  |
-| `xflow_vendor_strings_refused_total`                | Counter | Unrepresentable string fields, counted per field     |
-| `xflow_applications_refused_total`                  | Counter | Announcements refused at the per-device app budget   |
-| `xflow_exporters_refused_total`                     | Counter | Datagrams left unattributed at the exporter budget   |
-| `xflow_aggregation_entries`                         | Gauge   | Entries held per `aggregation` table                 |
-| `xflow_aggregation_evictions_total`                 | Counter | Idle entries evicted per `aggregation`               |
-| `xflow_aggregation_overflow_records_total`          | Counter | Records folded into `other` by the entry bound       |
-| `xflow_enrichment_lookups_total`                    | Counter | Records per `enricher` and `result`                  |
-| `xflow_threat_entries`                              | Gauge   | Flagged addresses held from the list files           |
-| `xflow_threat_skipped_lines`                        | Gauge   | List lines that name no address, in the set in force |
-| `xflow_threat_reloads_total`                        | Counter | List loads that succeeded, the initial one included  |
-| `xflow_threat_reload_failures_total`                | Counter | List loads that failed, keeping the previous set     |
-| `xflow_remote_write_sends_total`                    | Counter | Writes the remote endpoint accepted                  |
-| `xflow_remote_write_failures_total`                 | Counter | Writes that failed                                   |
-| `xflow_remote_write_samples_total`                  | Counter | Samples shipped, one per series per write            |
-| `xflow_remote_write_last_success_timestamp_seconds` | Gauge   | Unix time of the last accepted write                 |
+**`src`/`dst`**
 
-### Observation domains
+the flow's addresses as the device exported them, `hosts` and `services` carrying both while `destinations` carries the destination alone.
 
-`xflow_templates`, `xflow_sequence_missed_total` and `xflow_sampling_rate`
-carry `exporter`, `version` and `odid`. A domain is that triple, not the
-identifier alone: the three protocols number their domains independently, so
-one number from one device names as many domains as it speaks protocols.
+**`proto`**
 
-`odid` is short for what each protocol calls the field, because they do not
-agree — NetFlow v9 says Source ID, IPFIX says Observation Domain ID, sFlow
-says sub-agent id. Spelling out any one of them would put that protocol's word
-on a series whose `version` names another.
+the conventional protocol name for the common IANA numbers, the number itself otherwise, on `services` and `destinations` alike.
 
-### Reason values
+**`port`**
 
-`xflow_decode_errors_total` carries one of a closed set of reasons:
+the destination port: the service side of the conversation as exported.
 
-| Reason                    | Meaning                                              |
-| :------------------------ | :--------------------------------------------------- |
-| `unsupported_version`     | A datagram no decoder claims                         |
-| `malformed`               | A structure that does not fit its bytes              |
-| `unsupported_aggregation` | A NetFlow v8 method outside the fourteen known       |
-| `missing_template`        | A v9/IPFIX template that has not arrived yet         |
-| `invalid_template`        | A template announcement the parser refuses           |
-| `reserved_set`            | A set id its protocol leaves unassigned              |
-| `domain_limit`            | An observation domain past the device's budget       |
+**`flags`**
 
-`xflow_receiver_dropped_packets_total` carries one of two:
+the TCP control bits the flow's packets ORed together, rendered as names from the low bit up (`syn`, `syn,ack`, `fin,psh,ack`).
 
-| Reason       | Meaning                                              |
-| :----------- | :--------------------------------------------------- |
-| `queue_full` | A burst the queue could not absorb                   |
-| `truncated`  | A datagram larger than `--receiver.max-packet-size`  |
+- A segment setting no bit is a NULL scan rather than a gap, so it keys `none` rather than being dropped.
 
-**Freshness** — alert on `time() - xflow_last_flow_timestamp_seconds`: a silent device stops moving its timestamp while every counter freezes, and nothing else can tell that from a healthy quiet network.
+**`dscp`**
+
+the top six bits of the TOS byte as the class they name, the number otherwise.
+
+- A record built on `match ipv4 dscp` exports the code point alone as IE 195 instead of the byte, which reads the same here; the byte wins where a template carries both, carrying the ECN bits with it.
+
+**`src_asn`/`dst_asn`**
+
+the AS numbers as exported, where `0` is a device that did not know the AS and no database placed the address.
+
+**`asn`/`organization`**
+
+one AS number and what `--enrich.asn-database` calls it, carried by `xflow_asn_info` alone.
+
+**`application`**
+
+the device-announced AVC name, the inline vendor string, or the `engine:selector` split of `applicationId` when only the number is known.
+
+- `--enrich.services` fills it from the transport port where none of those exist.
+
+**`src_country`/`dst_country`**
+
+ISO codes from `--enrich.country-database`, `private` for an address on a LAN and `unknown` for a side it could not place — an address the database holds no country for, or no address at all on that side.
+
+- Private means what Go's `netip` means by it, RFC 1918 and the IPv6 unique local range and nothing wider: shared address space, loopback and link-local have no country either but are not private, and naming them so would be the guess this distinction exists to avoid.
+
+**`address`/`direction`**
+
+a single address a threat list names, and the side of the flow it was seen on, `src` or `dst`.
+
+## Specifications
+
+Each entry carries what the series' HELP text and the shared [Absence](README.md#absence) rules do not.
+
+**the `other` series of every family**
+
+every label reads `other`, and the series carries what the aggregation's entry bound rejected at ingest and nothing else, so a family stays whole across the point where `--aggregation.max-entries` stopped it opening a new entry.
+
+- The tail below the Top-K and min-bytes cuts is withheld rather than summed into it — [Counter semantics](README.md#counter-semantics) carries why folding that tail, or an evicted entry's totals, would break `rate()`.
+
+**the three `xflow_exporter_*` counters**
+
+the per-device family takes no scrape-time cut, neither Top-K nor min-bytes, because its cardinality is the fleet's rather than the traffic's — a device that exported one small flow keeps its own series where the same volume in another family could fall outside the Top-K or below `--aggregation.min-bytes` and publish nothing.
+
+**the three `xflow_destination_*` counters**
+
+`destinations` is `services` without the source, so one entry reads as what a service received in total rather than what any one client sent it, and a record whose source never resolved still names the service it reached.
+
+- It is directional: an ingress-only pair of observation points keys the two directions of a conversation separately, so it is not a host total.
+- Folding `xflow_service_*` in a query matches it only while every source stays inside the Top-K cut, which a service reached by more sources than `--aggregation.top-k` does not.
+
+**the three `xflow_tcp_flags_*` counters**
+
+only TCP records feed them, and only those from a device that exported the control-bit field, so a template omitting the field leaves the module with no entry at all rather than a table in which every profile reads `none`.
+
+**the three `xflow_dscp_*` counters**
+
+admission keys on whether the device reported the TOS byte or the code point at all, not on the value either carried, so the table covers every record whose template named one of the two and no record besides.
+
+- `cs0` is best-effort traffic rather than an unset field, which is the distinction an admission test on the value would lose.
+
+**the three `xflow_asn_pair_*` counters**
+
+a record neither side of which carries an AS feeds no entry, while one side alone opens one and the unknown side reads `0`, so a `0` in the table always sits opposite an AS that was known.
+
+**`xflow_asn_info`**
+
+it names each AS the published pairs carry, and the name rides its own series rather than the counters' labels because a database respelling a company would otherwise break every counter it touches.
+
+- It follows the same cut those pairs take, the table behind that cut running to `--aggregation.max-entries` while a database names every AS there is.
+- An AS no lookup resolved carries no name, which a join shows by finding nothing to join to, and the series is absent altogether without `--enrich.asn-database`.
+
+**the three `xflow_country_pair_*` counters**
+
+a record neither side of which resolved feeds no entry, while one side alone opens one and the other reads `unknown`, so a pair of empty codes never reaches the table as a place of its own.
+
+**the three `xflow_threat_*` counters**
+
+only addresses a list flags appear, so the table holds what is worth acting on rather than one entry per address seen, and a record flagged on both sides opens an entry for each of them.

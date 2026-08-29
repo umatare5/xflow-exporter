@@ -42,7 +42,7 @@ flowchart TB
     GF -- "PromQL" --> PROM
 ```
 
-A scrape reads the in-memory aggregation tables and never waits on flow arrival. Mind the naming collision: in flow terminology the device is the "exporter", so the `exporter` label always names the device, never this binary.
+A scrape reads the in-memory aggregation tables and never waits on flow arrival.
 
 ## Quick Start
 
@@ -91,17 +91,9 @@ Each data collector is enabled per module:
 | `--collector.threats`       | Traffic per flagged address, needs a list file     |
 | `--collector.distributions` | Flow size and duration native histograms           |
 
-Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from its port, and `--enrich.asn-database`, `--enrich.country-database` and `--enrich.threat-file` read files held locally. See [docs/README.md](docs/README.md#enrichment).
+Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from its port, and `--enrich.asn-database`, `--enrich.country-database` and `--enrich.threat-file` read files held locally. See [Enrichment](docs/README.md#enrichment).
 
-> [!Note]
-> Enrichment fetches nothing and holds no credential. [`scripts/fetch-enrichment-data.sh`](scripts/fetch-enrichment-data.sh) downloads the published threat lists and the MaxMind-format databases; `/-/reload` picks up a refreshed list and a refreshed database alike.
-
-`--remote-write.url` ships the registry's counters and gauges to a Remote Write 2.0 endpoint for the deployments a scrape cannot reach, alongside or instead of `/metrics`. Native histograms stay scrape-only.
-
-> [!Note]
-> `--aggregation.top-k` bounds what is live at any instant, not what a long-term store accumulates: the address-keyed families turn their Top-K over as talkers come and go — measured at 5.3× the live series count per hour for `xflow_service_*` on a quiet link, before the ordering fix that removed the share of that turnover a byte tie was causing — while the dimensional families (`asns`, `applications`, `tcp_flags`, `dscp`, `countries`) stay flat at 1.0×. Aggregate the former with recording rules, or drop them with `write_relabel_configs`, before shipping to remote storage; neither `--remote-write.url` nor a scrape filters anything of its own accord.
-
-The operational knobs live under `--receiver.*`, `--parser.*` and `--aggregation.*`. On Linux the read loops use `recvmmsg` batching — other platforms read one datagram per call.
+`--remote-write.url` ships the registry where a scrape cannot reach, and the receive path is bounded under `--receiver.*`, `--parser.*` and `--aggregation.*`. See [Remote write](docs/README.md#remote-write) and [Push and pull](docs/README.md#push-and-pull).
 
 ## Endpoints
 
@@ -114,56 +106,51 @@ The exporter serves four endpoints:
 
 ## Metrics
 
-This exporter aggregates flows into eleven modules, documented in [docs/collectors.md](docs/collectors.md):
-
-| Module          | Metric family (representative)   | Labels                             |
-| :-------------- | :------------------------------- | :--------------------------------- |
-| `exporters`     | `xflow_exporter_bytes_total`     | `exporter,version`                 |
-| `hosts`         | `xflow_host_pair_bytes_total`    | `exporter,src,dst`                 |
-| `services`      | `xflow_service_bytes_total`      | `exporter,src,dst,proto,port`      |
-| `destinations`  | `xflow_destination_bytes_total`  | `exporter,dst,proto,port`          |
-| `tcp_flags`     | `xflow_tcp_flags_bytes_total`    | `exporter,flags`                   |
-| `dscp`          | `xflow_dscp_bytes_total`         | `exporter,dscp`                    |
-| `asns`          | `xflow_asn_pair_bytes_total`     | `exporter,src_asn,dst_asn`         |
-| `applications`  | `xflow_application_bytes_total`  | `exporter,application`             |
-| `countries`     | `xflow_country_pair_bytes_total` | `exporter,src_country,dst_country` |
-| `threats`       | `xflow_threat_bytes_total`       | `exporter,address,direction`       |
-| `distributions` | `xflow_flow_bytes`               | `exporter` — native histogram      |
+This exporter aggregates flows into eleven modules. The ten table families, their metrics and their labels are documented in [docs/collectors.md](docs/collectors.md), and `distributions` publishes `xflow_flow_bytes` and `xflow_flow_duration_seconds` as native histograms.
 
 See [docs/README.md](docs/README.md) for the absence, folding, eviction and sampling-correction semantics every module shares.
 
 > [!Important]
 >
-> All collector modules are **disabled by default** to bound cardinality, and everything folded lands in a single series whose labels read `other`.
->
-> - Each table family carries `_bytes_total`, `_packets_total` and `_flows_total` — bytes and packets are sampling-corrected.
-> - An entry idle past `--aggregation.entry-ttl` is evicted and its series disappears — a flow nobody has seen is gone, not zero.
-> - `distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration.
+> All collector modules are **disabled by default** to bound cardinality, and `distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration.
 
 ### Exporter Health Metrics
 
-These series describe the exporter itself. They have no module and no collector flag.
+These series describe the exporter itself. They have no module and no collector flag. The aggregation series appear only while a collector module is enabled; the enrichment, threat and remote-write series only while their `--enrich.*` source or `--remote-write.url` is set.
 
-| Metric                                     | Type    | Description                                       |
-| :----------------------------------------- | :------ | :------------------------------------------------ |
-| `xflow_build_info`                         | Gauge   | Exporter version in the `version` label, always 1 |
-| `xflow_receiver_packets_total`             | Counter | Datagrams read per `listener`, drops included     |
-| `xflow_receiver_bytes_total`               | Counter | Payload bytes received per `listener`             |
-| `xflow_receiver_read_errors_total`         | Counter | Socket read failures per `listener`               |
-| `xflow_receiver_dropped_packets_total`     | Counter | Pre-decode drops per `listener` and `reason`      |
-| `xflow_receiver_queue_length`              | Gauge   | Datagrams queued ahead of the decoders            |
-| `xflow_receiver_queue_capacity`            | Gauge   | Bound of that queue                               |
-| `xflow_flows_total`                        | Counter | Records decoded per `exporter` and `version`      |
-| `xflow_decode_errors_total`                | Counter | Rejections per `exporter`, `version` and `reason` |
-| `xflow_last_flow_timestamp_seconds`        | Gauge   | Unix time of the exporter's last decode           |
-| `xflow_templates`                          | Gauge   | Unexpired templates per domain and `type`         |
-| `xflow_sequence_missed_total`              | Counter | Export packets lost per domain                    |
-| `xflow_sampling_rate`                      | Gauge   | Declared sampling rate, absent until one arrives  |
-| `xflow_aggregation_entries`                | Gauge   | Entries held per `aggregation` table              |
-| `xflow_aggregation_evictions_total`        | Counter | Idle entries evicted per `aggregation`            |
-| `xflow_aggregation_overflow_records_total` | Counter | Records folded into `other` by the entry bound    |
+| Metric                                              | Type    | Description                                          |
+| :-------------------------------------------------- | :------ | :--------------------------------------------------- |
+| `xflow_build_info`                                  | Gauge   | Exporter version in the `version` label, always 1    |
+| `xflow_receiver_packets_total`                      | Counter | Datagrams read per `listener`, drops included        |
+| `xflow_receiver_bytes_total`                        | Counter | Payload bytes received per `listener`                |
+| `xflow_receiver_read_errors_total`                  | Counter | Socket read failures per `listener`                  |
+| `xflow_receiver_dropped_packets_total`              | Counter | Pre-decode drops per `listener` and `reason`         |
+| `xflow_receiver_queue_length`                       | Gauge   | Datagrams queued ahead of the decoders               |
+| `xflow_receiver_queue_capacity`                     | Gauge   | Bound of that queue                                  |
+| `xflow_flows_total`                                 | Counter | Records decoded per `exporter` and `version`         |
+| `xflow_decode_errors_total`                         | Counter | Rejections per `exporter`, `version` and `reason`    |
+| `xflow_last_flow_timestamp_seconds`                 | Gauge   | Unix time of the exporter's last decode              |
+| `xflow_templates`                                   | Gauge   | Unexpired templates per domain and `type`            |
+| `xflow_sequence_missed_total`                       | Counter | Export packets lost per domain                       |
+| `xflow_sampling_rate`                               | Gauge   | Declared rate per domain, absent until one arrives   |
+| `xflow_domains_refused_total`                       | Counter | Datagrams discarded at the per-device domain budget  |
+| `xflow_vendor_strings_refused_total`                | Counter | Unrepresentable string fields, counted per field     |
+| `xflow_applications_refused_total`                  | Counter | Announcements refused at the per-device app budget   |
+| `xflow_exporters_refused_total`                     | Counter | Datagrams left unattributed at the exporter budget   |
+| `xflow_aggregation_entries`                         | Gauge   | Entries held per `aggregation` table                 |
+| `xflow_aggregation_evictions_total`                 | Counter | Idle entries evicted per `aggregation`               |
+| `xflow_aggregation_overflow_records_total`          | Counter | Records folded into `other` by the entry bound       |
+| `xflow_enrichment_lookups_total`                    | Counter | Records per `enricher` and `result`                  |
+| `xflow_threat_entries`                              | Gauge   | Flagged addresses held from the list files           |
+| `xflow_threat_skipped_lines`                        | Gauge   | List lines that name no address, in the set in force |
+| `xflow_threat_reloads_total`                        | Counter | List loads that succeeded, the initial one included  |
+| `xflow_threat_reload_failures_total`                | Counter | List loads that failed, keeping the previous set     |
+| `xflow_remote_write_sends_total`                    | Counter | Writes the remote endpoint accepted                  |
+| `xflow_remote_write_failures_total`                 | Counter | Writes that failed                                   |
+| `xflow_remote_write_samples_total`                  | Counter | Samples shipped, one per series per write            |
+| `xflow_remote_write_last_success_timestamp_seconds` | Gauge   | Unix time of the last accepted write                 |
 
-The `reason` label values are catalogued in [docs/collectors.md](docs/collectors.md).
+The `reason` values are catalogued in [Reason values](docs/README.md#reason-values), and [Templates](docs/README.md#templates) carries what `odid` names.
 
 > [!Important]
 >
@@ -205,12 +192,10 @@ Add the alerting rules to your Prometheus YAML file using [examples/prometheus_a
 
 ### Grafana Dashboard
 
-Import [examples/grafana_dashboard.json](./examples/grafana_dashboard.json). It covers reception and decoding, throughput per device, the Top-K composition views, the aggregation tables and the enrichment sources. The data source and the devices are variables.
+Import [examples/grafana_dashboard.json](./examples/grafana_dashboard.json), whose data source and devices are variables.
 
 > [!Note]
-> Panels rank by packets, not bytes. Both are sampled estimates, and a byte figure adds the variance of the packet-size distribution on top of the counting error. Read volume as proportion and take an exact figure from the device's SNMP interface counters.
->
-> The composition panels rank; they do not total. Entries below `--aggregation.top-k` publish nothing, and `other` carries only what the entry bound folded at ingest. Every panel carries its own description.
+> Panels rank by packets rather than bytes, and the composition panels rank rather than total — [Dashboards](docs/README.md#dashboards) carries what each panel covers and why.
 
 ## Contributing
 
