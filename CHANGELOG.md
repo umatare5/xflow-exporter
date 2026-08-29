@@ -1,11 +1,11 @@
 # Changelog
 
-Notable changes to the metric surface, one section per release — a short preamble, the breaking change where the release has one, then the metric changes and the flag changes.
+Notable changes to the metric surface, one section per release, listing the pull requests that release carries.
 
 A minor release may rename or remove a metric. Every collector module flag is off by default, so a release that adds one adds no series until you set it.
 
-## [Unreleased]
+## [v0.1.0]
 
-Initial scaffolding: CLI, configuration, HTTP server (`/metrics`, `/healthz`), and the `xflow_build_info` series.
+- [#1](https://github.com/umatare5/xflow-exporter/pull/1) — Start the exporter with its flags, HTTP surface and UDP receiver
 
-The UDP flow receiver: `--receiver.*` flags, `recvmmsg` batching on Linux, a bounded queue that drops rather than blocks, and the `xflow_receiver_*` health series. Received datagrams are counted and discarded until the decoders land.
+[v0.1.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.1.0
