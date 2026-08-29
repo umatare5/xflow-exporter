@@ -45,7 +45,7 @@ func TestNewLifecycleManager(t *testing.T) {
 			t.Parallel()
 
 			registry := prometheus.NewRegistry()
-			mgr := server.NewLifecycleManager(registry, tt.cfg)
+			mgr := server.NewLifecycleManager(registry, tt.cfg, nil)
 
 			if mgr == nil {
 				t.Fatal("NewLifecycleManager() returned nil")
@@ -69,7 +69,7 @@ func TestLifecycleManager_RunWithImmediateCancel(t *testing.T) {
 	}
 
 	registry := prometheus.NewRegistry()
-	mgr := server.NewLifecycleManager(registry, cfg)
+	mgr := server.NewLifecycleManager(registry, cfg, nil)
 
 	// Create a context that's immediately canceled
 	ctx, cancel := context.WithCancel(context.Background())
@@ -94,7 +94,7 @@ func TestLifecycleManager_RunWithTimeout(t *testing.T) {
 	}
 
 	registry := prometheus.NewRegistry()
-	mgr := server.NewLifecycleManager(registry, cfg)
+	mgr := server.NewLifecycleManager(registry, cfg, nil)
 
 	// Create a context with short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)

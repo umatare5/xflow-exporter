@@ -12,7 +12,7 @@ USAGE:
    xflow-exporter [global options]
 
 VERSION:
-   0.1.0
+   0.4.0
 
 GLOBAL OPTIONS:
    --dry-run                    Validate configuration without starting the server
@@ -20,6 +20,7 @@ GLOBAL OPTIONS:
    --log.format string          Log format (json, text) (default: "json")
    --log.level string           Log level (debug, info, warn, error) (default: "info")
    --version, -v                print the version
+   --web.enable-lifecycle       Enable /-/reload, which re-reads the enrichment sources
    --web.listen-address string  Address to bind the HTTP server to (default: "0.0.0.0")
    --web.listen-port int        Port number to bind the HTTP server to (default: 10052)
    --web.telemetry-path string  Path for the metrics endpoint (default: "/metrics")
@@ -28,10 +29,20 @@ GLOBAL OPTIONS:
 
    --collector.applications   Enable application metrics from AVC, App-ID or applicationId
    --collector.asns           Enable AS pair metrics from device-exported AS numbers
+   --collector.countries      Enable country pair metrics, which need --enrich.country-database
+   --collector.destinations   Enable destination address with protocol and port metrics
    --collector.distributions  Enable flow size and duration native histograms
    --collector.exporters      Enable per-device traffic metrics
    --collector.hosts          Enable source-destination address pair metrics
    --collector.services       Enable address pair with protocol and port metrics
+   --collector.threats        Enable flagged address metrics, which need --enrich.threat-file
+
+   # Enrichment Options
+
+   --enrich.asn-database string                                 Path to a MaxMind-format ASN database, filling the AS numbers a device omits
+   --enrich.country-database string                             Path to a MaxMind-format country database, filling the ISO codes for --collector.countries
+   --enrich.services                                            Name the application from the transport port where the device named none
+   --enrich.threat-file string [ --enrich.threat-file string ]  Path to a file of flagged addresses, one per line (repeatable)
 
    * Aggregation Options
 
@@ -59,6 +70,14 @@ GLOBAL OPTIONS:
    --receiver.queue-size int                                Datagrams buffered between the read loops and the decoders (default: 8192)
    --receiver.workers int                                   Decode workers consuming the queue (0 sizes to the CPU count) (default: 0)
 
+   * Remote Write Options
+
+   --remote-write.header string [ --remote-write.header string ]  Extra request header as name=value (repeatable)
+   --remote-write.interval duration                               How often the registry is shipped (default: 1m0s)
+   --remote-write.password string                                 Basic auth password for the endpoint [$XFLOW_REMOTE_WRITE_PASSWORD]
+   --remote-write.timeout duration                                Timeout of one write (default: 30s)
+   --remote-write.url string                                      Remote Write 2.0 endpoint to ship metrics to, which enables the client when set
+   --remote-write.username string                                 Basic auth username for the endpoint [$XFLOW_REMOTE_WRITE_USERNAME]
 ```
 
 ## Notes

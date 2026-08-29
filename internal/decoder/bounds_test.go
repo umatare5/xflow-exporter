@@ -1,8 +1,10 @@
 package decoder
 
 import (
+	"bytes"
 	"encoding/binary"
 	"net/netip"
+	"strconv"
 	"testing"
 	"time"
 
@@ -173,6 +175,100 @@ func TestTemplateStore_SweepSparesLiveDomains(t *testing.T) {
 	}
 }
 
+// TestInterner_RefusesUnrepresentableStrings pins the guard on the one label
+// value this exporter takes from the wire. A name cut through a multi-byte
+// rune by a fixed export width is not valid UTF-8, and Prometheus cannot hold
+// it as a label value at all.
+func TestInterner_RefusesUnrepresentableStrings(t *testing.T) {
+	t.Parallel()
+
+	i := newInterner()
+
+	full := "アプリ"
+	truncated := []byte(full)[:8] // cut mid rune, as a fixed-width field does
+
+	if got := i.intern([]byte(full)); got != full {
+		t.Errorf("intern() = %q for a whole name, want %q", got, full)
+	}
+	if got := i.intern(truncated); got != "" {
+		t.Errorf("intern() = %q for a truncated name, want it refused", got)
+	}
+	if got := i.refusedCount(); got != 1 {
+		t.Errorf("refusedCount() = %d, want the refusal counted", got)
+	}
+
+	// The announced tables take the same path, so a broken options string
+	// leaves the table without an entry rather than with a poisoned one.
+	tables := newAppTables(i)
+	exporter := netip.MustParseAddr("192.0.2.10")
+	tables.setName(exporter, 42, truncated)
+	tables.setCategory(exporter, 42, truncated)
+	if name, category := tables.resolve(exporter, 42); name != "" || category != "" {
+		t.Errorf("resolve() = %q, %q; want both absent", name, category)
+	}
+}
+
+// TestAppTables_RefusedRefreshKeepsLastAnnouncement pins what a refusal does
+// to a name the device already announced. An options template repeats one
+// device's whole database on every refresh, so a field that arrives
+// unrepresentable -- cut mid-rune by the export width, or blanked to nothing
+// but padding -- is a damaged export of that same database rather than a
+// retraction. Dropping the entry would not leave the dimension absent: the
+// application label falls back to the numeric applicationId, which splits one
+// application's counters across two series.
+func TestAppTables_RefusedRefreshKeepsLastAnnouncement(t *testing.T) {
+	t.Parallel()
+
+	tables := newAppTables(newInterner())
+	exporter := netip.MustParseAddr("192.0.2.10")
+
+	tables.setName(exporter, 42, []byte("ms-office-365\x00\x00\x00"))
+	tables.setCategory(exporter, 42, []byte("business-and-productivity-tools\x00"))
+
+	// The refresh that follows carries one field cut mid rune and one blanked
+	// to padding, the two shapes the interner refuses.
+	tables.setName(exporter, 42, []byte("アプリ")[:8])
+	tables.setCategory(exporter, 42, []byte("\x00\x00\x00\x00\x00\x00\x00\x00"))
+
+	name, category := tables.resolve(exporter, 42)
+	if name != "ms-office-365" {
+		t.Errorf("resolve() name = %q, want the last good announcement kept", name)
+	}
+	if category != "business-and-productivity-tools" {
+		t.Errorf("resolve() category = %q, want the last good announcement kept", category)
+	}
+}
+
+// TestInterner_RefusesAnOverlongString pins the other half of the interner's
+// budget. The entry bound counts strings and not their bytes, so a device
+// exporting a name as wide as its datagram fills the map with datagrams; the
+// interner never expires an entry, so what it takes it keeps.
+func TestInterner_RefusesAnOverlongString(t *testing.T) {
+	t.Parallel()
+
+	i := newInterner()
+
+	atBound := bytes.Repeat([]byte("a"), maxVendorStringLength)
+	if got := i.intern(atBound); got != string(atBound) {
+		t.Errorf("intern() of a string at the bound = %d bytes, want it kept", len(got))
+	}
+
+	overBound := bytes.Repeat([]byte("b"), maxVendorStringLength+1)
+	if got := i.intern(overBound); got != "" {
+		t.Errorf("intern() of a string past the bound = %d bytes, want it refused", len(got))
+	}
+	if got := i.refusedCount(); got != 1 {
+		t.Errorf("refusedCount() = %d, want the refusal counted", got)
+	}
+
+	// Padding is stripped before the length is judged, so a fixed-width
+	// export whose name fits is not refused for the width of its field.
+	padded := append(bytes.Repeat([]byte("c"), maxVendorStringLength), make([]byte, 64)...)
+	if got := i.intern(padded); len(got) != maxVendorStringLength {
+		t.Errorf("intern() of a padded string = %d bytes, want %d", len(got), maxVendorStringLength)
+	}
+}
+
 // TestInterner_IsBounded pins that the interner stops growing at its bound
 // and keeps returning correct values past it, the cost being an allocation
 // rather than a wrong reading.
@@ -181,20 +277,216 @@ func TestInterner_IsBounded(t *testing.T) {
 
 	i := newInterner()
 
-	for k := range uint32(maxInternedStrings + 1000) {
-		// The trailing 0xFF keeps the value distinct and non-empty once
-		// trimPadding has taken the export padding off the tail.
-		var v [8]byte
-		binary.BigEndian.PutUint32(v[0:4], k)
-		v[4] = 0xFF
+	for k := range maxInternedStrings + 1000 {
+		// A distinct name per iteration, in the shape a vendor string comes
+		// in: text, padded to a fixed export width with NULs.
+		want := "app-" + strconv.Itoa(k)
+		v := append([]byte(want), 0, 0, 0)
 
-		want := string(v[:5])
-		if got := i.intern(v[:]); got != want {
+		if got := i.intern(v); got != want {
 			t.Fatalf("intern() = %q, want %q unchanged past the bound", got, want)
 		}
 	}
 
 	if got := len(i.m); got != maxInternedStrings {
 		t.Errorf("interner holds %d entries, want the bound of %d", got, maxInternedStrings)
+	}
+}
+
+// appTableTemplateID is the options template the application-table fixtures
+// announce under.
+const appTableTemplateID = 700
+
+// appTableTemplate announces the application name mapping of RFC 6759 6.8:
+// applicationId is the scope, and the variable-length name follows it.
+func appTableTemplate() []byte {
+	body := make([]byte, 6)
+	binary.BigEndian.PutUint16(body[0:2], appTableTemplateID)
+	binary.BigEndian.PutUint16(body[2:4], 2)
+	binary.BigEndian.PutUint16(body[4:6], 1)
+	body = append(body, ipfixSpec(fieldApplicationID, 4, 0)...)
+	body = append(body, ipfixSpec(fieldApplicationName, variableFieldLength, 0)...)
+	return flowSet(ipfixOptionsTemplateSetID, body)
+}
+
+// appAnnouncement is one application-table options record.
+func appAnnouncement(appID uint32, name string) []byte {
+	rec := be32(nil, appID)
+	rec = append(rec, byte(len(name)))
+	return append(rec, name...)
+}
+
+// announceApps declares appIDs 1..count, naming each one distinctly.
+func announceApps(t *testing.T, d *Decoder, exporter netip.Addr, count int) {
+	t.Helper()
+
+	if _, err := d.Decode(exporter, ipfixMessage(0, appTableTemplate()), nil); err != nil {
+		t.Fatalf("options template: %v", err)
+	}
+
+	const perMessage = 1024
+	for base := 0; base < count; base += perMessage {
+		var body []byte
+		for k := base; k < base+perMessage && k < count; k++ {
+			body = append(body, appAnnouncement(uint32(k)+1, "app-"+strconv.Itoa(k))...)
+		}
+		if _, err := d.Decode(exporter,
+			ipfixMessage(uint32(base)+1, flowSet(appTableTemplateID, body)), nil); err != nil {
+			t.Fatalf("announcement at %d: %v", base, err)
+		}
+	}
+}
+
+// TestAppTables_AreBoundedPerExporter is the regression test for the
+// unbounded application table. The applicationId is a wire field, so one
+// permitted source address can announce 2^32 of them, no network-layer filter
+// can prevent it, and nothing expires what the table already holds.
+func TestAppTables_AreBoundedPerExporter(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	const attempts = maxAppsPerExporter * 2
+	announceApps(t, d, testExporter, attempts)
+
+	table := d.apps.table(testExporter)
+	table.mu.RLock()
+	held := len(table.names)
+	table.mu.RUnlock()
+
+	if held != maxAppsPerExporter {
+		t.Errorf("table holds %d applications, want the budget of %d", held, maxAppsPerExporter)
+	}
+	if got, want := d.ApplicationsRefused(), uint64(attempts-maxAppsPerExporter); got != want {
+		t.Errorf("ApplicationsRefused() = %d, want %d", got, want)
+	}
+
+	// The applications admitted before the bound keep resolving, and one
+	// past it stays numbered rather than being named wrongly.
+	if name, _ := d.apps.resolve(testExporter, 1); name != "app-0" {
+		t.Errorf("resolve(1) = %q, want the established name kept", name)
+	}
+	if name, category := d.apps.resolve(testExporter, attempts); name != "" || category != "" {
+		t.Errorf("resolve(%d) = %q, %q; want the refused application left absent", attempts, name, category)
+	}
+}
+
+// TestAppTables_RefreshSurvivesTheBudget pins that a device at its budget
+// keeps refreshing the applications it established. The options template
+// repeats the whole database periodically, so a bound that refused known
+// identifiers would drop nothing but would count forever.
+func TestAppTables_RefreshSurvivesTheBudget(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	announceApps(t, d, testExporter, maxAppsPerExporter+10)
+	refusedOnce := d.ApplicationsRefused()
+
+	// The device re-announces the same table on its next refresh.
+	announceApps(t, d, testExporter, maxAppsPerExporter+10)
+
+	if name, _ := d.apps.resolve(testExporter, maxAppsPerExporter); name == "" {
+		t.Error("an established application lost its name on refresh")
+	}
+	if got, want := d.ApplicationsRefused(), refusedOnce*2; got != want {
+		t.Errorf("ApplicationsRefused() = %d, want %d: only the surplus counts again", got, want)
+	}
+}
+
+// TestAppTables_BudgetIsPerExporter pins that one device exhausting its
+// application budget does not deny another device its own.
+func TestAppTables_BudgetIsPerExporter(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	other := netip.MustParseAddr("192.0.2.88")
+
+	announceApps(t, d, testExporter, maxAppsPerExporter+1)
+	announceApps(t, d, other, 1)
+
+	if name, _ := d.apps.resolve(other, 1); name != "app-0" {
+		t.Errorf("resolve() = %q for the second exporter, want budgets kept per device", name)
+	}
+
+	// An identifier only the first device announced does not resolve here.
+	// One table per device is what makes one budget per device, and the
+	// numbering is per protocol pack: two devices on different packs give
+	// the same identifier to different applications.
+	if name, _ := d.apps.resolve(other, 2); name != "" {
+		t.Errorf("resolve(2) = %q for the second exporter, want a table of its own", name)
+	}
+}
+
+// ipfixVariableLengthTemplate announces template 256 carrying a single
+// variable-length field, the encoding only IPFIX has.
+func ipfixVariableLengthTemplate(odid uint32) []byte {
+	const setLen = 12
+
+	b := be16(nil, 10)
+	b = be16(b, ipfixHeaderLen+setLen)
+	b = be32(b, 1)
+	b = be32(b, 1)
+	b = be32(b, odid)
+
+	b = be16(b, 2)
+	b = be16(b, setLen)
+	b = be16(b, 256)
+	b = be16(b, 1)
+	b = be16(b, 96)
+	return be16(b, variableFieldLength)
+}
+
+// v9DataSetNaming builds a v9 data flowset naming one template id, carrying
+// four bytes a record of the minimum length would divide into four records.
+func v9DataSetNaming(odid uint32, templateID uint16) []byte {
+	b := be16(nil, 9)
+	b = be16(b, 1)
+	b = be32(b, 1000)
+	b = be32(b, 1)
+	b = be32(b, 1)
+	b = be32(b, odid)
+
+	b = be16(b, templateID)
+	b = be16(b, flowSetHeaderLen+4)
+	return append(b, 0, 0, 0, 0)
+}
+
+// TestDecodeV9_RefusesAnIPFIXAnnouncedVariableLengthTemplate is the regression
+// test for a remote unauthenticated process death. The template store is keyed
+// by exporter address and Observation Domain ID, which RFC 7011 requires but
+// which does not separate the two protocols that share the store. An IPFIX
+// variable-length field registers as length 65535 against a recordLen of one,
+// and the v9 walk reads every field at its declared length, so the second
+// datagram slices 65535 bytes out of a one-byte record.
+//
+// Nothing recovers it: the only recover() in the process wraps Collect, and
+// the decode workers are bare goroutines. A device with one v9 and one IPFIX
+// flow exporter aimed here shares a source address and an ODID, and both
+// allocate template ids from 256, so this arrives without an attacker.
+func TestDecodeV9_RefusesAnIPFIXAnnouncedVariableLengthTemplate(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	const odid = 7
+
+	if _, err := d.Decode(testExporter, ipfixVariableLengthTemplate(odid), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want the IPFIX template accepted", err)
+	}
+
+	got, err := d.Decode(testExporter, v9DataSetNaming(odid, 256), nil)
+	if err != nil {
+		t.Fatalf("Decode() error = %v, want the v9 data set tolerated", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("Decode() returned %d records, want none from a template v9 cannot walk", len(got))
+	}
+
+	var refused uint64
+	for _, e := range d.Stats().Snapshot()[0].Errors {
+		if e.Version == flow.VersionNetFlowV9 && e.Reason == ReasonInvalidTemplate {
+			refused = e.Count
+		}
+	}
+	if refused != 1 {
+		t.Errorf("invalid_template count = %d, want 1 so the refusal is visible", refused)
 	}
 }

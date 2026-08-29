@@ -50,10 +50,11 @@ type table[K comparable] struct {
 
 	maxEntries int
 
-	// overflow accumulates what the bound rejected and what eviction took
-	// away, so the family's other series stays monotonic: a total that has
-	// once been counted is never withdrawn from it. Its lastSeen never
-	// evicts it, the bucket being part of the table rather than an entry.
+	// overflow accumulates what the entry bound rejected at ingest, and
+	// nothing else. It is the one fold the table knows to be unpublished:
+	// the record never reached an entry, so no series ever carried it. Its
+	// lastSeen never evicts it, the bucket being part of the table rather
+	// than an entry.
 	overflow entry
 
 	idleEvictions atomic.Uint64
@@ -114,31 +115,38 @@ func (t *table[K]) insert(key K, bytes, packets, flows uint64, now int64) bool {
 	return true
 }
 
-// sweep drops every entry idle since before cutoff and reports how many.
-// Their own series disappear with them, which is the push-model spelling of
-// absence: a flow nobody has seen for the TTL is not a zero, it is gone.
+// sweep drops every entry idle since before cutoff, reporting how many and
+// what they carried. Their own series disappear with them, which is the push
+// model's spelling of absence: a flow nobody has seen for the TTL is not a
+// zero, it is gone.
 //
-// The totals they carried move into the overflow bucket rather than vanishing.
-// The other series is a counter, so withdrawing a total it has already
-// published would read as a counter reset and give rate() a false spike.
-func (t *table[K]) sweep(cutoff int64) int {
+// The totals they carried are not moved into the overflow bucket. An entry
+// that had a series of its own has already been counted there, increment by
+// increment; re-publishing its lifetime on the other series would count the
+// same bytes a second time, and sum(rate()) over the family would read twice
+// what was ingested. The returned totals are the ledger of what left the
+// table, which no series publishes.
+func (t *table[K]) sweep(cutoff int64) (int, Totals) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	evicted := 0
+	var dropped Totals
 	for key, e := range t.entries {
 		if e.lastSeen.Load() >= cutoff {
 			continue
 		}
 
 		totals := e.totals()
-		t.overflow.add(totals.Bytes, totals.Packets, totals.Flows, cutoff)
+		dropped.Bytes += totals.Bytes
+		dropped.Packets += totals.Packets
+		dropped.Flows += totals.Flows
 		delete(t.entries, key)
 		evicted++
 	}
 
 	t.idleEvictions.Add(uint64(evicted)) //nolint:gosec // A map size is never negative.
-	return evicted
+	return evicted, dropped
 }
 
 // EntrySnapshot is one entry at one instant.

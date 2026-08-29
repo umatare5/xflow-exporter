@@ -52,7 +52,7 @@ Make targets ([Makefile](Makefile)):
 
 - Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore(deps):`, etc.).
 - Sign off commits with `Signed-off-by:` (DCO).
-- Open PRs against `main`. CI runs lint, tests, and CodeQL.
+- Open PRs against `main`. CI runs lint, tests and the alerting-rule checks.
 
 ## Domain Knowledge
 

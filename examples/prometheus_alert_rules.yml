@@ -76,3 +76,48 @@ groups:
             The table hit --aggregation.max-entries, so new keys fold into
             the other series and per-key visibility is lost until eviction
             frees entries or the bound is raised.
+
+      - alert: XflowThreatListCollapsed
+        expr: >-
+          xflow_threat_entries
+          < 0.5 * max_over_time(xflow_threat_entries[24h])
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "xflow-exporter's threat set has lost half its addresses"
+          description: >-
+            A reload replaced the set with a much smaller one, which is what
+            a fetch that brought back an error page or a truncated feed looks
+            like from here. The addresses no longer covered stop being
+            flagged, and an unflagged address reads as a clean one.
+
+      - alert: XflowThreatListPartlyUnread
+        expr: xflow_threat_skipped_lines > 0
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "xflow-exporter skipped lines of the threat list"
+          description: >-
+            Lines of the configured lists name no address and were passed
+            over, a list published in CIDR notation being the usual reason.
+            Those addresses are not covered, which is absence rather than a
+            clean bill of health.
+
+      - alert: XflowVendorStringsRefused
+        expr: increase(xflow_vendor_strings_refused_total[1h]) > 0
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "xflow-exporter refused an application name it cannot show"
+          description: >-
+            A device exported a string that is not valid UTF-8, an
+            application name cut through a multi-byte character by a
+            fixed-width field being the usual cause. The name is dropped,
+            not the record: one carrying an application id keeps the numbered
+            form, 13:453 and the like, --enrich.services can still name one
+            from its port, and only a record with neither publishes no
+            application series. Widen the export field on the device rather
+            than read a numbered series as an application of its own.

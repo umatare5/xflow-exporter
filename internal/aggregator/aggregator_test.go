@@ -26,7 +26,10 @@ func testConfig() config.Aggregation {
 }
 
 func allModules() Modules {
-	return Modules{Exporters: true, Hosts: true, Services: true, ASNs: true, Applications: true}
+	return Modules{
+		Exporters: true, Hosts: true, Services: true, Destinations: true,
+		ASNs: true, Applications: true,
+	}
 }
 
 // testRecord is a fully-dimensioned record.
@@ -248,6 +251,9 @@ func TestAggregator_DisabledModulesReturnNothing(t *testing.T) {
 	if entries, _ := a.Exporters(); entries != nil {
 		t.Errorf("Exporters() = %+v, want nil with the module disabled", entries)
 	}
+	if entries, _ := a.Destinations(); entries != nil {
+		t.Errorf("Destinations() = %+v, want nil with the module disabled", entries)
+	}
 	if got := len(a.Health()); got != 0 {
 		t.Errorf("Health() reports %d tables, want 0", got)
 	}
@@ -271,5 +277,139 @@ func BenchmarkAggregator_Ingest(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		a.Ingest(records)
+	}
+}
+
+// TestAggregator_ThreatsKeepTheSideTheHitWasSeenOn pins the dimension the
+// flagged-address table exists for. A hit on the source is an outside address
+// probing the perimeter, and a hit on the destination is an inside host that
+// reached a listed one -- the two read as different events, so the side has to
+// survive into the key rather than being folded into one address series.
+func TestAggregator_ThreatsKeepTheSideTheHitWasSeenOn(t *testing.T) {
+	t.Parallel()
+
+	a := New(testConfig(), Modules{Threats: true})
+
+	src := testRecord()
+	src.SrcFlagged = true
+
+	dst := testRecord()
+	dst.DstFlagged = true
+	dst.Bytes = 2000
+
+	a.Ingest([]flow.Record{src, dst})
+
+	entries, _ := a.Threats()
+	if len(entries) != 2 {
+		t.Fatalf("Threats() = %d entries, want one per side", len(entries))
+	}
+
+	seen := make(map[string]ThreatKey, len(entries))
+	for _, e := range entries {
+		seen[e.Key.Direction] = e.Key
+	}
+
+	if key, ok := seen[DirectionSrc]; !ok || key.Address != testSrc {
+		t.Errorf("source-side entry = %+v, want the source address keyed as src", key)
+	}
+	if key, ok := seen[DirectionDst]; !ok || key.Address != testDst {
+		t.Errorf("destination-side entry = %+v, want the destination address keyed as dst", key)
+	}
+}
+
+// TestAggregator_UnflaggedRecordsFeedNoThreatTable pins the absence rule for
+// the module: an address no list covers is uncovered rather than clean, so it
+// must produce no series at all.
+func TestAggregator_UnflaggedRecordsFeedNoThreatTable(t *testing.T) {
+	t.Parallel()
+
+	a := New(testConfig(), Modules{Threats: true})
+	a.Ingest([]flow.Record{testRecord()})
+
+	if entries, _ := a.Threats(); len(entries) != 0 {
+		t.Errorf("Threats() = %d entries for an unflagged record, want none", len(entries))
+	}
+}
+
+// TestAggregator_DestinationsFoldEverySourceIntoOne pins what separates this
+// table from the service table: it is the same key without the source, so
+// every host that reached one service shares an entry where the service table
+// keeps one apiece. The reading is what the service received, not who sent it.
+func TestAggregator_DestinationsFoldEverySourceIntoOne(t *testing.T) {
+	t.Parallel()
+
+	a := New(testConfig(), Modules{Services: true, Destinations: true})
+
+	for _, src := range []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"} {
+		r := testRecord()
+		r.SrcAddr = netip.MustParseAddr(src)
+		a.Ingest([]flow.Record{r})
+	}
+
+	if services, _ := a.Services(); len(services) != 3 {
+		t.Errorf("Services() returned %d entries, want one per source", len(services))
+	}
+
+	destinations, fold := a.Destinations()
+	if len(destinations) != 1 {
+		t.Fatalf("Destinations() returned %d entries, want the three sources in one", len(destinations))
+	}
+
+	got := destinations[0]
+	if got.Bytes != 3000 || got.Packets != 30 || got.Flows != 3 {
+		t.Errorf("Destinations() totals = %+v, want every source summed", got.Totals)
+	}
+	if got.Key.Dst != testDst || got.Key.Protocol != 6 || got.Key.Port != 443 {
+		t.Errorf("destination key = %+v, want the service the records reached", got.Key)
+	}
+	if fold != (Totals{}) {
+		t.Errorf("fold = %+v, want nothing folded below the entry bound", fold)
+	}
+}
+
+// TestAggregator_DestinationsNeedADestinationAndAProtocol pins the two
+// conditions the table checks and the one it deliberately does not. A record
+// whose source never resolved still names the service it reached, so the
+// source is not among them; one naming no destination, or carrying no
+// protocol, would key a series on a value the device never reported.
+func TestAggregator_DestinationsNeedADestinationAndAProtocol(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*flow.Record)
+		want   int
+	}{
+		{
+			name:   "no source resolved",
+			mutate: func(r *flow.Record) { r.SrcAddr = netip.Addr{} },
+			want:   1,
+		},
+		{
+			name:   "no destination",
+			mutate: func(r *flow.Record) { r.DstAddr = netip.Addr{} },
+			want:   0,
+		},
+		{
+			name:   "no protocol",
+			mutate: func(r *flow.Record) { r.Protocol = 0 },
+			want:   0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			a := New(testConfig(), Modules{Destinations: true})
+			r := testRecord()
+			tt.mutate(&r)
+			a.Ingest([]flow.Record{r})
+
+			entries, _ := a.Destinations()
+			if len(entries) != tt.want {
+				t.Errorf("Destinations() returned %d entries, want %d", len(entries), tt.want)
+			}
+		})
 	}
 }

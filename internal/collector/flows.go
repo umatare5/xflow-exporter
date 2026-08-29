@@ -1,8 +1,8 @@
 // Package collector provides collectors for xflow-exporter.
 // This file publishes the aggregation tables. Every family carries bytes,
-// packets and flows; the entries past the Top-K bound or under the byte
-// threshold fold into one series whose labels all read "other", alongside
-// what the entry bound already folded at ingest.
+// packets and flows; the series whose labels all read "other" carries what
+// the entry bound folded at ingest, which is the only traffic no series of
+// this family has ever published.
 package collector
 
 import (
@@ -23,8 +23,11 @@ type FlowSource interface {
 	Exporters() ([]aggregator.EntrySnapshot[aggregator.ExporterKey], aggregator.Totals)
 	Hosts() ([]aggregator.EntrySnapshot[aggregator.HostKey], aggregator.Totals)
 	Services() ([]aggregator.EntrySnapshot[aggregator.ServiceKey], aggregator.Totals)
+	Destinations() ([]aggregator.EntrySnapshot[aggregator.DestinationKey], aggregator.Totals)
 	ASNs() ([]aggregator.EntrySnapshot[aggregator.ASNKey], aggregator.Totals)
 	Applications() ([]aggregator.EntrySnapshot[aggregator.AppKey], aggregator.Totals)
+	Countries() ([]aggregator.EntrySnapshot[aggregator.CountryKey], aggregator.Totals)
+	Threats() ([]aggregator.EntrySnapshot[aggregator.ThreatKey], aggregator.Totals)
 	Health() []aggregator.TableHealth
 }
 
@@ -39,11 +42,11 @@ type familyDescs struct {
 func newFamilyDescs(prefix, subject string, labels []string) familyDescs {
 	return familyDescs{
 		bytes: prometheus.NewDesc(prefix+"_bytes_total",
-			"Sampling-corrected bytes per "+subject+", other folds the rest", labels, nil),
+			"Sampling-corrected bytes per "+subject+", other carries the entry-bound fold", labels, nil),
 		packets: prometheus.NewDesc(prefix+"_packets_total",
-			"Sampling-corrected packets per "+subject+", other folds the rest", labels, nil),
+			"Sampling-corrected packets per "+subject+", other carries the entry-bound fold", labels, nil),
 		flows: prometheus.NewDesc(prefix+"_flows_total",
-			"Flow records as exported per "+subject+", other folds the rest", labels, nil),
+			"Flow records as exported per "+subject+", other carries the entry-bound fold", labels, nil),
 	}
 }
 
@@ -54,11 +57,24 @@ func (f *familyDescs) describe(ch chan<- *prometheus.Desc) {
 	ch <- f.flows
 }
 
-// emit publishes one label set's totals.
+// emit publishes one label set's totals. A label value Prometheus cannot hold
+// drops that entry's three series and nothing else: the panic MustNewConstMetric
+// would raise costs the scrape every family queued behind this one.
 func (f *familyDescs) emit(ch chan<- prometheus.Metric, totals aggregator.Totals, labels ...string) {
-	ch <- prometheus.MustNewConstMetric(f.bytes, prometheus.CounterValue, float64(totals.Bytes), labels...)
-	ch <- prometheus.MustNewConstMetric(f.packets, prometheus.CounterValue, float64(totals.Packets), labels...)
-	ch <- prometheus.MustNewConstMetric(f.flows, prometheus.CounterValue, float64(totals.Flows), labels...)
+	send := func(desc *prometheus.Desc, value uint64) bool {
+		m, err := prometheus.NewConstMetric(desc, prometheus.CounterValue, float64(value), labels...)
+		if err != nil {
+			return false
+		}
+		ch <- m
+		return true
+	}
+
+	if !send(f.bytes, totals.Bytes) {
+		return
+	}
+	send(f.packets, totals.Packets)
+	send(f.flows, totals.Flows)
 }
 
 // FlowCollector publishes the enabled aggregation tables.
@@ -72,8 +88,11 @@ type FlowCollector struct {
 	exporters    familyDescs
 	hosts        familyDescs
 	services     familyDescs
+	destinations familyDescs
 	asns         familyDescs
 	applications familyDescs
+	countries    familyDescs
+	threats      familyDescs
 
 	entriesDesc   *prometheus.Desc
 	evictionsDesc *prometheus.Desc
@@ -116,6 +135,10 @@ func NewFlowCollector(src FlowSource, modules config.Collectors, agg config.Aggr
 		c.services = newFamilyDescs("xflow_service", "service five-tuple",
 			[]string{labelExporter, labelSrc, labelDst, labelProto, labelPort})
 	}
+	if modules.Destinations {
+		c.destinations = newFamilyDescs("xflow_destination", "destination service",
+			[]string{labelExporter, labelDst, labelProto, labelPort})
+	}
 	if modules.ASNs {
 		c.asns = newFamilyDescs("xflow_asn_pair", "AS pair",
 			[]string{labelExporter, labelSrcASN, labelDstASN})
@@ -123,6 +146,14 @@ func NewFlowCollector(src FlowSource, modules config.Collectors, agg config.Aggr
 	if modules.Applications {
 		c.applications = newFamilyDescs("xflow_application", "application",
 			[]string{labelExporter, labelApplication})
+	}
+	if modules.Countries {
+		c.countries = newFamilyDescs("xflow_country_pair", "country pair",
+			[]string{labelExporter, labelSrcCountry, labelDstCountry})
+	}
+	if modules.Threats {
+		c.threats = newFamilyDescs("xflow_threat", "flagged address",
+			[]string{labelExporter, labelAddress, labelDirection})
 	}
 
 	return c
@@ -139,11 +170,20 @@ func (c *FlowCollector) Describe(ch chan<- *prometheus.Desc) {
 	if c.modules.Services {
 		c.services.describe(ch)
 	}
+	if c.modules.Destinations {
+		c.destinations.describe(ch)
+	}
 	if c.modules.ASNs {
 		c.asns.describe(ch)
 	}
 	if c.modules.Applications {
 		c.applications.describe(ch)
+	}
+	if c.modules.Countries {
+		c.countries.describe(ch)
+	}
+	if c.modules.Threats {
+		c.threats.describe(ch)
 	}
 	ch <- c.entriesDesc
 	ch <- c.evictionsDesc
@@ -151,7 +191,14 @@ func (c *FlowCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 // Collect implements prometheus.Collector by reading the aggregator.
+//
+// The health series go first. A label value the wire controls can panic the
+// metric that renders it, and the recovery costs the scrape everything this
+// collector had not yet emitted -- so the counters an operator would notice
+// the loss by must not be queued behind the tables that can raise it.
 func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
+	c.collectHealth(ch)
+
 	if c.modules.Exporters {
 		c.collectExporters(ch)
 	}
@@ -161,14 +208,21 @@ func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
 	if c.modules.Services {
 		collectFamily(c, ch, &c.services, c.src.Services, serviceLabels)
 	}
+	if c.modules.Destinations {
+		collectFamily(c, ch, &c.destinations, c.src.Destinations, destinationLabels)
+	}
 	if c.modules.ASNs {
 		collectFamily(c, ch, &c.asns, c.src.ASNs, asnLabels)
 	}
 	if c.modules.Applications {
 		collectFamily(c, ch, &c.applications, c.src.Applications, appLabels)
 	}
-
-	c.collectHealth(ch)
+	if c.modules.Countries {
+		collectFamily(c, ch, &c.countries, c.src.Countries, countryLabels)
+	}
+	if c.modules.Threats {
+		collectFamily(c, ch, &c.threats, c.src.Threats, threatLabels)
+	}
 }
 
 // collectExporters publishes the per-device table without folding: its
@@ -183,13 +237,14 @@ func (c *FlowCollector) collectExporters(ch chan<- prometheus.Metric) {
 
 // collectFamily publishes one folded table: the Top-K entries at or above the
 // byte threshold keep their labels, and the other series carries what the
-// table folded at ingest or at eviction.
+// entry bound folded at ingest.
 //
-// The live tail below the cut is not added to that series. Its entries are
-// still accumulating, so summing them per scrape would make a counter that
-// falls whenever one of them is evicted or grows into the cut, which rate()
-// reports as a reset. A tail entry reaches the other series when it is
-// evicted, and until then it is simply not published.
+// The tail below the cut is not added to that series, at any point in its
+// life. Its entries are still accumulating, so summing them per scrape would
+// make a counter that falls whenever one of them is evicted or grows into the
+// cut, which rate() reports as a reset -- and folding them once at eviction
+// would double-count every entry that had been above the cut, since those
+// bytes already reached Prometheus as increments on the entry's own series.
 func collectFamily[K comparable](
 	c *FlowCollector, ch chan<- prometheus.Metric, descs *familyDescs,
 	read func() ([]aggregator.EntrySnapshot[K], aggregator.Totals),
@@ -254,6 +309,13 @@ func serviceLabels(k aggregator.ServiceKey) []string {
 	}
 }
 
+func destinationLabels(k aggregator.DestinationKey) []string {
+	return []string{
+		k.Exporter.String(), k.Dst.String(),
+		protocolName(k.Protocol), strconv.Itoa(int(k.Port)),
+	}
+}
+
 func asnLabels(k aggregator.ASNKey) []string {
 	return []string{
 		k.Exporter.String(),
@@ -264,6 +326,26 @@ func asnLabels(k aggregator.ASNKey) []string {
 
 func appLabels(k aggregator.AppKey) []string {
 	return []string{k.Exporter.String(), k.Name}
+}
+
+// countryLabels renders a country pair. A side the database could not place
+// reads as unknown rather than as an empty label, which Prometheus cannot
+// tell from a label that was never set.
+func countryLabels(k aggregator.CountryKey) []string {
+	return []string{k.Exporter.String(), countryLabel(k.Src), countryLabel(k.Dst)}
+}
+
+// threatLabels renders one flagged address and the side it was seen on.
+func threatLabels(k aggregator.ThreatKey) []string {
+	return []string{k.Exporter.String(), k.Address.String(), k.Direction}
+}
+
+// countryLabel spells one side of a pair.
+func countryLabel(code string) string {
+	if code == "" {
+		return "unknown"
+	}
+	return code
 }
 
 // protocolNames maps the common IANA protocol numbers to their conventional

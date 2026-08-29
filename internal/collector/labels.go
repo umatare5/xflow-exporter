@@ -19,4 +19,12 @@ const (
 	labelSrcASN      = "src_asn"     // Source AS number
 	labelDstASN      = "dst_asn"     // Destination AS number
 	labelApplication = "application" // Resolved application name or engine:selector
+	labelAddress     = "address"     // A single address a series is keyed by
+	labelDirection   = "direction"   // Side of the flow an address was seen on
+	labelSrcCountry  = "src_country" // ISO country code of the source address
+	labelDstCountry  = "dst_country" // ISO country code of the destination address
+
+	// Enrichment labels.
+	labelEnricher = "enricher" // Enrichment source a lookup went through
+	labelResult   = "result"   // What an enrichment source made of a record
 )

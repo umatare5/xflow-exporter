@@ -34,7 +34,9 @@ To release a new version, follow these steps:
 2. Update the version in the `VERSION` file.
 3. Submit a pull request with both files.
 
-Merging that pull request is the whole release. A push to `main` touching `VERSION` runs the release workflow, which tags the commit and publishes the release in the same run. The workflow has no manual trigger, so there is no step to perform by hand.
+Merging that pull request is the whole release. A push to `main` touching `VERSION` runs the release workflow, which tags the commit and publishes the release in the same run.
+
+The workflow also accepts a manual run from the Actions tab. That is for the release a path filter could not reach, the first one above all: the push that creates a branch carries nothing to compare paths against.
 
 ## Pull requests
 

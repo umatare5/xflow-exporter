@@ -131,19 +131,30 @@ func (d *Decoder) parseIPFIXTemplates(key domainKey, set []byte, issue func(reas
 // parseIPFIXOptionsTemplates compiles every options template in one set. The
 // head differs from v9: a total field count and a scope field count.
 func (d *Decoder) parseIPFIXOptionsTemplates(key domainKey, set []byte, issue func(reason string)) {
-	const headLen = 6
+	// RFC 7011 figures T and V put no scope field count on a withdrawal, so
+	// it is the template id and a field count of zero and nothing else. An
+	// all-options withdrawal is therefore a set of length 8, whose body falls
+	// short of an announcement's head.
+	const (
+		headLen       = 6
+		withdrawalLen = 4
+	)
 
 	offset := 0
-	for offset+headLen <= len(set) {
+	for offset+withdrawalLen <= len(set) {
 		templateID := binary.BigEndian.Uint16(set[offset : offset+2])
 		fieldCount := int(binary.BigEndian.Uint16(set[offset+2 : offset+4]))
-		scopeCount := int(binary.BigEndian.Uint16(set[offset+4 : offset+6]))
 
 		if fieldCount == 0 {
 			d.withdrawTemplates(key, templateID, true)
-			offset += headLen
+			offset += withdrawalLen
 			continue
 		}
+
+		if offset+headLen > len(set) {
+			return
+		}
+		scopeCount := int(binary.BigEndian.Uint16(set[offset+4 : offset+6]))
 		offset += headLen
 
 		// RFC 7011 requires at least one scope field, and the scope fields
@@ -300,15 +311,12 @@ func (d *Decoder) readIPFIXOptionsRecord(
 ) (int, bool) {
 	var opts optionsState
 
-	for i, f := range tpl.fields {
+	for _, f := range tpl.fields {
 		value, next, ok := nextFieldValue(f, set, offset)
 		if !ok {
 			return 0, false
 		}
 		offset = next
-		if i < tpl.scopeCount {
-			continue
-		}
 		opts.apply(f.fieldType, f.enterprise, value)
 	}
 

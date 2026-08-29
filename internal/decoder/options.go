@@ -37,7 +37,11 @@ type optionsState struct {
 	appCategory []byte
 }
 
-// apply captures one option field this exporter consumes.
+// apply captures one field this exporter consumes, scope or not. RFC 6759
+// scopes the application name and attribute mappings on applicationId, so the
+// field naming what a record describes is in the scope area: skipping it left
+// the table empty on every Cisco AVC export. Nothing else consumed here is an
+// identifier a template scopes on.
 func (o *optionsState) apply(fieldType uint16, enterprise uint32, value []byte) {
 	if enterprise == ciscoPEN {
 		if fieldType == fieldCiscoAppCategory {

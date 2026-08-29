@@ -18,13 +18,17 @@ type Modules struct {
 	Exporters    bool
 	Hosts        bool
 	Services     bool
+	Destinations bool
 	ASNs         bool
 	Applications bool
+	Countries    bool
+	Threats      bool
 }
 
 // Any reports whether any aggregation is enabled.
 func (m Modules) Any() bool {
-	return m.Exporters || m.Hosts || m.Services || m.ASNs || m.Applications
+	return m.Exporters || m.Hosts || m.Services || m.Destinations ||
+		m.ASNs || m.Applications || m.Countries || m.Threats
 }
 
 // Table keys. Label values are derived from these at scrape time.
@@ -52,12 +56,47 @@ type ServiceKey struct {
 	Port     uint16
 }
 
+// DestinationKey keys the aggregation ServiceKey becomes without its source:
+// what one service received, summed over every host that reached it. It is
+// directional rather than a host total, so an ingress-only pair of
+// observation points keys the two directions separately.
+type DestinationKey struct {
+	Exporter netip.Addr
+	Dst      netip.Addr
+	Protocol uint8
+	Port     uint16
+}
+
 // ASNKey keys the AS-pair aggregation.
 type ASNKey struct {
 	Exporter netip.Addr
 	SrcAS    uint32
 	DstAS    uint32
 }
+
+// CountryKey keys the country-pair aggregation. The codes are ISO two-letter
+// spellings filled by enrichment, so the table needs a country database to
+// hold anything.
+type CountryKey struct {
+	Exporter netip.Addr
+	Src      string
+	Dst      string
+}
+
+// ThreatKey keys the flagged-address aggregation. Only an address a
+// reputation source flagged appears, so the table holds what is worth acting
+// on rather than one entry per address seen.
+type ThreatKey struct {
+	Exporter  netip.Addr
+	Address   netip.Addr
+	Direction string
+}
+
+// The sides a flagged address was seen on.
+const (
+	DirectionSrc = "src"
+	DirectionDst = "dst"
+)
 
 // AppKey keys the application aggregation. Name is the resolved or inline
 // application name, or the numbered identifier where no name is known.
@@ -74,8 +113,13 @@ type Aggregator struct {
 	exporters *table[ExporterKey]
 	hosts     *table[HostKey]
 	services  *table[ServiceKey]
-	asns      *table[ASNKey]
-	apps      *table[AppKey]
+	// destinations holds the same records as services keyed without the
+	// source, so it is enabled and swept independently of it.
+	destinations *table[DestinationKey]
+	asns         *table[ASNKey]
+	apps         *table[AppKey]
+	countries    *table[CountryKey]
+	threats      *table[ThreatKey]
 
 	// now is pinned by tests.
 	now func() time.Time
@@ -97,11 +141,20 @@ func New(cfg config.Aggregation, modules Modules) *Aggregator {
 	if modules.Services {
 		a.services = newTable[ServiceKey](cfg.MaxEntries)
 	}
+	if modules.Destinations {
+		a.destinations = newTable[DestinationKey](cfg.MaxEntries)
+	}
 	if modules.ASNs {
 		a.asns = newTable[ASNKey](cfg.MaxEntries)
 	}
 	if modules.Applications {
 		a.apps = newTable[AppKey](cfg.MaxEntries)
+	}
+	if modules.Countries {
+		a.countries = newTable[CountryKey](cfg.MaxEntries)
+	}
+	if modules.Threats {
+		a.threats = newTable[ThreatKey](cfg.MaxEntries)
 	}
 	return a
 }
@@ -150,6 +203,17 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 		}, bytes, packets, r.Flows, now)
 	}
 
+	// The source is not read here, so a record whose source never resolved
+	// still names the service it reached.
+	if a.destinations != nil && r.DstAddr.IsValid() && r.Protocol != 0 {
+		a.destinations.add(DestinationKey{
+			Exporter: r.Exporter,
+			Dst:      r.DstAddr,
+			Protocol: r.Protocol,
+			Port:     r.DstPort,
+		}, bytes, packets, r.Flows, now)
+	}
+
 	if a.asns != nil && (r.SrcAS != 0 || r.DstAS != 0) {
 		a.asns.add(ASNKey{Exporter: r.Exporter, SrcAS: r.SrcAS, DstAS: r.DstAS},
 			bytes, packets, r.Flows, now)
@@ -160,6 +224,33 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 			a.apps.add(AppKey{Exporter: r.Exporter, Name: name},
 				bytes, packets, r.Flows, now)
 		}
+	}
+
+	// A record neither side of which resolved to a country feeds nothing:
+	// a pair of empty codes is absence rather than a place.
+	if a.countries != nil && (r.SrcCountry != "" || r.DstCountry != "") {
+		a.countries.add(CountryKey{Exporter: r.Exporter, Src: r.SrcCountry, Dst: r.DstCountry},
+			bytes, packets, r.Flows, now)
+	}
+
+	a.ingestThreats(r, bytes, packets, now)
+}
+
+// ingestThreats records the flagged sides of one record. A record with
+// neither side flagged feeds nothing, which is what keeps the table to the
+// addresses worth acting on.
+func (a *Aggregator) ingestThreats(r *flow.Record, bytes, packets uint64, now int64) {
+	if a.threats == nil {
+		return
+	}
+
+	if r.SrcFlagged {
+		a.threats.add(ThreatKey{Exporter: r.Exporter, Address: r.SrcAddr, Direction: DirectionSrc},
+			bytes, packets, r.Flows, now)
+	}
+	if r.DstFlagged {
+		a.threats.add(ThreatKey{Exporter: r.Exporter, Address: r.DstAddr, Direction: DirectionDst},
+			bytes, packets, r.Flows, now)
 	}
 }
 
@@ -213,13 +304,13 @@ func (a *Aggregator) Run(ctx context.Context) {
 func (a *Aggregator) sweep() {
 	cutoff := a.now().Add(-a.cfg.EntryTTL).UnixNano()
 	for _, t := range a.tables() {
-		t.sweep(cutoff)
+		_, _ = t.sweep(cutoff)
 	}
 }
 
 // sweepable lets the enabled tables be walked without their key types.
 type sweepable interface {
-	sweep(cutoff int64) int
+	sweep(cutoff int64) (int, Totals)
 	size() int
 	stats() (idle, folds uint64)
 }
@@ -230,7 +321,7 @@ func (t *table[K]) stats() (idle, folds uint64) {
 }
 
 // tableCount is how many aggregations exist, sizing the walk below.
-const tableCount = 5
+const tableCount = 8
 
 // tables returns the enabled tables keyed by their aggregation label value.
 func (a *Aggregator) tables() map[string]sweepable {
@@ -244,11 +335,20 @@ func (a *Aggregator) tables() map[string]sweepable {
 	if a.services != nil {
 		tables["services"] = a.services
 	}
+	if a.destinations != nil {
+		tables["destinations"] = a.destinations
+	}
 	if a.asns != nil {
 		tables["asns"] = a.asns
 	}
 	if a.apps != nil {
 		tables["applications"] = a.apps
+	}
+	if a.countries != nil {
+		tables["countries"] = a.countries
+	}
+	if a.threats != nil {
+		tables["threats"] = a.threats
 	}
 	return tables
 }
@@ -304,6 +404,14 @@ func (a *Aggregator) Services() ([]EntrySnapshot[ServiceKey], Totals) {
 	return a.services.snapshot()
 }
 
+// Destinations reads the destination-service table.
+func (a *Aggregator) Destinations() ([]EntrySnapshot[DestinationKey], Totals) {
+	if a.destinations == nil {
+		return nil, Totals{}
+	}
+	return a.destinations.snapshot()
+}
+
 // ASNs reads the AS-pair table.
 func (a *Aggregator) ASNs() ([]EntrySnapshot[ASNKey], Totals) {
 	if a.asns == nil {
@@ -318,4 +426,20 @@ func (a *Aggregator) Applications() ([]EntrySnapshot[AppKey], Totals) {
 		return nil, Totals{}
 	}
 	return a.apps.snapshot()
+}
+
+// Countries reads the country-pair table.
+func (a *Aggregator) Countries() ([]EntrySnapshot[CountryKey], Totals) {
+	if a.countries == nil {
+		return nil, Totals{}
+	}
+	return a.countries.snapshot()
+}
+
+// Threats reads the flagged-address table.
+func (a *Aggregator) Threats() ([]EntrySnapshot[ThreatKey], Totals) {
+	if a.threats == nil {
+		return nil, Totals{}
+	}
+	return a.threats.snapshot()
 }

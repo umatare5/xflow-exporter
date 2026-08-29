@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"net/url"
 	"path"
 	"slices"
 	"strconv"
@@ -51,6 +52,13 @@ const (
 	// silence means the template is orphaned.
 	DefaultParserTemplateTTL = 30 * time.Minute
 
+	// DefaultRemoteWriteInterval is how often the registry is shipped. It
+	// matches a conventional scrape interval, the remote endpoint seeing the
+	// same resolution a scrape would have given it.
+	DefaultRemoteWriteInterval = 60 * time.Second
+	// DefaultRemoteWriteTimeout bounds one write.
+	DefaultRemoteWriteTimeout = 30 * time.Second
+
 	// DefaultAggregationEntryTTL is how long an idle aggregation entry stays
 	// before eviction removes it, and its series with it.
 	DefaultAggregationEntryTTL = 15 * time.Minute
@@ -65,7 +73,11 @@ const (
 	DefaultAggregationMinBytes = 0
 	// HealthPath lives here so Validate can reject a telemetry path that takes it.
 	// The server package already depends on this one, so the reverse would cycle.
-	HealthPath       = "/healthz"
+	HealthPath = "/healthz"
+	// ReloadPath re-reads the enrichment sources. It is exposed only with
+	// --web.enable-lifecycle, which is the spelling Prometheus uses for the
+	// same endpoint.
+	ReloadPath       = "/-/reload"
 	DefaultLogLevel  = "info"
 	DefaultLogFormat = "json"
 )
@@ -77,6 +89,8 @@ type Config struct {
 	Parser            Parser            `json:"parser"`
 	Aggregation       Aggregation       `json:"aggregation"`
 	Collectors        Collectors        `json:"collectors"`
+	Enrichment        Enrichment        `json:"enrichment"`
+	RemoteWrite       RemoteWrite       `json:"remote_write"`
 	Log               Log               `json:"log"`
 	InternalCollector InternalCollector `json:"internal_collector"`
 	DryRun            bool              `json:"dry_run"`
@@ -87,6 +101,10 @@ type Web struct {
 	ListenAddress string `json:"listen_address"`
 	ListenPort    int    `json:"listen_port"`
 	TelemetryPath string `json:"telemetry_path"`
+	// EnableLifecycle exposes the management endpoints, which reload the
+	// enrichment sources from disk. It is off by default, the reload being
+	// an unauthenticated write that belongs behind a controlled path.
+	EnableLifecycle bool `json:"enable_lifecycle"`
 }
 
 // Receiver holds UDP flow receiver configuration.
@@ -120,9 +138,39 @@ type Collectors struct {
 	Exporters     bool `json:"exporters"`
 	Hosts         bool `json:"hosts"`
 	Services      bool `json:"services"`
+	Destinations  bool `json:"destinations"`
 	ASNs          bool `json:"asns"`
 	Applications  bool `json:"applications"`
+	Countries     bool `json:"countries"`
+	Threats       bool `json:"threats"`
 	Distributions bool `json:"distributions"`
+}
+
+// Enrichment holds the optional record enrichment switches. Every source is
+// off by default: enrichment fills dimensions that then key their own series,
+// so enabling one is a deliberate choice about cardinality.
+type Enrichment struct {
+	Services        bool     `json:"services"`
+	ASNDatabase     string   `json:"asn_database"`
+	CountryDatabase string   `json:"country_database"`
+	ThreatFiles     []string `json:"threat_files"`
+}
+
+// RemoteWrite holds the Remote Write 2.0 client configuration. It is off
+// until a URL is set, and shipping changes no series a scrape would see: the
+// writer reads the same registry.
+type RemoteWrite struct {
+	URL      string            `json:"url"`
+	Interval time.Duration     `json:"interval"`
+	Timeout  time.Duration     `json:"timeout"`
+	Username string            `json:"username"`
+	Password string            `json:"-"`
+	Headers  map[string]string `json:"headers"`
+}
+
+// Enabled reports whether a remote endpoint is configured.
+func (r RemoteWrite) Enabled() bool {
+	return strings.TrimSpace(r.URL) != ""
 }
 
 // Log holds logging configuration.
@@ -141,9 +189,10 @@ type InternalCollector struct {
 func Parse(cmd *cli.Command) (*Config, error) {
 	cfg := &Config{
 		Web: Web{
-			ListenAddress: cmd.String("web.listen-address"),
-			ListenPort:    cmd.Int("web.listen-port"),
-			TelemetryPath: cmd.String("web.telemetry-path"),
+			ListenAddress:   cmd.String("web.listen-address"),
+			ListenPort:      cmd.Int("web.listen-port"),
+			TelemetryPath:   cmd.String("web.telemetry-path"),
+			EnableLifecycle: cmd.Bool("web.enable-lifecycle"),
 		},
 		Receiver: Receiver{
 			Addresses:     cmd.StringSlice("receiver.address"),
@@ -163,13 +212,30 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			TopK:       cmd.Int("aggregation.top-k"),
 			MinBytes:   cmd.Int64("aggregation.min-bytes"),
 		},
+		Enrichment: Enrichment{
+			Services:        cmd.Bool("enrich.services"),
+			ASNDatabase:     cmd.String("enrich.asn-database"),
+			CountryDatabase: cmd.String("enrich.country-database"),
+			ThreatFiles:     cmd.StringSlice("enrich.threat-file"),
+		},
 		Collectors: Collectors{
 			Exporters:     cmd.Bool("collector.exporters"),
 			Hosts:         cmd.Bool("collector.hosts"),
 			Services:      cmd.Bool("collector.services"),
+			Destinations:  cmd.Bool("collector.destinations"),
 			ASNs:          cmd.Bool("collector.asns"),
 			Applications:  cmd.Bool("collector.applications"),
+			Countries:     cmd.Bool("collector.countries"),
+			Threats:       cmd.Bool("collector.threats"),
 			Distributions: cmd.Bool("collector.distributions"),
+		},
+		RemoteWrite: RemoteWrite{
+			URL:      cmd.String("remote-write.url"),
+			Interval: cmd.Duration("remote-write.interval"),
+			Timeout:  cmd.Duration("remote-write.timeout"),
+			Username: cmd.String("remote-write.username"),
+			Password: cmd.String("remote-write.password"),
+			Headers:  parseHeaders(cmd.StringSlice("remote-write.header")),
 		},
 		Log: Log{
 			Level:  cmd.String("log.level"),
@@ -254,7 +320,81 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("aggregation validation failed: %w", err)
 	}
 
+	if err := c.validateRemoteWrite(); err != nil {
+		return fmt.Errorf("remote write validation failed: %w", err)
+	}
+
 	return nil
+}
+
+// validateRemoteWrite validates the remote write client.
+func (c *Config) validateRemoteWrite() error {
+	r := &c.RemoteWrite
+	if !r.Enabled() {
+		return nil
+	}
+
+	parsed, err := url.Parse(r.URL)
+	if err != nil {
+		return fmt.Errorf("invalid remote write URL %q: %w", r.URL, err)
+	}
+
+	validationRules := []struct {
+		condition bool
+		message   string
+	}{
+		{
+			parsed.Scheme != "http" && parsed.Scheme != "https",
+			"remote write URL must be http or https: " + r.URL,
+		},
+		{
+			parsed.Host == "",
+			"remote write URL must carry a host: " + r.URL,
+		},
+		{
+			r.Interval <= 0,
+			fmt.Sprintf("remote write interval must be positive, got: %v", r.Interval),
+		},
+		{
+			r.Timeout <= 0,
+			fmt.Sprintf("remote write timeout must be positive, got: %v", r.Timeout),
+		},
+		{
+			r.Username == "" && r.Password != "",
+			"remote write password is set without a username",
+		},
+	}
+
+	for _, rule := range validationRules {
+		if rule.condition {
+			return errors.New(rule.message)
+		}
+	}
+
+	return nil
+}
+
+// parseHeaders turns the repeatable name=value flag into a map. A malformed
+// entry is dropped rather than failing startup: the flag is additive, and a
+// header nobody asked for is not worth refusing to run over.
+func parseHeaders(entries []string) map[string]string {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	headers := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		name, value, found := strings.Cut(entry, "=")
+		name = strings.TrimSpace(name)
+		if !found || name == "" {
+			continue
+		}
+		headers[name] = strings.TrimSpace(value)
+	}
+	if len(headers) == 0 {
+		return nil
+	}
+	return headers
 }
 
 // validateAggregation validates the aggregation limits.

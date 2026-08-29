@@ -54,6 +54,8 @@ func registerFlags() []cli.Flag {
 	flags = append(flags, registerParserFlags()...)
 	flags = append(flags, registerAggregationFlags()...)
 	flags = append(flags, registerCollectorFlags()...)
+	flags = append(flags, registerEnrichmentFlags()...)
+	flags = append(flags, registerRemoteWriteFlags()...)
 	flags = append(flags, registerLogFlags()...)
 	flags = append(flags, registerUtilityFlags()...)
 	flags = append(flags, registerInternalCollectorFlags()...)
@@ -77,6 +79,11 @@ func registerWebFlags() []cli.Flag {
 			Name:  "web.telemetry-path",
 			Usage: "Path for the metrics endpoint",
 			Value: config.DefaultTelemetryPath,
+		},
+		&cli.BoolFlag{
+			Name:        "web.enable-lifecycle",
+			Usage:       "Enable " + config.ReloadPath + ", which re-reads the enrichment sources",
+			HideDefault: true,
 		},
 	}
 }
@@ -196,6 +203,12 @@ func registerCollectorFlags() []cli.Flag {
 			HideDefault: true,
 		},
 		&cli.BoolFlag{
+			Name:        "collector.destinations",
+			Usage:       "Enable destination address with protocol and port metrics",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
 			Name:        "collector.asns",
 			Usage:       "Enable AS pair metrics from device-exported AS numbers",
 			Category:    "# Collector Options",
@@ -208,10 +221,107 @@ func registerCollectorFlags() []cli.Flag {
 			HideDefault: true,
 		},
 		&cli.BoolFlag{
+			Name:        "collector.countries",
+			Usage:       "Enable country pair metrics, which need --enrich.country-database",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
+			Name:        "collector.threats",
+			Usage:       "Enable flagged address metrics, which need --enrich.threat-file",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
 			Name:        "collector.distributions",
 			Usage:       "Enable flow size and duration native histograms",
 			Category:    "# Collector Options",
 			HideDefault: true,
+		},
+	}
+}
+
+// registerEnrichmentFlags defines the record enrichment switches.
+func registerEnrichmentFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.BoolFlag{
+			Name:        "enrich.services",
+			Usage:       "Name the application from the transport port where the device named none",
+			Category:    "# Enrichment Options",
+			HideDefault: true,
+		},
+		&cli.StringFlag{
+			Name:     "enrich.asn-database",
+			Usage:    "Path to a MaxMind-format ASN database, filling the AS numbers a device omits",
+			Category: "# Enrichment Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
+		},
+		&cli.StringFlag{
+			Name:     "enrich.country-database",
+			Usage:    "Path to a MaxMind-format country database, filling the ISO codes for --collector.countries",
+			Category: "# Enrichment Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
+		},
+		&cli.StringSliceFlag{
+			Name:     "enrich.threat-file",
+			Usage:    "Path to a file of flagged addresses, one per line (repeatable)",
+			Category: "# Enrichment Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
+		},
+	}
+}
+
+// registerRemoteWriteFlags defines the Remote Write 2.0 client.
+func registerRemoteWriteFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:     "remote-write.url",
+			Usage:    "Remote Write 2.0 endpoint to ship metrics to, which enables the client when set",
+			Category: "* Remote Write Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
+		},
+		&cli.DurationFlag{
+			Name:     "remote-write.interval",
+			Usage:    "How often the registry is shipped",
+			Value:    config.DefaultRemoteWriteInterval,
+			Category: "* Remote Write Options",
+		},
+		&cli.DurationFlag{
+			Name:     "remote-write.timeout",
+			Usage:    "Timeout of one write",
+			Value:    config.DefaultRemoteWriteTimeout,
+			Category: "* Remote Write Options",
+		},
+		&cli.StringFlag{
+			Name:     "remote-write.username",
+			Usage:    "Basic auth username for the endpoint",
+			Sources:  cli.EnvVars("XFLOW_REMOTE_WRITE_USERNAME"),
+			Category: "* Remote Write Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
+		},
+		&cli.StringFlag{
+			Name:     "remote-write.password",
+			Usage:    "Basic auth password for the endpoint",
+			Sources:  cli.EnvVars("XFLOW_REMOTE_WRITE_PASSWORD"),
+			Category: "* Remote Write Options",
+		},
+		&cli.StringSliceFlag{
+			Name:     "remote-write.header",
+			Usage:    "Extra request header as name=value (repeatable)",
+			Category: "* Remote Write Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
 		},
 	}
 }

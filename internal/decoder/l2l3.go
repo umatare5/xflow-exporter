@@ -100,8 +100,8 @@ func readIPv6Header(packet []byte, r *flow.Record) {
 
 	r.TOS = packet[0]<<4 | packet[1]>>4
 	r.Protocol = packet[6]
-	r.SrcAddr = netip.AddrFrom16([16]byte(packet[8:24]))
-	r.DstAddr = netip.AddrFrom16([16]byte(packet[24:40]))
+	r.SrcAddr = addrFrom16([16]byte(packet[8:24]))
+	r.DstAddr = addrFrom16([16]byte(packet[24:40]))
 
 	readTransport(packet[ipv6HdrLen:], r)
 }

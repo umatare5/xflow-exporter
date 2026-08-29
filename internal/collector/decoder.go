@@ -15,6 +15,8 @@ type DecoderSource interface {
 	Stats() *decoder.Stats
 	Domains() []decoder.DomainSnapshot
 	DomainsRefused() uint64
+	VendorStringsRefused() uint64
+	ApplicationsRefused() uint64
 }
 
 // DecoderCollector reports what the decoders made of the received datagrams.
@@ -31,6 +33,8 @@ type DecoderCollector struct {
 	seqMissedDesc      *prometheus.Desc
 	samplingDesc       *prometheus.Desc
 	domainsRefusedDesc *prometheus.Desc
+	stringsRefusedDesc *prometheus.Desc
+	appsRefusedDesc    *prometheus.Desc
 }
 
 // NewDecoderCollector creates a collector reporting decode outcomes.
@@ -72,6 +76,16 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 			"Observation domains refused since process start, the exporter being at its domain budget",
 			nil, nil,
 		),
+		stringsRefusedDesc: prometheus.NewDesc(
+			"xflow_vendor_strings_refused_total",
+			"Vendor strings refused since process start, leaving the application numbered, port-named or absent",
+			nil, nil,
+		),
+		appsRefusedDesc: prometheus.NewDesc(
+			"xflow_applications_refused_total",
+			"Application announcements refused since process start, the exporter being at its application budget",
+			nil, nil,
+		),
 	}
 }
 
@@ -84,6 +98,8 @@ func (c *DecoderCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.seqMissedDesc
 	ch <- c.samplingDesc
 	ch <- c.domainsRefusedDesc
+	ch <- c.stringsRefusedDesc
+	ch <- c.appsRefusedDesc
 }
 
 // Collect implements prometheus.Collector by reading the decode counters.
@@ -119,6 +135,10 @@ func (c *DecoderCollector) Collect(ch chan<- prometheus.Metric) {
 	// series rather than as a series appearing from nothing.
 	ch <- prometheus.MustNewConstMetric(
 		c.domainsRefusedDesc, prometheus.CounterValue, float64(c.src.DomainsRefused()))
+	ch <- prometheus.MustNewConstMetric(
+		c.stringsRefusedDesc, prometheus.CounterValue, float64(c.src.VendorStringsRefused()))
+	ch <- prometheus.MustNewConstMetric(
+		c.appsRefusedDesc, prometheus.CounterValue, float64(c.src.ApplicationsRefused()))
 }
 
 // The template kinds published in the type label.

@@ -8,6 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
 	"github.com/umatare5/xflow-exporter/internal/config"
+	"github.com/umatare5/xflow-exporter/internal/enrich"
 )
 
 // Collector manages Prometheus collectors and registry.
@@ -73,6 +74,18 @@ func (c *Collector) RegisterDistributions() *Distributions {
 	d.Register(c.registry)
 	slog.Debug("Registered distribution histograms")
 	return d
+}
+
+// RegisterEnrichmentCollector registers the enrichment self-monitoring collector.
+func (c *Collector) RegisterEnrichmentCollector(src enrich.Snapshotter, threat *enrich.Threat) {
+	c.registry.MustRegister(NewSafeCollector(NewEnrichmentCollector(src, threat), "Enrichment"))
+	slog.Debug("Registered enrichment collector")
+}
+
+// RegisterRemoteWriteCollector registers the remote write self-monitoring collector.
+func (c *Collector) RegisterRemoteWriteCollector(src RemoteWriteSource) {
+	c.registry.MustRegister(NewSafeCollector(NewRemoteWriteCollector(src), "RemoteWrite"))
+	slog.Debug("Registered remote write collector")
 }
 
 // RegisterSystemCollectors registers Go and process collectors conditionally.

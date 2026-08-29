@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/urfave/cli/v3"
 )
@@ -16,6 +17,7 @@ func parseFlags() []cli.Flag {
 		&cli.StringFlag{Name: "web.listen-address", Value: DefaultListenAddress},
 		&cli.IntFlag{Name: "web.listen-port", Value: DefaultListenPort},
 		&cli.StringFlag{Name: "web.telemetry-path", Value: DefaultTelemetryPath},
+		&cli.BoolFlag{Name: "web.enable-lifecycle"},
 		&cli.StringSliceFlag{Name: "receiver.address", Value: []string{DefaultReceiverAddress}},
 		&cli.IntFlag{Name: "receiver.batch-size", Value: DefaultReceiverBatchSize},
 		&cli.IntFlag{Name: "receiver.queue-size", Value: DefaultReceiverQueueSize},
@@ -32,6 +34,16 @@ func parseFlags() []cli.Flag {
 		&cli.StringFlag{Name: "log.format", Value: DefaultLogFormat},
 		&cli.BoolFlag{Name: "collector.internal.go-runtime"},
 		&cli.BoolFlag{Name: "collector.internal.process"},
+		&cli.BoolFlag{Name: "enrich.services"},
+		&cli.StringFlag{Name: "enrich.asn-database"},
+		&cli.StringFlag{Name: "enrich.country-database"},
+		&cli.StringSliceFlag{Name: "enrich.threat-file"},
+		&cli.StringFlag{Name: "remote-write.url"},
+		&cli.DurationFlag{Name: "remote-write.interval", Value: DefaultRemoteWriteInterval},
+		&cli.DurationFlag{Name: "remote-write.timeout", Value: DefaultRemoteWriteTimeout},
+		&cli.StringFlag{Name: "remote-write.username"},
+		&cli.StringFlag{Name: "remote-write.password"},
+		&cli.StringSliceFlag{Name: "remote-write.header"},
 		&cli.BoolFlag{Name: "dry-run"},
 	}
 }
@@ -423,6 +435,67 @@ func TestConfig_Validate(t *testing.T) {
 			name:    "aggregation negative min bytes",
 			mutate:  func(c *Config) { c.Aggregation.MinBytes = -1 },
 			wantErr: "invalid aggregation min bytes",
+		},
+		{
+			name:    "remote write off needs no URL",
+			mutate:  func(c *Config) { c.RemoteWrite = RemoteWrite{} },
+			wantErr: "",
+		},
+		{
+			name: "remote write URL with an unsupported scheme",
+			mutate: func(c *Config) {
+				c.RemoteWrite = RemoteWrite{
+					URL: "ftp://example.internal/push", Interval: time.Minute, Timeout: time.Second,
+				}
+			},
+			wantErr: "must be http or https",
+		},
+		{
+			name: "remote write URL without a host",
+			mutate: func(c *Config) {
+				c.RemoteWrite = RemoteWrite{
+					URL: "https:///push", Interval: time.Minute, Timeout: time.Second,
+				}
+			},
+			wantErr: "must carry a host",
+		},
+		{
+			name: "remote write interval zero",
+			mutate: func(c *Config) {
+				c.RemoteWrite = RemoteWrite{
+					URL: "https://example.internal/push", Timeout: time.Second,
+				}
+			},
+			wantErr: "remote write interval must be positive",
+		},
+		{
+			name: "remote write timeout zero",
+			mutate: func(c *Config) {
+				c.RemoteWrite = RemoteWrite{
+					URL: "https://example.internal/push", Interval: time.Minute,
+				}
+			},
+			wantErr: "remote write timeout must be positive",
+		},
+		{
+			name: "remote write password without a username",
+			mutate: func(c *Config) {
+				c.RemoteWrite = RemoteWrite{
+					URL: "https://example.internal/push", Interval: time.Minute,
+					Timeout: time.Second, Password: "secret",
+				}
+			},
+			wantErr: "password is set without a username",
+		},
+		{
+			name: "remote write fully configured",
+			mutate: func(c *Config) {
+				c.RemoteWrite = RemoteWrite{
+					URL: "https://example.internal/push", Interval: time.Minute,
+					Timeout: time.Second, Username: "u", Password: "p",
+				}
+			},
+			wantErr: "",
 		},
 		{
 			name:    "invalid log level",

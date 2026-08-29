@@ -26,6 +26,17 @@ nft add rule inet filter input udp dport 2055 ip saddr { 10.0.0.0/24, 192.0.2.10
 nft add rule inet filter input udp dport 2055 drop
 ```
 
+## What leaves the host
+
+Nothing. Every enrichment source reads a file on local disk, and the exporter
+holds no credential for any external service. Fetching the threat lists and
+the MaxMind databases is a separate job the operator runs, so no address seen
+in a flow is ever sent anywhere.
+
+`--web.enable-lifecycle` exposes `/-/reload`, which re-reads those files. It
+is unauthenticated, like the metrics endpoint, so keep it on a controlled
+path. It is off by default, and a `SIGHUP` reloads without exposing anything.
+
 ## Out of scope
 
 A defect in a network device's own flow export implementation belongs to its vendor — report it there, not to this third-party exporter.

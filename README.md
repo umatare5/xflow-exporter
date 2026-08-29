@@ -78,30 +78,43 @@ Each data collector is enabled per module:
 | `--collector.services`      | Traffic per address pair, protocol and port      |
 | `--collector.asns`          | Traffic per AS pair from device-exported numbers |
 | `--collector.applications`  | Traffic per AVC / App-ID / applicationId name    |
+| `--collector.countries`     | Traffic per country pair, needs a country database   |
+| `--collector.threats`       | Traffic per flagged address, needs a list file   |
 | `--collector.distributions` | Flow size and duration native histograms         |
+
+Optional enrichment fills dimensions a device did not export, each off by default: `--enrich.services` names an application from its port, and `--enrich.asn-database`, `--enrich.country-database` and `--enrich.threat-file` read files held locally. See [docs/README.md](docs/README.md#enrichment).
+
+> [!Note]
+> This exporter fetches nothing and holds no credential. [`scripts/fetch-enrichment-data.sh`](scripts/fetch-enrichment-data.sh) downloads the published threat lists and the MaxMind-format databases; `/-/reload` picks up a refreshed list and a refreshed database alike.
+
+`--remote-write.url` ships the registry's counters and gauges to a Remote Write 2.0 endpoint for the deployments a scrape cannot reach, alongside or instead of `/metrics`. Native histograms stay scrape-only.
 
 The operational knobs live under `--receiver.*`, `--parser.*` and `--aggregation.*`. On Linux the read loops use `recvmmsg` batching — other platforms read one datagram per call.
 
 ## Endpoints
 
-The exporter serves three endpoints:
+The exporter serves four endpoints:
 
 - `/` — landing page, which confirms the exporter is running when reached at <http://localhost:10052/>
 - `/metrics` — metrics endpoint, configurable via `--web.telemetry-path`
 - `/healthz` — liveness probe, which returns a static 200 and deliberately ignores flow reception
+- `/-/reload` — re-reads the enrichment sources on POST or PUT, exposed only with `--web.enable-lifecycle`. A `SIGHUP` does the same without the flag
 
 ## Metrics
 
-This exporter aggregates flows into six modules, documented in [docs/collectors.md](docs/collectors.md):
+This exporter aggregates flows into nine modules, documented in [docs/collectors.md](docs/collectors.md):
 
-| Module          | Metric family (representative)  | Labels                        |
-| :-------------- | :------------------------------ | :---------------------------- |
-| `exporters`     | `xflow_exporter_bytes_total`    | `exporter,version`            |
-| `hosts`         | `xflow_host_pair_bytes_total`   | `exporter,src,dst`            |
-| `services`      | `xflow_service_bytes_total`     | `exporter,src,dst,proto,port` |
-| `asns`          | `xflow_asn_pair_bytes_total`    | `exporter,src_asn,dst_asn`    |
-| `applications`  | `xflow_application_bytes_total` | `exporter,application`        |
-| `distributions` | `xflow_flow_bytes`              | `exporter` — native histogram |
+| Module          | Metric family (representative)   | Labels                             |
+| :-------------- | :------------------------------- | :--------------------------------- |
+| `exporters`     | `xflow_exporter_bytes_total`     | `exporter,version`                 |
+| `hosts`         | `xflow_host_pair_bytes_total`    | `exporter,src,dst`                 |
+| `services`      | `xflow_service_bytes_total`      | `exporter,src,dst,proto,port`      |
+| `destinations`  | `xflow_destination_bytes_total`  | `exporter,dst,proto,port`          |
+| `asns`          | `xflow_asn_pair_bytes_total`     | `exporter,src_asn,dst_asn`         |
+| `applications`  | `xflow_application_bytes_total`  | `exporter,application`             |
+| `countries`     | `xflow_country_pair_bytes_total` | `exporter,src_country,dst_country` |
+| `threats`       | `xflow_threat_bytes_total`       | `exporter,address,direction`       |
+| `distributions` | `xflow_flow_bytes`               | `exporter` — native histogram      |
 
 See [docs/README.md](docs/README.md) for the absence, folding, eviction and sampling-correction semantics every module shares.
 
@@ -182,4 +195,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the `make` targets, the Docker build,
 
 ## Licence
 
-[MIT](LICENSE). The binary statically links Apache-2.0, MIT and BSD 3-Clause dependencies, whose notices are reproduced in [NOTICE](NOTICE) and shipped alongside `LICENSE` in every release archive and container image.
+[MIT](LICENSE). The binary statically links Apache-2.0, MIT, ISC and BSD 3-Clause dependencies, whose notices are reproduced in [NOTICE](NOTICE) and shipped alongside `LICENSE` in every release archive and container image.

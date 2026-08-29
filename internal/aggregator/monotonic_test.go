@@ -9,10 +9,13 @@ import (
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
-// TestAggregator_EvictionKeepsTheOverflowMonotonic is the regression test for
-// the other series falling. An evicted entry's totals move into the overflow
-// bucket, so a total this exporter has already published is never withdrawn.
-func TestAggregator_EvictionKeepsTheOverflowMonotonic(t *testing.T) {
+// TestAggregator_EvictionLeavesTheOverflowAlone pins that an evicted entry's
+// lifetime is not re-published on the other series. Prometheus counted those
+// bytes as increments on the entry's own series while it lived; folding them
+// again at eviction would make sum(rate()) over the family read twice what
+// was ingested. The overflow bucket still only ever rises -- it just rises
+// from ingest-time capacity folds alone.
+func TestAggregator_EvictionLeavesTheOverflowAlone(t *testing.T) {
 	t.Parallel()
 
 	cfg := testConfig()
@@ -38,8 +41,8 @@ func TestAggregator_EvictionKeepsTheOverflowMonotonic(t *testing.T) {
 	if len(entries) != 0 {
 		t.Fatalf("entries = %d after the sweep, want 0", len(entries))
 	}
-	if after.Bytes != 700 || after.Packets != 10 || after.Flows != 1 {
-		t.Errorf("overflow = %+v, want the evicted totals preserved", after)
+	if after != (Totals{}) {
+		t.Errorf("overflow = %+v after the eviction, want it untouched", after)
 	}
 }
 
@@ -111,6 +114,7 @@ func TestTable_AddUnderSweepLosesNothing(t *testing.T) {
 	// path and the add path interleave on the same keys throughout.
 	stop := make(chan struct{})
 	swept := make(chan struct{})
+	var evicted Totals
 	go func() {
 		defer close(swept)
 		for {
@@ -118,7 +122,10 @@ func TestTable_AddUnderSweepLosesNothing(t *testing.T) {
 			case <-stop:
 				return
 			default:
-				tbl.sweep(int64(rounds))
+				_, dropped := tbl.sweep(int64(rounds))
+				evicted.Bytes += dropped.Bytes
+				evicted.Packets += dropped.Packets
+				evicted.Flows += dropped.Flows
 			}
 		}
 	}()
@@ -129,6 +136,9 @@ func TestTable_AddUnderSweepLosesNothing(t *testing.T) {
 
 	entries, overflow := tbl.snapshot()
 	total := overflow
+	total.Bytes += evicted.Bytes
+	total.Packets += evicted.Packets
+	total.Flows += evicted.Flows
 	for _, e := range entries {
 		total.Bytes += e.Bytes
 		total.Packets += e.Packets
@@ -136,7 +146,7 @@ func TestTable_AddUnderSweepLosesNothing(t *testing.T) {
 	}
 
 	if want := uint64(workers * rounds * perAdd); total.Bytes != want {
-		t.Errorf("bytes = %d across live entries and overflow, want %d ingested", total.Bytes, want)
+		t.Errorf("bytes = %d across entries, overflow and evictions, want %d", total.Bytes, want)
 	}
 	if want := uint64(workers * rounds); total.Flows != want {
 		t.Errorf("flows = %d, want %d ingested", total.Flows, want)

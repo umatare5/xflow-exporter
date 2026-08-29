@@ -11,7 +11,7 @@ func TestRegisterFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerFlags()
-	if got, want := len(flags), 26; got != want {
+	if got, want := len(flags), 40; got != want {
 		t.Errorf("registerFlags() returned %d flags, want %d", got, want)
 	}
 }
@@ -21,11 +21,11 @@ func TestRegisterWebFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerWebFlags()
-	if got, want := len(flags), 3; got != want {
+	if got, want := len(flags), 4; got != want {
 		t.Fatalf("registerWebFlags() returned %d flags, want %d", got, want)
 	}
 
-	expectedTypes := []string{"string", "int", "string"}
+	expectedTypes := []string{"string", "int", "string", "bool"}
 	for i, flag := range flags {
 		var gotType string
 		switch flag.(type) {
@@ -33,6 +33,8 @@ func TestRegisterWebFlags(t *testing.T) {
 			gotType = "string"
 		case *cli.IntFlag:
 			gotType = "int"
+		case *cli.BoolFlag:
+			gotType = "bool"
 		default:
 			gotType = "unknown"
 		}
@@ -96,12 +98,68 @@ func TestRegisterCollectorFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerCollectorFlags()
-	if got, want := len(flags), 6; got != want {
+	if got, want := len(flags), 9; got != want {
 		t.Fatalf("registerCollectorFlags() returned %d flags, want %d", got, want)
 	}
 	for i, flag := range flags {
 		if _, ok := flag.(*cli.BoolFlag); !ok {
 			t.Errorf("flag[%d] is %T, want *cli.BoolFlag", i, flag)
+		}
+	}
+}
+
+// TestRegisterEnrichmentFlags verifies the enrichment switches.
+func TestRegisterEnrichmentFlags(t *testing.T) {
+	t.Parallel()
+
+	flags := registerEnrichmentFlags()
+	if got, want := len(flags), 4; got != want {
+		t.Fatalf("registerEnrichmentFlags() returned %d flags, want %d", got, want)
+	}
+	if _, ok := flags[0].(*cli.BoolFlag); !ok {
+		t.Errorf("flag[0] is %T, want *cli.BoolFlag", flags[0])
+	}
+
+	// The threat lists are files this exporter reads, repeatable so several
+	// published lists combine into one set.
+	if _, ok := flags[3].(*cli.StringSliceFlag); !ok {
+		t.Errorf("flag[3] is %T, want *cli.StringSliceFlag", flags[3])
+	}
+
+	// Nothing here reaches a network: no enrichment flag carries a secret.
+	for _, flag := range flags {
+		str, ok := flag.(*cli.StringFlag)
+		if ok && len(str.Sources.EnvKeys()) > 0 {
+			t.Errorf("%s reads an environment variable, want no credential among these", str.Name)
+		}
+	}
+}
+
+// TestRegisterRemoteWriteFlags verifies the Remote Write 2.0 client flags.
+func TestRegisterRemoteWriteFlags(t *testing.T) {
+	t.Parallel()
+
+	flags := registerRemoteWriteFlags()
+	if got, want := len(flags), 6; got != want {
+		t.Fatalf("registerRemoteWriteFlags() returned %d flags, want %d", got, want)
+	}
+
+	// The credentials read environment variables, which is how a secret
+	// reaches a container without appearing in its command line.
+	for _, name := range []string{"remote-write.username", "remote-write.password"} {
+		found := false
+		for _, flag := range flags {
+			str, ok := flag.(*cli.StringFlag)
+			if !ok || str.Name != name {
+				continue
+			}
+			found = true
+			if len(str.Sources.EnvKeys()) == 0 {
+				t.Errorf("%s reads no environment variable, want one", name)
+			}
+		}
+		if !found {
+			t.Errorf("%s is not registered", name)
 		}
 	}
 }
