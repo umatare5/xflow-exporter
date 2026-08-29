@@ -102,7 +102,7 @@ release:
     docker run --rm ghcr.io/umatare5/xflow-exporter:{{ .Tag }} --help
 
     # With the default ports published
-    docker run --rm -p 10052:10052 -p 2055:2055/udp ghcr.io/umatare5/xflow-exporter:{{ .Tag }}
+    docker run --rm -p 10053:10053 -p 2055:2055/udp ghcr.io/umatare5/xflow-exporter:{{ .Tag }}
     ```
 
     ### 📦 Binary Installation

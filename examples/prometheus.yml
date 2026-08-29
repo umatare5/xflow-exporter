@@ -13,7 +13,7 @@ rule_files:
 scrape_configs:
   - job_name: "xflow"
     static_configs:
-      - targets: [localhost:10052]
+      - targets: [localhost:10053]
 
     # Three ways to bound what this exporter costs the reader, from the reader's
     # side alone. They act at different points and only the first one narrows

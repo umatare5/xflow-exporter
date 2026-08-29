@@ -18,7 +18,7 @@ import (
 
 const (
 	DefaultListenAddress = "0.0.0.0"
-	DefaultListenPort    = 10052
+	DefaultListenPort    = 10053
 	DefaultTelemetryPath = "/metrics"
 
 	// DefaultReceiverAddress is where flow datagrams are expected. 2055 is the

@@ -13,7 +13,7 @@
 #
 # After any run, tell the exporter to re-read what changed:
 #
-#   curl -X POST http://localhost:10052/-/reload
+#   curl -X POST http://localhost:10053/-/reload
 #
 # or send it a SIGHUP. One reload covers the lists and the databases alike.
 #

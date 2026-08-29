@@ -50,7 +50,7 @@ Configure each device to export flows to the exporter's address, UDP port 2055 b
 ### 2. Run the exporter with Docker
 
 ```bash
-docker run -p 10052:10052 -p 2055:2055/udp \
+docker run -p 10053:10053 -p 2055:2055/udp \
   ghcr.io/umatare5/xflow-exporter:latest \
   --collector.exporters --collector.hosts
 ```
@@ -94,7 +94,7 @@ Each data collector is enabled per module:
 
 The exporter serves four endpoints:
 
-- `/` — landing page, which confirms the exporter is running when reached at <http://localhost:10052/>
+- `/` — landing page, which confirms the exporter is running when reached at <http://localhost:10053/>
 - `/metrics` — metrics endpoint, configurable via `--web.telemetry-path`
 - `/healthz` — liveness probe, which returns a static 200 and deliberately ignores flow reception
 - `/-/reload` — [re-reads the enrichment sources](docs/README.md#reloading) on POST or PUT, needs `--web.enable-lifecycle`
@@ -162,9 +162,9 @@ These series describe the shipping path rather than the exporter, and appear onl
 
 ```bash
 $ ./xflow-exporter --log.format text
-time=2026-08-26T19:58:24.288+09:00 level=INFO msg="Starting xflow-exporter" version=0.1.0 listen_address=0.0.0.0 listen_port=10052 telemetry_path=/metrics
+time=2026-08-26T19:58:24.288+09:00 level=INFO msg="Starting xflow-exporter" version=0.1.0 listen_address=0.0.0.0 listen_port=10053 telemetry_path=/metrics
 time=2026-08-26T19:58:24.291+09:00 level=INFO msg="Flow receiver listening" listener=:2055
-time=2026-08-26T19:58:24.292+09:00 level=INFO msg="HTTP server listening" addr=0.0.0.0:10052
+time=2026-08-26T19:58:24.292+09:00 level=INFO msg="HTTP server listening" addr=0.0.0.0:10053
 ```
 
 The receiver listens and the health series count every datagram, but no traffic series is published.
