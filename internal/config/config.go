@@ -76,6 +76,7 @@ type Config struct {
 	Receiver          Receiver          `json:"receiver"`
 	Parser            Parser            `json:"parser"`
 	Aggregation       Aggregation       `json:"aggregation"`
+	Collectors        Collectors        `json:"collectors"`
 	Log               Log               `json:"log"`
 	InternalCollector InternalCollector `json:"internal_collector"`
 	DryRun            bool              `json:"dry_run"`
@@ -110,6 +111,18 @@ type Aggregation struct {
 	MaxEntries int           `json:"max_entries"`
 	TopK       int           `json:"top_k"`
 	MinBytes   int64         `json:"min_bytes"`
+}
+
+// Collectors holds the data collector module switches. Every module is off
+// by default: an exporter with none enabled receives and counts flows but
+// publishes no traffic series.
+type Collectors struct {
+	Exporters     bool `json:"exporters"`
+	Hosts         bool `json:"hosts"`
+	Services      bool `json:"services"`
+	ASNs          bool `json:"asns"`
+	Applications  bool `json:"applications"`
+	Distributions bool `json:"distributions"`
 }
 
 // Log holds logging configuration.
@@ -149,6 +162,14 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			MaxEntries: cmd.Int("aggregation.max-entries"),
 			TopK:       cmd.Int("aggregation.top-k"),
 			MinBytes:   cmd.Int64("aggregation.min-bytes"),
+		},
+		Collectors: Collectors{
+			Exporters:     cmd.Bool("collector.exporters"),
+			Hosts:         cmd.Bool("collector.hosts"),
+			Services:      cmd.Bool("collector.services"),
+			ASNs:          cmd.Bool("collector.asns"),
+			Applications:  cmd.Bool("collector.applications"),
+			Distributions: cmd.Bool("collector.distributions"),
 		},
 		Log: Log{
 			Level:  cmd.String("log.level"),

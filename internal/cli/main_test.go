@@ -11,7 +11,7 @@ func TestRegisterFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerFlags()
-	if got, want := len(flags), 20; got != want {
+	if got, want := len(flags), 26; got != want {
 		t.Errorf("registerFlags() returned %d flags, want %d", got, want)
 	}
 }
@@ -88,6 +88,21 @@ func TestRegisterAggregationFlags(t *testing.T) {
 	}
 	if _, ok := flags[0].(*cli.DurationFlag); !ok {
 		t.Errorf("flag[0] is %T, want *cli.DurationFlag", flags[0])
+	}
+}
+
+// TestRegisterCollectorFlags verifies the data collector module switches.
+func TestRegisterCollectorFlags(t *testing.T) {
+	t.Parallel()
+
+	flags := registerCollectorFlags()
+	if got, want := len(flags), 6; got != want {
+		t.Fatalf("registerCollectorFlags() returned %d flags, want %d", got, want)
+	}
+	for i, flag := range flags {
+		if _, ok := flag.(*cli.BoolFlag); !ok {
+			t.Errorf("flag[%d] is %T, want *cli.BoolFlag", i, flag)
+		}
 	}
 }
 

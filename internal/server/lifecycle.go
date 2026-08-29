@@ -16,6 +16,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/umatare5/xflow-exporter/internal/aggregator"
 	"github.com/umatare5/xflow-exporter/internal/collector"
 	"github.com/umatare5/xflow-exporter/internal/config"
 	"github.com/umatare5/xflow-exporter/internal/decoder"
@@ -58,11 +59,30 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 
 	dec := decoder.New(cfg.Parser)
 
+	modules := aggregator.Modules{
+		Exporters:    cfg.Collectors.Exporters,
+		Hosts:        cfg.Collectors.Hosts,
+		Services:     cfg.Collectors.Services,
+		ASNs:         cfg.Collectors.ASNs,
+		Applications: cfg.Collectors.Applications,
+	}
+
 	// Create and setup collector manager
 	collectorMgr := collector.NewCollector(cfg)
 	collectorMgr.Setup(version)
 	collectorMgr.RegisterReceiverCollector(recv)
 	collectorMgr.RegisterDecoderCollector(dec)
+
+	var agg *aggregator.Aggregator
+	if modules.Any() {
+		agg = aggregator.New(cfg.Aggregation, modules)
+		collectorMgr.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation)
+	}
+
+	var dist *collector.Distributions
+	if cfg.Collectors.Distributions {
+		dist = collectorMgr.RegisterDistributions()
+	}
 
 	// The receiver stops when this context ends, which Run ties to the
 	// shutdown signals.
@@ -73,6 +93,15 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	go func() {
 		defer close(receiverDone)
 		recv.Serve(ctx)
+	}()
+
+	// The eviction sweep runs for as long as the receiver does.
+	aggDone := make(chan struct{})
+	go func() {
+		defer close(aggDone)
+		if agg != nil {
+			agg.Run(ctx)
+		}
 	}()
 
 	// Decode workers consume the queue. Records are decoded and accounted,
@@ -86,7 +115,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		decodeWG.Add(1)
 		go func() {
 			defer decodeWG.Done()
-			decodeLoop(recv, dec)
+			decodeLoop(recv, dec, agg, dist)
 		}()
 	}
 
@@ -97,13 +126,17 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	cancel()
 	<-receiverDone
 	decodeWG.Wait()
+	<-aggDone
 	return err
 }
 
-// decodeLoop drains the receive queue through the decoder until the queue
-// closes. The records slice is reused across datagrams, so a steady worker
-// allocates nothing per packet.
-func decodeLoop(recv *receiver.Receiver, dec *decoder.Decoder) {
+// decodeLoop drains the receive queue through the decoder into the enabled
+// consumers until the queue closes. The records slice is reused across
+// datagrams, so a steady worker allocates nothing per packet.
+func decodeLoop(
+	recv *receiver.Receiver, dec *decoder.Decoder,
+	agg *aggregator.Aggregator, dist *collector.Distributions,
+) {
 	var records []flow.Record
 
 	for pkt := range recv.Packets() {
@@ -114,6 +147,13 @@ func decodeLoop(recv *receiver.Receiver, dec *decoder.Decoder) {
 				"exporter", pkt.Src.Addr(), "listener", pkt.Listener, "error", err)
 		}
 		recv.Release(pkt)
+
+		if agg != nil {
+			agg.Ingest(records)
+		}
+		if dist != nil {
+			dist.Observe(records)
+		}
 	}
 }
 

@@ -53,6 +53,7 @@ func registerFlags() []cli.Flag {
 	flags = append(flags, registerReceiverFlags()...)
 	flags = append(flags, registerParserFlags()...)
 	flags = append(flags, registerAggregationFlags()...)
+	flags = append(flags, registerCollectorFlags()...)
 	flags = append(flags, registerLogFlags()...)
 	flags = append(flags, registerUtilityFlags()...)
 	flags = append(flags, registerInternalCollectorFlags()...)
@@ -169,6 +170,48 @@ func registerAggregationFlags() []cli.Flag {
 			Usage:    "Bytes below which an entry folds into other at scrape time (0 publishes all)",
 			Value:    config.DefaultAggregationMinBytes,
 			Category: "* Aggregation Options",
+		},
+	}
+}
+
+// registerCollectorFlags defines the data collector module switches.
+func registerCollectorFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.BoolFlag{
+			Name:        "collector.exporters",
+			Usage:       "Enable per-device traffic metrics",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
+			Name:        "collector.hosts",
+			Usage:       "Enable source-destination address pair metrics",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
+			Name:        "collector.services",
+			Usage:       "Enable address pair with protocol and port metrics",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
+			Name:        "collector.asns",
+			Usage:       "Enable AS pair metrics from device-exported AS numbers",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
+			Name:        "collector.applications",
+			Usage:       "Enable application metrics from AVC, App-ID or applicationId",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
+			Name:        "collector.distributions",
+			Usage:       "Enable flow size and duration native histograms",
+			Category:    "# Collector Options",
+			HideDefault: true,
 		},
 	}
 }

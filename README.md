@@ -68,6 +68,15 @@ GLOBAL OPTIONS:
    --receiver.queue-size int                                Datagrams buffered between the read loops and the decoders (default: 8192)
    --receiver.workers int                                   Decode workers consuming the queue (0 sizes to the CPU count) (default: 0)
 
+   # Collector Options
+
+   --collector.applications   Enable application metrics from AVC, App-ID or applicationId
+   --collector.asns           Enable AS pair metrics from device-exported AS numbers
+   --collector.distributions  Enable flow size and duration native histograms
+   --collector.exporters      Enable per-device traffic metrics
+   --collector.hosts          Enable source-destination address pair metrics
+   --collector.services       Enable address pair with protocol and port metrics
+
    * Aggregation Options
 
    --aggregation.entry-ttl duration  How long an idle aggregation entry keeps its series (default: 15m0s)
@@ -93,25 +102,45 @@ The exporter serves three endpoints:
 
 ## Metrics
 
+### Traffic Metrics
+
+Every module is **disabled by default** and enabled per `--collector.*` flag. Each table family carries `_bytes_total`, `_packets_total` and `_flows_total`; bytes and packets are sampling-corrected, flow counts stay as exported.
+
+| Module          | Metric family (representative)   | Labels                            |
+| :-------------- | :------------------------------- | :-------------------------------- |
+| `exporters`     | `xflow_exporter_bytes_total`     | `exporter,version`                |
+| `hosts`         | `xflow_host_pair_bytes_total`    | `exporter,src,dst`                |
+| `services`      | `xflow_service_bytes_total`      | `exporter,src,dst,proto,port`     |
+| `asns`          | `xflow_asn_pair_bytes_total`     | `exporter,src_asn,dst_asn`        |
+| `applications`  | `xflow_application_bytes_total`  | `exporter,application`            |
+| `distributions` | `xflow_flow_bytes`               | `exporter` — native histogram     |
+
+Cardinality is bounded three ways, and everything folded lands in a single series whose labels read `other`: the entry bound (`--aggregation.max-entries`) folds new keys at ingest, the Top-K bound (`--aggregation.top-k`) and the byte threshold (`--aggregation.min-bytes`) fold the tail at scrape time. An entry idle past `--aggregation.entry-ttl` is evicted and its series disappears — a flow nobody has seen is gone, not zero. A record lacking an aggregation's dimensions feeds no series there.
+
+`distributions` publishes `xflow_flow_bytes` and `xflow_flow_duration_seconds` as **native histograms**: scraping them needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration.
+
 ### Exporter Health Metrics
 
 These series describe the exporter itself. They have no module and no collector flag.
 
-| Metric                                 | Type    | Description                                          |
-| :------------------------------------- | :------ | :--------------------------------------------------- |
-| `xflow_build_info`                     | Gauge   | Exporter version in the `version` label, always 1    |
-| `xflow_receiver_packets_total`         | Counter | Datagrams received per `listener`, dropped included  |
-| `xflow_receiver_bytes_total`           | Counter | Payload bytes received per `listener`                |
-| `xflow_receiver_read_errors_total`     | Counter | Socket read failures per `listener`                  |
-| `xflow_receiver_dropped_packets_total` | Counter | Drops per `listener` and `reason` before decoding    |
-| `xflow_receiver_queue_length`          | Gauge   | Datagrams waiting between read loops and decoders    |
-| `xflow_receiver_queue_capacity`        | Gauge   | Bound of that queue                                  |
-| `xflow_flows_total`                    | Counter | Records decoded per `exporter` and `version`         |
-| `xflow_decode_errors_total`            | Counter | Rejections per `exporter`, `version` and `reason`    |
-| `xflow_last_flow_timestamp_seconds`    | Gauge   | Unix time of the exporter's last decoded datagram    |
-| `xflow_templates`                      | Gauge   | Unexpired templates per `exporter`, `odid`, `type`   |
-| `xflow_sequence_missed_total`          | Counter | Export packets lost per `exporter` and `odid`        |
-| `xflow_sampling_rate`                  | Gauge   | Declared sampling rate, absent until one arrives     |
+| Metric                                     | Type    | Description                                          |
+| :----------------------------------------- | :------ | :--------------------------------------------------- |
+| `xflow_build_info`                         | Gauge   | Exporter version in the `version` label, always 1    |
+| `xflow_receiver_packets_total`             | Counter | Datagrams received per `listener`, dropped included  |
+| `xflow_receiver_bytes_total`               | Counter | Payload bytes received per `listener`                |
+| `xflow_receiver_read_errors_total`         | Counter | Socket read failures per `listener`                  |
+| `xflow_receiver_dropped_packets_total`     | Counter | Drops per `listener` and `reason` before decoding    |
+| `xflow_receiver_queue_length`              | Gauge   | Datagrams waiting between read loops and decoders    |
+| `xflow_receiver_queue_capacity`            | Gauge   | Bound of that queue                                  |
+| `xflow_flows_total`                        | Counter | Records decoded per `exporter` and `version`         |
+| `xflow_decode_errors_total`                | Counter | Rejections per `exporter`, `version` and `reason`    |
+| `xflow_last_flow_timestamp_seconds`        | Gauge   | Unix time of the exporter's last decoded datagram    |
+| `xflow_templates`                          | Gauge   | Unexpired templates per `exporter`, `odid`, `type`   |
+| `xflow_sequence_missed_total`              | Counter | Export packets lost per `exporter` and `odid`        |
+| `xflow_sampling_rate`                      | Gauge   | Declared sampling rate, absent until one arrives     |
+| `xflow_aggregation_entries`                | Gauge   | Entries held per `aggregation` table                 |
+| `xflow_aggregation_evictions_total`        | Counter | Idle entries evicted per `aggregation`               |
+| `xflow_aggregation_overflow_records_total` | Counter | Records folded into `other` by the entry bound       |
 
 On `xflow_receiver_dropped_packets_total`, `reason` is `queue_full` for a burst the queue could not absorb and `truncated` for a datagram larger than `--receiver.max-packet-size`. Both series are seeded at 0, so a first drop is a rise on a series that was already there.
 
@@ -119,7 +148,7 @@ On `xflow_decode_errors_total`, `reason` is `unsupported_version` for a datagram
 
 Alert on freshness with `time() - xflow_last_flow_timestamp_seconds`: a device that goes silent stops moving its timestamp while every counter freezes, and nothing else can tell that from a healthy quiet network.
 
-The aggregation metrics land in the upcoming milestones, each behind its own `--collector.*` flag and disabled by default. Until then decoded records are counted, then discarded.
+With no `--collector.*` module enabled, decoded records are counted by the health series and discarded.
 
 ## Contributing
 
