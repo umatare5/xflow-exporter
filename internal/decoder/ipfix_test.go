@@ -425,10 +425,16 @@ func TestDecodeIPFIX_RejectsBrokenStructure(t *testing.T) {
 	}
 }
 
+// TestDecodeNetFlowV9_PanOSStringsAreCarried covers the PAN-OS application
+// name, and pins that the User-ID beside it is skipped by its length rather
+// than read: a user identity is high-cardinality and personally identifying,
+// so no series carries it.
 func TestDecodeNetFlowV9_PanOSStringsAreCarried(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()
+
+	const fieldPanUserID = 56702
 
 	tpl := flowSet(templateFlowSetID, templateSpec(fixtureV9TemplateID,
 		[2]uint16{fieldInBytes, 4},
@@ -448,8 +454,11 @@ func TestDecodeNetFlowV9_PanOSStringsAreCarried(t *testing.T) {
 	if len(records) != 1 {
 		t.Fatalf("Decode() returned %d records, want 1", len(records))
 	}
-	if records[0].AppName != "ssl" || records[0].User != "alice" {
-		t.Errorf("record = %+v, want the padded PAN-OS strings trimmed and carried", records[0])
+	if records[0].AppName != "ssl" {
+		t.Errorf("record = %+v, want the padded PAN-OS application name trimmed and carried", records[0])
+	}
+	if records[0].Bytes != 4242 {
+		t.Errorf("Bytes = %d, want the User-ID skipped by length without desynchronizing", records[0].Bytes)
 	}
 
 	// A second record with the same strings must intern to the same backing.

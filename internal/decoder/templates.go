@@ -16,6 +16,14 @@ import (
 // attacker, registering templates without end. Real devices carry tens.
 const maxTemplatesPerDomain = 8192
 
+// maxDomainsPerExporter bounds the observation domains one device may open.
+// The Observation Domain ID is a wire field rather than a property of the
+// fleet, so a device with a broken numbering scheme, or one under an
+// attacker's control, would otherwise mint domains without end from a single
+// permitted source address. A chassis exports one per linecard or VRF, so
+// hundreds is already generous.
+const maxDomainsPerExporter = 256
+
 // templateField is one field specifier of a template. Enterprise is zero for
 // an IANA information element and the enterprise number for a vendor one,
 // which only IPFIX can express. An IPFIX variable-length field carries length
@@ -56,6 +64,10 @@ type domainState struct {
 	mu        sync.RWMutex
 	templates map[uint16]*template
 
+	// lastSeen is when a datagram last named this domain, which the idle
+	// sweep reads to free the exporter's budget again.
+	lastSeen atomic.Int64
+
 	// sequence gap tracking. seqInit and lastSeq move under mu.
 	seqInit bool
 	lastSeq uint32
@@ -68,11 +80,18 @@ type domainState struct {
 	samplingRate atomic.Uint32
 }
 
-// templateStore indexes the per-domain state. Domains appear on first use and
-// are never removed: their count is bounded by the fleet, not by traffic.
+// templateStore indexes the per-domain state. Domains appear on first use,
+// are bounded per exporter, and are swept once idle, so their count follows
+// the fleet rather than the traffic.
 type templateStore struct {
 	mu      sync.RWMutex
 	domains map[domainKey]*domainState
+	// perExporter counts each device's live domains against its budget.
+	perExporter map[netip.Addr]int
+
+	// domainsRefused counts the domains the budget turned away, so the loss
+	// is visible rather than silent.
+	domainsRefused atomic.Uint64
 
 	maxFields int
 	ttl       time.Duration
@@ -82,36 +101,88 @@ type templateStore struct {
 // newTemplateStore creates a store enforcing the configured limits.
 func newTemplateStore(cfg config.Parser) *templateStore {
 	return &templateStore{
-		domains:   make(map[domainKey]*domainState),
-		maxFields: cfg.MaxFieldsPerTemplate,
-		ttl:       cfg.TemplateTTL,
-		now:       time.Now,
+		domains:     make(map[domainKey]*domainState),
+		perExporter: make(map[netip.Addr]int),
+		maxFields:   cfg.MaxFieldsPerTemplate,
+		ttl:         cfg.TemplateTTL,
+		now:         time.Now,
 	}
 }
 
-// domain returns one observation domain's state, creating it on first use.
+// domain returns one observation domain's state, creating it on first use and
+// stamping it as seen. It returns nil once the exporter is at its domain
+// budget: the identifier is a wire field, so an unbounded map here is
+// reachable from one permitted source address.
 func (s *templateStore) domain(key domainKey) *domainState {
+	now := s.now().UnixNano()
+
 	s.mu.RLock()
 	d, ok := s.domains[key]
 	s.mu.RUnlock()
 	if ok {
+		d.lastSeen.Store(now)
 		return d
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if d, ok := s.domains[key]; ok {
+		d.lastSeen.Store(now)
 		return d
 	}
+	if s.perExporter[key.exporter] >= maxDomainsPerExporter {
+		s.domainsRefused.Add(1)
+		return nil
+	}
+
 	d = &domainState{templates: make(map[uint16]*template)}
+	d.lastSeen.Store(now)
 	s.domains[key] = d
+	s.perExporter[key.exporter]++
 	return d
+}
+
+// sweepDomains drops every domain idle since before cutoff, returning its slot
+// to the exporter's budget, and reports how many went.
+func (s *templateStore) sweepDomains(cutoff int64) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	evicted := 0
+	for key, d := range s.domains {
+		if d.lastSeen.Load() >= cutoff {
+			continue
+		}
+
+		delete(s.domains, key)
+		s.perExporter[key.exporter]--
+		if s.perExporter[key.exporter] <= 0 {
+			delete(s.perExporter, key.exporter)
+		}
+		evicted++
+	}
+	return evicted
+}
+
+// sweep drops the domains idle for longer than the template TTL. A domain
+// nobody has named for that long carries only templates that have expired
+// with it.
+func (s *templateStore) sweep() int {
+	return s.sweepDomains(s.now().Add(-s.ttl).UnixNano())
+}
+
+// refused reports how many domains the budget turned away.
+func (s *templateStore) refused() uint64 {
+	return s.domainsRefused.Load()
 }
 
 // add registers or refreshes one template. A full domain drops expired
 // templates first and rejects the addition when nothing expired.
 func (s *templateStore) add(key domainKey, id uint16, t *template) bool {
 	d := s.domain(key)
+	if d == nil {
+		return false
+	}
 	now := s.now()
 	t.refreshedAt = now
 
@@ -142,6 +213,9 @@ func (d *domainState) pruneExpiredLocked(now time.Time, ttl time.Duration) {
 // remove withdraws one template.
 func (s *templateStore) remove(key domainKey, id uint16) {
 	d := s.domain(key)
+	if d == nil {
+		return
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	delete(d.templates, id)
@@ -150,6 +224,9 @@ func (s *templateStore) remove(key domainKey, id uint16) {
 // removeAll withdraws every template of one kind in the domain.
 func (s *templateStore) removeAll(key domainKey, options bool) {
 	d := s.domain(key)
+	if d == nil {
+		return
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for id, t := range d.templates {
@@ -164,6 +241,9 @@ func (s *templateStore) removeAll(key domainKey, options bool) {
 // may have replaced.
 func (s *templateStore) lookup(key domainKey, id uint16) (*template, bool) {
 	d := s.domain(key)
+	if d == nil {
+		return nil, false
+	}
 
 	d.mu.RLock()
 	defer d.mu.RUnlock()

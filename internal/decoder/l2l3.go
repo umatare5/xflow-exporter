@@ -27,6 +27,22 @@ const (
 	tcpFlagsOffset = 13
 )
 
+// readIPPacket walks a sampled section that starts at the IP header, the
+// version nibble selecting the family. A section that is neither decodes to
+// nothing, which is absence rather than a guess.
+func readIPPacket(packet []byte, r *flow.Record) {
+	if len(packet) == 0 {
+		return
+	}
+
+	switch packet[0] >> 4 {
+	case 4:
+		readIPv4Header(packet, r)
+	case 6:
+		readIPv6Header(packet, r)
+	}
+}
+
 // readEthernetFrame walks one sampled frame into the record. It reports
 // false only when not even the Ethernet header fits: a frame that decodes
 // down to IP without ports is still a flow reading.

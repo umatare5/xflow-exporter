@@ -14,6 +14,7 @@ import (
 type DecoderSource interface {
 	Stats() *decoder.Stats
 	Domains() []decoder.DomainSnapshot
+	DomainsRefused() uint64
 }
 
 // DecoderCollector reports what the decoders made of the received datagrams.
@@ -26,9 +27,10 @@ type DecoderCollector struct {
 	errorsDesc   *prometheus.Desc
 	lastFlowDesc *prometheus.Desc
 
-	templatesDesc *prometheus.Desc
-	seqMissedDesc *prometheus.Desc
-	samplingDesc  *prometheus.Desc
+	templatesDesc      *prometheus.Desc
+	seqMissedDesc      *prometheus.Desc
+	samplingDesc       *prometheus.Desc
+	domainsRefusedDesc *prometheus.Desc
 }
 
 // NewDecoderCollector creates a collector reporting decode outcomes.
@@ -65,6 +67,11 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 			"Packet sampling rate the domain's options declared, absent until one arrives",
 			[]string{labelExporter, labelODID}, nil,
 		),
+		domainsRefusedDesc: prometheus.NewDesc(
+			"xflow_domains_refused_total",
+			"Observation domains refused since process start, the exporter being at its domain budget",
+			nil, nil,
+		),
 	}
 }
 
@@ -76,6 +83,7 @@ func (c *DecoderCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.templatesDesc
 	ch <- c.seqMissedDesc
 	ch <- c.samplingDesc
+	ch <- c.domainsRefusedDesc
 }
 
 // Collect implements prometheus.Collector by reading the decode counters.
@@ -106,6 +114,11 @@ func (c *DecoderCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	c.collectDomains(ch)
+
+	// Seeded at zero: a first refusal must read as a rise on an existing
+	// series rather than as a series appearing from nothing.
+	ch <- prometheus.MustNewConstMetric(
+		c.domainsRefusedDesc, prometheus.CounterValue, float64(c.src.DomainsRefused()))
 }
 
 // The template kinds published in the type label.

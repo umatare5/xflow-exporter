@@ -13,6 +13,17 @@ import (
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
+// Sampled packet section elements. NetFlow-Lite devices export one sampled
+// packet per record: v9 mode ships the layer-2 section in the deprecated
+// field 104, measured on Cisco devices, and IPFIX mode in IE 315, with the
+// original frame length in IE 312 and an IP-only section in IE 313.
+const (
+	fieldPacketSectionV9Data   = 104
+	fieldDataLinkFrameSize     = 312
+	fieldIPHeaderPacketSection = 313
+	fieldDataLinkFrameSection  = 315
+)
+
 // Vendor information elements mapped beyond the IANA set.
 const (
 	// Cisco AVC exports the application identifier as IANA IE 95; the name
@@ -20,10 +31,11 @@ const (
 	// options reader captures.
 	fieldApplicationID = 95
 
-	// PAN-OS exports these string fields inside NetFlow v9 records using
-	// private type numbers, there being no enterprise bit in v9.
-	fieldPanAppID  = 56701
-	fieldPanUserID = 56702
+	// PAN-OS exports its application name inside NetFlow v9 records using a
+	// private type number, there being no enterprise bit in v9. The User-ID
+	// beside it is not read: a user identity is high-cardinality and
+	// personally identifying, so no series would be allowed to carry it.
+	fieldPanAppID = 56701
 )
 
 // ciscoPEN is the Cisco private enterprise number, under which the AVC
@@ -44,11 +56,19 @@ type fieldState struct {
 	startAbs, endAbs            time.Time
 	outBytes, outPackets        uint64
 	intern                      *interner
+
+	// A sampled packet section, kept for resolution after every field is
+	// read so the device's own parsed fields can take precedence.
+	frameSection []byte
+	ipSection    []byte
+	frameSize    uint64
 }
 
 // finishRecord resolves the accumulated state into the record and stamps the
 // domain sampling rate where the record carried none.
 func finishRecord(r *flow.Record, state *fieldState, bootTime time.Time, domain *domainState) {
+	resolvePacketSection(r, state)
+
 	// An egress-only template carries OUT_* alone; both present would double
 	// the flow if summed, so IN_* wins.
 	if r.Bytes == 0 {
@@ -69,6 +89,38 @@ func finishRecord(r *flow.Record, state *fieldState, bootTime time.Time, domain 
 
 	if r.SamplingRate == 0 {
 		r.SamplingRate = domain.samplingRate.Load()
+	}
+}
+
+// resolvePacketSection decodes a sampled packet section through the header
+// walkers the sFlow decoder uses — NetFlow-Lite is packet sampling in a
+// NetFlow envelope, so the two share one parse.
+//
+// Fields the device parsed itself win: the section fills only what is still
+// absent, and a record carrying both addresses and a section keeps the
+// device's own classification.
+func resolvePacketSection(r *flow.Record, state *fieldState) {
+	if len(state.frameSection) == 0 && len(state.ipSection) == 0 {
+		return
+	}
+
+	if !r.SrcAddr.IsValid() && !r.DstAddr.IsValid() {
+		switch {
+		case len(state.frameSection) > 0:
+			readEthernetFrame(state.frameSection, r)
+		case len(state.ipSection) > 0:
+			readIPPacket(state.ipSection, r)
+		}
+	}
+
+	// One record describes one sampled packet, which is the protocol's own
+	// semantics rather than a fabricated reading. The frame length is the
+	// original frame's, a-la the sFlow frameLength.
+	if r.Packets == 0 {
+		r.Packets = 1
+	}
+	if r.Bytes == 0 {
+		r.Bytes = state.frameSize
 	}
 }
 
@@ -160,9 +212,28 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 	}
 }
 
-// applyRareField maps the elements off the hot path: the flow clocks and the
-// vendor strings.
+// applySectionField captures the sampled packet section elements.
+func applySectionField(state *fieldState, fieldType uint16, value []byte) bool {
+	switch fieldType {
+	case fieldPacketSectionV9Data, fieldDataLinkFrameSection:
+		state.frameSection = value
+	case fieldIPHeaderPacketSection:
+		state.ipSection = value
+	case fieldDataLinkFrameSize:
+		state.frameSize, _ = beUint(value)
+	default:
+		return false
+	}
+	return true
+}
+
+// applyRareField maps the elements off the hot path: the flow clocks, the
+// packet sections and the vendor strings.
 func applyRareField(r *flow.Record, state *fieldState, fieldType uint16, value []byte) {
+	if applySectionField(state, fieldType, value) {
+		return
+	}
+
 	switch fieldType {
 	case fieldFirstSwitched:
 		state.firstUptimeMs, _ = beUint32(value)
@@ -192,8 +263,6 @@ func applyRareField(r *flow.Record, state *fieldState, fieldType uint16, value [
 		r.AppName = state.intern.intern(value)
 	case fieldPanAppID:
 		r.AppName = state.intern.intern(value)
-	case fieldPanUserID:
-		r.User = state.intern.intern(value)
 	}
 }
 

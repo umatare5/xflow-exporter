@@ -23,19 +23,58 @@ func TestPool_GetBuildsWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestPool_PutThenGetReturnsTheValue(t *testing.T) {
+// TestPool_RecyclesValuesIntact pins that a value survives the round trip
+// through the pointer box. Identity is deliberately not asserted: sync.Pool
+// drops what it holds at every GC, so a Put followed by a Get is free to
+// return a freshly built value, and a test demanding the pooled one back
+// fails whenever the collector runs between the two.
+func TestPool_RecyclesValuesIntact(t *testing.T) {
 	t.Parallel()
 
-	p := New(func() []byte { return make([]byte, 4) })
+	const (
+		size = 4
+		mark = 0xAB
+		runs = 64
+	)
 
-	buf := p.Get()
-	buf[0] = 0xAB
-	p.Put(buf)
+	p := New(func() []byte { return make([]byte, size) })
 
-	got := p.Get()
-	if got[0] != 0xAB {
-		t.Errorf("Get() after Put() returned a fresh buffer, want the pooled one")
+	for range runs {
+		buf := p.Get()
+		for i := range buf {
+			buf[i] = mark
+		}
+		p.Put(buf)
 	}
+
+	// Every value handed back is either one this test marked or a freshly
+	// built one. A partially marked buffer would mean the box corrupted the
+	// value on its way through the pool.
+	recycled := 0
+	for range runs {
+		buf := p.Get()
+		if len(buf) != size {
+			t.Fatalf("Get() returned a buffer of length %d, want %d", len(buf), size)
+		}
+
+		marked, fresh := 0, 0
+		for _, b := range buf {
+			switch b {
+			case mark:
+				marked++
+			case 0:
+				fresh++
+			}
+		}
+		if marked != size && fresh != size {
+			t.Fatalf("Get() returned a partially marked buffer %v, want it intact", buf)
+		}
+		if marked == size {
+			recycled++
+		}
+	}
+
+	t.Logf("%d of %d values came back from the pool, the rest were rebuilt after a drop", recycled, runs)
 }
 
 //nolint:paralleltest // testing.AllocsPerRun panics inside a parallel test.
@@ -45,11 +84,19 @@ func TestPool_GetAllocatesNothingOnceWarm(t *testing.T) {
 	// Warm both internal pools.
 	p.Put(p.Get())
 
+	// A GC during the measurement empties sync.Pool, and the Get that follows
+	// rebuilds its value, so the average is not reliably zero. The bound
+	// still separates the two outcomes it must tell apart: storing the value
+	// rather than a pointer would allocate on every single Put, averaging one
+	// or more, while an occasional rebuild after a drop averages near zero.
+	const maxAllocsPerRun = 0.5
+
 	allocs := testing.AllocsPerRun(100, func() {
 		p.Put(p.Get())
 	})
-	if allocs != 0 {
-		t.Errorf("Get/Put allocated %v times per run, want 0", allocs)
+	if allocs >= maxAllocsPerRun {
+		t.Errorf("Get/Put allocated %v times per run, want the steady state below %v",
+			allocs, maxAllocsPerRun)
 	}
 }
 

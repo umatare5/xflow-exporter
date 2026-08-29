@@ -60,6 +60,21 @@ func (c *Collector) RegisterDecoderCollector(src DecoderSource) {
 	slog.Debug("Registered decoder collector")
 }
 
+// RegisterFlowCollector registers the aggregation table collector.
+func (c *Collector) RegisterFlowCollector(src FlowSource, modules config.Collectors, agg config.Aggregation) {
+	c.registry.MustRegister(NewSafeCollector(NewFlowCollector(src, modules, agg), "Flow"))
+	slog.Debug("Registered flow collector")
+}
+
+// RegisterDistributions registers the flow distribution histograms and
+// returns them for the ingest path to observe.
+func (c *Collector) RegisterDistributions() *Distributions {
+	d := NewDistributions()
+	d.Register(c.registry)
+	slog.Debug("Registered distribution histograms")
+	return d
+}
+
 // RegisterSystemCollectors registers Go and process collectors conditionally.
 func (c *Collector) RegisterSystemCollectors() {
 	if c.cfg.InternalCollector.EnableGoCollector {

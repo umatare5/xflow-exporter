@@ -12,12 +12,12 @@
 
 ## Repository Structure
 
-- `cmd/` — Entry point (`main.go`); calls `internal/cli` for app setup
+- `cmd/` — Entry point (`main.go`), which calls `internal/cli` for app setup
 - `internal/cli/` — CLI flag definitions and app wiring (urfave/cli/v3)
-- `internal/config/` — flag/env parsing, defaults (`0.0.0.0:10040`), and validation
+- `internal/config/` — flag/env parsing, defaults (`0.0.0.0:10052`), and validation
 - `internal/server/` — HTTP server (`/metrics`, `/healthz`, `/`), graceful shutdown
 - `internal/collector/` — `prometheus.Collector` implementations and registry management
-- `internal/log/` — `log/slog` setup; structured logging helpers
+- `internal/log/` — `log/slog` setup and structured logging helpers
 
 ## Setup and Commands
 
@@ -40,7 +40,7 @@ Make targets ([Makefile](Makefile)):
 ## Code Style
 
 - `gofmt` and `golangci-lint` are enforced by the pre-commit hook (see [.pre-commit-config.yaml](.pre-commit-config.yaml)).
-- Comments record only what the code cannot say; never address the reader.
+- Comments record only what the code cannot say, and never address the reader.
 
 ## Testing Instructions
 
@@ -66,7 +66,7 @@ fabricated zero from a measured one.
 
 NetFlow v9 and IPFIX templates are valid only within the transport session and
 observation domain that announced them. Every template lookup is keyed by the
-exporter source address and the Observation Domain ID (Source ID) together;
+exporter source address and the Observation Domain ID (Source ID) together —
 keying by either alone corrupts records when two domains reuse one template ID.
 
 ### Sampling

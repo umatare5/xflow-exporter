@@ -52,6 +52,8 @@ func registerFlags() []cli.Flag {
 	flags = append(flags, registerWebFlags()...)
 	flags = append(flags, registerReceiverFlags()...)
 	flags = append(flags, registerParserFlags()...)
+	flags = append(flags, registerAggregationFlags()...)
+	flags = append(flags, registerCollectorFlags()...)
 	flags = append(flags, registerLogFlags()...)
 	flags = append(flags, registerUtilityFlags()...)
 	flags = append(flags, registerInternalCollectorFlags()...)
@@ -111,7 +113,7 @@ func registerReceiverFlags() []cli.Flag {
 		},
 		&cli.IntFlag{
 			Name:     "receiver.max-packet-size",
-			Usage:    "Largest datagram in bytes kept whole; larger ones are dropped",
+			Usage:    "Largest datagram in bytes kept whole, dropping larger ones",
 			Value:    config.DefaultReceiverMaxPacketSize,
 			Category: "* Receiver Options",
 		},
@@ -138,6 +140,78 @@ func registerParserFlags() []cli.Flag {
 			Usage:    "How long an unrefreshed template stays usable",
 			Value:    config.DefaultParserTemplateTTL,
 			Category: "* Parser Options",
+		},
+	}
+}
+
+// registerAggregationFlags defines flags for the in-memory aggregation limits.
+func registerAggregationFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.DurationFlag{
+			Name:     "aggregation.entry-ttl",
+			Usage:    "How long an idle aggregation entry keeps its series",
+			Value:    config.DefaultAggregationEntryTTL,
+			Category: "* Aggregation Options",
+		},
+		&cli.IntFlag{
+			Name:     "aggregation.max-entries",
+			Usage:    "Entry bound per aggregation table, folding new keys into other past it",
+			Value:    config.DefaultAggregationMaxEntries,
+			Category: "* Aggregation Options",
+		},
+		&cli.IntFlag{
+			Name:     "aggregation.top-k",
+			Usage:    "Entries each table publishes as their own series, folding the rest into other",
+			Value:    config.DefaultAggregationTopK,
+			Category: "* Aggregation Options",
+		},
+		&cli.Int64Flag{
+			Name:     "aggregation.min-bytes",
+			Usage:    "Bytes below which an entry folds into other at scrape time (0 publishes all)",
+			Value:    config.DefaultAggregationMinBytes,
+			Category: "* Aggregation Options",
+		},
+	}
+}
+
+// registerCollectorFlags defines the data collector module switches.
+func registerCollectorFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.BoolFlag{
+			Name:        "collector.exporters",
+			Usage:       "Enable per-device traffic metrics",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
+			Name:        "collector.hosts",
+			Usage:       "Enable source-destination address pair metrics",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
+			Name:        "collector.services",
+			Usage:       "Enable address pair with protocol and port metrics",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
+			Name:        "collector.asns",
+			Usage:       "Enable AS pair metrics from device-exported AS numbers",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
+			Name:        "collector.applications",
+			Usage:       "Enable application metrics from AVC, App-ID or applicationId",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
+			Name:        "collector.distributions",
+			Usage:       "Enable flow size and duration native histograms",
+			Category:    "# Collector Options",
+			HideDefault: true,
 		},
 	}
 }

@@ -61,6 +61,10 @@ func (d *Decoder) decodeSFlowV5(
 	}
 
 	domain := d.templates.domain(domainKey{exporter: exporter, odid: subAgentID})
+	if domain == nil {
+		issue(ReasonDomainLimit)
+		return dst, nil
+	}
 	domain.trackSequence(sequence)
 
 	for range numSamples {
@@ -151,7 +155,7 @@ func (d *Decoder) decodeSFlowFlowSample(
 			return dst
 		}
 
-		dst = d.appendSFlowRecord(exporter, recordType, record, samplingRate, inputIf, outputIf, dst)
+		dst = d.appendSFlowRecord(exporter, recordType, record, samplingRate, inputIf, outputIf, dst, issue)
 	}
 
 	return dst
@@ -161,11 +165,25 @@ func (d *Decoder) decodeSFlowFlowSample(
 // reads carries the packet; other formats were skipped by their length.
 func (d *Decoder) appendSFlowRecord(
 	exporter netip.Addr, recordType uint32, record []byte,
-	samplingRate, inputIf, outputIf uint32, dst []flow.Record,
+	samplingRate, inputIf, outputIf uint32, dst []flow.Record, issue func(reason string),
 ) []flow.Record {
 	const formatMask = 0xFFF
 
 	if recordType>>12 != 0 {
+		return dst
+	}
+
+	var read func([]byte, *flow.Record) bool
+	switch recordType & formatMask {
+	case sflowRawPacketHeader:
+		read = readSFlowRawHeader
+	case sflowSampledIPv4:
+		read = readSFlowSampledIPv4
+	case sflowSampledIPv6:
+		read = readSFlowSampledIPv6
+	default:
+		// An extended-data record annotates the sample rather than carrying
+		// the packet; skipping it is the design, not a failure.
 		return dst
 	}
 
@@ -178,20 +196,11 @@ func (d *Decoder) appendSFlowRecord(
 		InputIf:      inputIf,
 		OutputIf:     outputIf,
 	})
-	r := &dst[len(dst)-1]
 
-	ok := false
-	switch recordType & formatMask {
-	case sflowRawPacketHeader:
-		ok = readSFlowRawHeader(record, r)
-	case sflowSampledIPv4:
-		ok = readSFlowSampledIPv4(record, r)
-	case sflowSampledIPv6:
-		ok = readSFlowSampledIPv6(record, r)
-	}
-
-	if !ok {
-		// An extended-data or unreadable record yields no flow of its own.
+	// A record of a known format that does not parse is a structure problem
+	// the operator must see, not a silent drop.
+	if !read(record, &dst[len(dst)-1]) {
+		issue(ReasonMalformed)
 		return dst[:len(dst)-1]
 	}
 	return dst

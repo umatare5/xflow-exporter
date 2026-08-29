@@ -1,0 +1,12 @@
+# Example Prometheus configuration for xflow-exporter.
+global:
+  scrape_interval: 60s
+  evaluation_interval: 60s
+
+rule_files:
+  - prometheus_alert_rules.yml
+
+scrape_configs:
+  - job_name: "xflow"
+    static_configs:
+      - targets: [localhost:10052]
