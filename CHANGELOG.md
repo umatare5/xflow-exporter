@@ -7,5 +7,6 @@ A minor release may rename or remove a metric. Every collector module flag is of
 ## [v0.1.0]
 
 - [#1](https://github.com/umatare5/xflow-exporter/pull/1) — Start the exporter with its flags, HTTP surface and UDP receiver
+- [#2](https://github.com/umatare5/xflow-exporter/pull/2) — Add the release workflow the tag and the artifacts come from
 
 [v0.1.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.1.0
