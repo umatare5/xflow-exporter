@@ -1,67 +1,51 @@
 # Documentation
 
-Reference pages for xflow-exporter. The [README](../README.md) covers getting flows received and scraped, and these pages carry the traffic-metric catalogue and the behaviour every module shares.
+Reference pages for xflow-exporter. The [README](../README.md) covers getting flows received and scraped; these pages carry the catalogues and the behaviour every module shares.
 
-| Page                              | Focus                                    |
-| :-------------------------------- | :--------------------------------------- |
-| [Protocols](protocols.md)         | Per-protocol behaviour and limits        |
-| [Collectors](collectors.md)       | The traffic modules and their labels     |
-| [Health](health.md)               | The exporter's own metrics and reasons   |
-| [Configuration](configuration.md) | Flags and defaults, as `--help` prints   |
+| Page                              | Focus                                  |
+| :-------------------------------- | :------------------------------------- |
+| [Protocols](protocols.md)         | Per-protocol behaviour and limits      |
+| [Collectors](collectors.md)       | The traffic modules and their labels   |
+| [Health](health.md)               | The exporter's own metrics and reasons |
+| [Configuration](configuration.md) | Flags and defaults, as `--help` prints |
 
 ## Technical Information
 
 ### Push and pull
 
-Flow export is push, Prometheus is pull, and this exporter bridges the two. The [README](../README.md#architecture) carries the architecture diagram.
-
-- **Scrapes never wait** — a scrape reads the aggregation tables as they are, while flow datagrams keep accumulating between scrapes.
-- **No target to probe** — there is no `up`-style reachability toward a push sender, so per-device freshness is `xflow_last_flow_timestamp_seconds` instead.
-- **Naming** — RFC 7011 calls the device the "exporter", and the `exporter` label follows that reading: it always names the device.
-- **Tuning** — the receive path is bounded under `--receiver.*`, `--parser.*` and `--aggregation.*`. On Linux the read loops use `recvmmsg` batching; other platforms read one datagram per call.
+- **Scrapes never wait** — a scrape reads the aggregation tables as they stand, so its latency is independent of flow arrival.
+- **No target to probe** — nothing answers an `up`-style reachability check toward a push sender, so per-device liveness is `xflow_last_flow_timestamp_seconds`.
+- **Naming** — RFC 7011 calls the device the exporter, and the `exporter` label follows it: it names the device, never this binary.
+- **Tuning** — `--receiver.*`, `--parser.*` and `--aggregation.*` bound the receive path. Linux read loops batch with `recvmmsg`; elsewhere it is one datagram per call.
 
 ### Absence
 
-A dimension a flow record did not carry produces no series: never `0`, `false` or an epoch timestamp. Prometheus cannot distinguish a fabricated zero from a measured one.
+A dimension the record did not carry produces no series — never `0`, `false` or an epoch instant.
 
 - **Ingest** — a record without addresses feeds no host or service entry, one without an application feeds no application entry, and a NetFlow v8 aggregate feeds only the tables its method's dimensions cover.
-- **Eviction** — an aggregation entry idle past `--aggregation.entry-ttl` is removed and its series disappears. A flow nobody has seen is gone, not zero.
-- **Freshness** — `xflow_last_flow_timestamp_seconds` exists only once a device's datagram has decoded, and `xflow_sampling_rate` only once a rate has arrived.
+- **Eviction** — an entry idle past `--aggregation.entry-ttl` is removed and its series disappears.
+- **Freshness** — `xflow_last_flow_timestamp_seconds` appears once a device's datagram has decoded, `xflow_sampling_rate` once a rate has arrived.
 
 ### Counter semantics
 
-The table families are counters accumulated since each entry was created, and an entry evicted then re-created restarts from zero.
+Table families accumulate from entry creation, and an entry evicted then re-created restarts at zero.
 
-- **Rebirth** — the staleness marker Prometheus writes at eviction separates the old series from a rebirth.
-- **Folding** — the `other` series of each family is seeded at zero and absorbs what the entry bound rejected at ingest, so it only ever rises. Nothing else reaches it. The tail below the Top-K cut is withheld rather than summed into it, and an evicted entry's totals are not folded into it either: Prometheus already counted those bytes as increments on the entry's own series, so folding them again would make `sum(rate())` over the family read twice what was ingested.
-- **Flow counts** — `_flows_total` is as exported: a packet-sampling protocol observes flows rather than counting them, so no sampling multiplication is applied to it.
+- **Rebirth** — the staleness marker Prometheus writes at eviction separates the old series from the new one.
+- **Folding** — the `other` series absorbs what `--aggregation.max-entries` rejected at ingest and nothing else.
+- **Not folded** — the tail below the Top-K cut is still accumulating, so summing it would make the counter fall whenever an entry is evicted or rises into the cut; an evicted entry's totals are not folded in either, those bytes having already reached Prometheus on the entry's own series, where folding them again would make `sum(rate())` over the family read twice what was ingested.
+- **Flow counts** — `_flows_total` is as exported, a packet-sampling protocol observing flows rather than counting them.
 
 ### Sampling correction
 
-`_bytes_total` and `_packets_total` are multiplied by the sampling rate in force when the record was decoded.
+`_bytes_total` and `_packets_total` carry the record's value multiplied by the rate in force at decode.
 
-- **Sources** — the v5 header interval, the v9/IPFIX options rates in the precedence [Protocols](protocols.md#options-and-enrichment) tabulates, and the per-sample rate sFlow carries inline.
-- **Audit** — `xflow_sampling_rate` publishes the rate each v9/IPFIX domain declared through its options. The v5 header interval and sFlow's inline rate ride the records themselves and publish no rate series.
+- **Sources** — the v5 header interval, the v9/IPFIX options rates in the precedence [Protocols](protocols.md#options-and-enrichment) tabulates, and sFlow's per-sample inline rate.
+- **Audit** — `xflow_sampling_rate` publishes what a v9 or IPFIX domain declared through its options; the v5 and sFlow rates ride the records and publish no series.
 - **Unsampled** — a record carrying no rate multiplies by one, and PAN-OS NetFlow is always unsampled.
 
 ### Enrichment
 
-An enrichment source fills a dimension the exporting device did not carry.
-Every source is off by default and enabled per `--enrich.*` flag.
-
-- **Never overwrites** — the device saw the packet and this exporter did not,
-  so an exported reading is the authority and enrichment fills absence alone.
-  That is what keeps an enriched series comparable with an unenriched one.
-- **Feeds the existing families** — a filled dimension keys the module that
-  already publishes it, so naming an application from its port populates
-  `xflow_application_*` rather than a family of its own.
-- **Cardinality** — a filled dimension creates series that were previously
-  absent, which is why each source is a deliberate opt-in.
-- **Observability** — `xflow_enrichment_lookups_total` reports what each
-  source made of the records it saw, per the `result` values [Health](health.md#labels)
-  catalogues.
-
-The sources are these.
+An `--enrich.*` source fills a dimension the device did not carry. Every source is off by default.
 
 | Flag                        | Fills                                    |
 | :-------------------------- | :--------------------------------------- |
@@ -70,125 +54,56 @@ The sources are these.
 | `--enrich.country-database` | The ISO country codes, from the same     |
 | `--enrich.threat-file`      | A flag on addresses a list file names    |
 
-A database path that cannot be opened fails startup rather than enriching
-nothing in silence. Neither database ships with this exporter: point the flags
-at a GeoLite2 or DB-IP file you already hold, or let
-`scripts/fetch-enrichment-data.sh databases` fetch one. Database lookups are
-local, so a lookup sends no address anywhere and enrichment holds no credential of its own.
+- **Never overwrites** — an exported reading wins, which is what keeps an enriched series comparable with an unenriched one.
+- **Feeds the existing families** — a filled dimension keys the module that already publishes it, so naming an application from its port populates `xflow_application_*`.
+- **Cardinality** — a filled dimension creates series that were absent, which is why each source is a deliberate opt-in.
+- **Observability** — `xflow_enrichment_lookups_total` reports the `result` split [Health](health.md#labels) catalogues.
 
-An anycast or large cloud prefix carries no country worth reading. A lab in
-Japan reaching Cloudflare over AS 13335 measured `src_country="CA"`, which is
-where the database places the prefix rather than where the traffic went, and
-no database can say otherwise: the same address answers from a different
-continent depending on who asks. Read `xflow_country_pair_*` as the country
-the prefix is registered in, and do not reconcile it with a transit bill.
+Lookups are local: nothing is fetched and no credential is held. Neither database ships here — point the flag at a GeoLite2 or DB-IP file, or run `scripts/fetch-enrichment-data.sh databases`. A path that cannot be opened fails startup rather than enriching nothing in silence.
+
+A country is where the database registers the prefix, not where the traffic went: a lab in Japan reaching Cloudflare over AS 13335 measured `src_country="CA"`. Read `xflow_country_pair_*` that way, and do not reconcile it with a transit bill.
 
 ### Threat lists
 
-`--enrich.threat-file` reads a file of flagged addresses, one per line, and
-is repeatable so several published lists combine into one set.
+`--enrich.threat-file` reads flagged addresses, one per line, and is repeatable so several published lists combine into one set.
 
-- **Fetching is not the exporter's job.** `scripts/fetch-enrichment-data.sh`
-  downloads the published lists, merges and deduplicates them, and writes one
-  file. `fetch-enrichment-data.sh databases` fetches the ASN and country
-  databases beside them, from DB-IP unless `MAXMIND_LICENSE_KEY` is set. Run
-  it from cron and reload afterwards.
-- **One reload covers the lists and the databases alike.** `/-/reload` and
-  `SIGHUP` re-read every enrichment source, each mmdb reader being replaced
-  whole rather than reopened in place, so no restart is needed to pick a
-  refreshed file up. The script writes where `THREAT_FILE`, `ASN_DATABASE`
-  and `COUNTRY_DATABASE` point.
-- **A failed fetch leaves the previous file alone.** The script checks that
-  each body names an address rather than trusting the status, since an empty
-  response and an access-denied page both arrive as a `200`, and it refuses to
-  write a merge below `MIN_ADDRESSES` (1000). A publisher that splits its list
-  fills each part before opening the next, so a missing part behind a full one
-  is read as a gap rather than as the end, and a multi-part list no part of
-  which reached `SPLIT_PART_LINES` (131072) is refused rather than walked on
-  an assumption that no longer holds. Every refusal names its reason and
-  exits non-zero, so the exporter keeps serving the set it already holds.
-- **Format** — one address per line. Blank lines, `#` and `;` comments, and
-  any trailing field after whitespace or a comma are skipped, so a CSV export
-  loads without a converter. A line that is not an address is skipped rather
-  than failing the file: one malformed row must not cost the rest.
-- **A line over 255 bytes fails the file**, which is the one exception to the
-  rule above. Nothing a list publishes is that long, so such a line says the
-  file is not a list, and the reader cannot resume past it — a set quietly
-  missing its tail would under-flag, and an unflagged address reads as a clean
-  one.
-- **An unlisted address is not a clean one.** It is an address no list
-  covers, which is absence rather than a finding.
-- **Both directions are covered.** Most lists name the origins of inbound
-  attacks, and a hit lands on `direction="src"`. One names malicious
-  destinations — command-and-control, malware drops and phishing hosts — and
-  a hit there lands on `direction="dst"`, which reads as an inside host that
-  reached one of them.
-- **A prefix is not an address.** A `198.51.100.0/24` line is skipped like any
-  other line that is not an address, so a list published in CIDR notation
-  loads only its bare addresses. `xflow_threat_skipped_lines` counts what a
-  load passed over, and a reload logs the count, so the gap is visible rather
-  than read as full coverage. Blank lines and comments are not counted.
-- **The licence of a list is the operator's to check.** Several published
-  aggregates carry a non-commercial clause inherited from an upstream feed.
-  The lists the script fetches are MIT and CC0.
-- **Size** — the lists the script fetches combine to roughly 420,000
-  addresses, which costs about 20 MiB and answers a lookup in tens of
-  nanoseconds.
+- **Format** — blank lines, `#` and `;` comments and any trailing field after whitespace or a comma are skipped, so a CSV export loads unconverted. A line that is not an address is skipped rather than failing the file.
+- **A prefix is not an address** — a `198.51.100.0/24` line is skipped like any other, so a CIDR list loads only its bare addresses. `xflow_threat_skipped_lines` counts what the load passed over, blank lines and comments excluded.
+- **A line over 255 bytes fails the file** — nothing a list publishes is that long, so such a line says the file is not a list, and a set silently missing its tail would under-flag.
+- **An unlisted address is not a clean one** — it is an address no list covers, which is absence rather than a finding.
+- **Both directions** — a hit on the source lands on `direction="src"` and one on the destination on `direction="dst"`, which reads as an inside host that reached a flagged destination.
+- **Size** — the lists the bundled script fetches combine to roughly 420,000 addresses, about 20 MiB, answering a lookup in tens of nanoseconds.
+- **Licence** — several published aggregates inherit a non-commercial clause from an upstream feed; the ones the script fetches are MIT and CC0.
+
+`scripts/fetch-enrichment-data.sh` downloads, merges and deduplicates the published lists, and `fetch-enrichment-data.sh databases` fetches the ASN and country databases from DB-IP unless `MAXMIND_LICENSE_KEY` is set. Both write where `THREAT_FILE`, `ASN_DATABASE` and `COUNTRY_DATABASE` point. The script checks that each body names an address rather than trusting the status, refuses a merge below `MIN_ADDRESSES` (1000) and a multi-part list no part of which reached `SPLIT_PART_LINES` (131072), and exits non-zero naming its reason, so a bad fetch leaves the previous file in place. Run it from cron and reload afterwards.
 
 ### Reloading
 
-`--web.enable-lifecycle` exposes `/-/reload`, which re-reads every enrichment
-source from disk. A `SIGHUP` does the same and needs no flag. Both are the
-spelling Prometheus uses.
+`--web.enable-lifecycle` exposes `/-/reload`, and a `SIGHUP` does the same without the flag. Both re-read every enrichment source from disk.
 
-- **Off by default** — the endpoint is a write, so it stays unexposed unless
-  asked for; [SECURITY.md](../SECURITY.md) covers the exposure posture.
-- **POST or PUT only.**
-- **A failed reload keeps the previous data.** A list that has gone missing
-  would otherwise unflag every address at once, which reads as a network that
-  had just gone clean. `xflow_threat_reload_failures_total` counts those.
-- **Atomic** — the new set is built whole before it replaces the old one, so
-  a lookup never sees a half-loaded set and the decode path never pauses.
+- **POST or PUT only**, and unexposed by default, the endpoint being a write — [SECURITY.md](../SECURITY.md) covers the posture.
+- **A failed reload keeps the previous data** — a list gone missing would otherwise unflag every address at once, which reads as a network that had just gone clean. `xflow_threat_reload_failures_total` counts those.
+- **Atomic** — a new set is built whole before it replaces the old one and each mmdb reader is replaced rather than reopened, so a lookup never sees a half-loaded set and the decode path never pauses.
 
 ### Bounded state
 
-Every map keyed by data the wire controls carries a bound, because a push
-protocol cannot choose its senders.
+Every map keyed by wire data carries a bound, a push protocol not choosing its senders.
 
-- **Observation domains** — the identifier is a wire field, so each device may
-  open at most 256 of them. A refusal counts `domain_limit` against that
-  device and raises `xflow_domains_refused_total`.
-- **Idle domains** — swept on the template TTL, which returns the slot to the
-  device's budget and keeps the domain count following the fleet.
-- **Templates** — each domain holds at most 8192; a full domain drops expired
-  templates first, and a refusal counts `invalid_template`.
-- **Vendor strings** — the interner holds at most 65536, each at most 255
-  bytes. Past the entry bound a value is copied per occurrence, which costs an
-  allocation and never a wrong reading. A string longer than the byte bound,
-  or one that is not valid UTF-8, is refused before the map is consulted, so
-  `xflow_vendor_strings_refused_total` counts it once per field carrying it
-  rather than once. A refused application name leaves the record falling back
-  to its numbered `applicationId`, to its port name under `--enrich.services`,
-  or to no application series at all.
-- **Announced applications** — the `applicationId` is a wire field, so each
-  device may name at most 16384 of them, an order of magnitude above the
-  NBAR2 database a real device announces. A refusal raises
-  `xflow_applications_refused_total` and leaves that application numbered
-  rather than named; the ones already announced keep resolving and keep
-  refreshing.
-- **Exporting devices** — the source address is the sender's own claim, so the
-  process holds decode statistics for at most 65536 devices. A refusal raises
-  `xflow_exporters_refused_total` and leaves that device without statistics:
-  its datagrams still decode and still reach every aggregation table, but
-  reach no `xflow_flows_total`, `xflow_decode_errors_total` or
-  `xflow_last_flow_timestamp_seconds`.
-- **Idle devices** — swept on the template TTL, but only once that budget is
-  reached. Below it a device that has gone silent keeps its freshness series,
-  which is the one thing an alert on silence has to read.
+| Bounded                            | Limit  | Past it                                                      |
+| :--------------------------------- | :----- | :----------------------------------------------------------- |
+| Observation domains per device     | 256    | The datagram is discarded, counting `domain_limit`           |
+| Templates per domain               | 8192   | Expired templates go first, then `invalid_template`          |
+| Interned vendor strings            | 65536  | The value is copied per occurrence rather than refused       |
+| One vendor string                  | 255 B  | Refused, as invalid UTF-8 is, counting once per field        |
+| Announced applications per device  | 16384  | The application stays numbered rather than named             |
+| Devices holding decode statistics  | 65536  | The device decodes but reaches no per-device health series   |
+| AS names held from the database    | 65536  | The AS goes unnamed, which a join shows by finding nothing   |
 
-Maps keyed by the source address alone — the per-device application tables,
-the distribution histograms — are bounded by restricting the receiver to
-permitted senders. See [SECURITY.md](../SECURITY.md).
+- **Announced applications** — the bound sits an order of magnitude above the 1500 or so an NBAR2 protocol pack names, that database being what the table carries.
+- **Refusal counters** — `xflow_domains_refused_total`, `xflow_vendor_strings_refused_total`, `xflow_applications_refused_total` and `xflow_exporters_refused_total` count attempts, and [Health](health.md) carries what each costs the records behind it.
+- **Fallback** — a refused vendor string leaves the record on its numbered `applicationId`, on its port name under `--enrich.services`, or on no application series at all, never on a partial name.
+- **Sweeps** — idle domains are swept on the template TTL, and idle devices only once the device budget is reached, so a device that has gone silent keeps the freshness series an alert on silence has to read.
+- **Not wire-keyed** — the per-device application tables and the distribution histograms key on the source address alone, and are bounded by restricting the receiver to permitted senders ([SECURITY.md](../SECURITY.md)).
 
 ### Templates
 
@@ -200,22 +115,22 @@ A NetFlow-Lite record carries one sampled packet section instead of parsed flow 
 
 ### Remote write
 
-`--remote-write.url` ships the registry's counters and gauges to a Remote Write 2.0 endpoint, for the deployments a scrape cannot reach, alongside or instead of `/metrics`.
+`--remote-write.url` ships the registry's counters and gauges to a Remote Write 2.0 endpoint, alongside or instead of `/metrics`.
 
-- **Cardinality is the caller's to bound.** `--aggregation.top-k` bounds what is live at any instant, not what a long-term store accumulates: the address-keyed families turn their Top-K over as talkers come and go, measured at 5.3× the live series count per hour for `xflow_service_*` on a quiet link, and before the ordering fix that removed the share of it a byte tie was causing, while the dimensional families (`asns`, `applications`, `tcp_flags`, `dscp`, `countries`) stay flat at 1.0×.
-- **Aggregate before shipping** — reduce the address-keyed families with recording rules, or drop them with `write_relabel_configs`. Neither `--remote-write.url` nor a scrape filters anything of its own accord.
+- **Cardinality is the caller's to bound** — `--aggregation.top-k` bounds what is live at any instant, not what a long-term store accumulates. The address-keyed families turn their Top-K over as talkers come and go, measured at 5.3× the live series count per hour for `xflow_service_*` on a quiet link and before the ordering fix that removed the share a byte tie was causing, while `asns`, `applications`, `tcp_flags`, `dscp` and `countries` stay flat at 1.0×.
+- **Aggregate before shipping** — reduce the address-keyed families with recording rules or drop them with `write_relabel_configs`. Neither the writer nor a scrape filters anything of its own accord.
 
 ### Native histograms
 
 `--collector.distributions` publishes `xflow_flow_bytes` and `xflow_flow_duration_seconds` as native histograms, one series per exporter with exponential buckets.
 
 - **Scraping** — Prometheus v3.8+ with `scrape_native_histograms: true`, which [examples/prometheus.yml](../examples/prometheus.yml) sets. Without it the scrape negotiates the classic text exposition, which carries a `_count`, a `_sum` and one `+Inf` bucket.
-- **Duration** — observed only where the record carried both flow instants: sFlow samples and clock-less templates contribute size but no duration.
-- **Remote write does not carry them.** Remote Write 2.0 sends a histogram as its own message, and reducing one to a single sample would be a value nobody measured, so `--remote-write.url` ships the counters and gauges alone. Distributions are scrape-only.
+- **Duration** — observed only where the record carried both flow instants, so sFlow samples and clock-less templates contribute size but no duration.
+- **Scrape-only** — Remote Write 2.0 sends a histogram as its own message, and reducing one to a single sample would be a value nobody measured, so `--remote-write.url` ships the counters and gauges alone.
 
 ### Dashboards
 
 [examples/grafana_dashboard.json](../examples/grafana_dashboard.json) covers reception and decoding, throughput per device, the Top-K composition views, the aggregation tables and the enrichment sources, with the data source and the devices as variables.
 
-- **Panels rank by packets, not bytes.** Both are sampled estimates, and a byte figure adds the variance of the packet-size distribution on top of the counting error, so read volume as a proportion and take an exact figure from the device's SNMP interface counters.
-- **The composition panels rank; they do not total.** Entries below `--aggregation.top-k` publish nothing, and `other` carries only what the entry bound folded at ingest. Every panel carries its own description.
+- **Panels rank by packets, not bytes** — both are sampled estimates and a byte figure adds the variance of the packet-size distribution on top, so read volume as a proportion and take an exact figure from the device's SNMP interface counters.
+- **The composition panels rank; they do not total** — entries below `--aggregation.top-k` publish nothing, and `other` carries only what the entry bound folded at ingest.

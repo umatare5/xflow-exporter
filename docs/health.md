@@ -1,36 +1,36 @@
 # Exporter health
 
-These series describe the exporter itself rather than the traffic it aggregates, and none takes a collector flag. The aggregation series appear while any module is enabled and the enrichment series while their `--enrich.*` source is set, while the remote-write series are in the [README](../README.md#remote-write-metrics).
+This is the whole set of series the exporter publishes about itself, and none takes a collector flag. The aggregation series appear while any module is enabled and the enrichment series while their `--enrich.*` source is set, while the remote-write series are in the [README](../README.md#remote-write-metrics).
 
 ## Metrics
 
-| Subsystem     | Metric                                     | Type    | Description                                          |
-| :------------ | :----------------------------------------- | :------ | :--------------------------------------------------- |
-| `build`       | `xflow_build_info`                         | Gauge   | Exporter version in the `version` label, always 1    |
-| `receiver`    | `xflow_receiver_packets_total`             | Counter | Datagrams read per `listener`, drops included        |
-| `receiver`    | `xflow_receiver_bytes_total`               | Counter | Payload bytes received per `listener`                |
-| `receiver`    | `xflow_receiver_read_errors_total`         | Counter | Socket read failures per `listener`                  |
-| `receiver`    | `xflow_receiver_dropped_packets_total`     | Counter | Pre-decode drops per `listener` and `reason`         |
-| `receiver`    | `xflow_receiver_queue_length`              | Gauge   | Datagrams queued ahead of the decoders               |
-| `receiver`    | `xflow_receiver_queue_capacity`            | Gauge   | Bound of that queue                                  |
-| `decoder`     | `xflow_flows_total`                        | Counter | Records decoded per `exporter` and `version`         |
-| `decoder`     | `xflow_decode_errors_total`                | Counter | Rejections per `exporter`, `version` and `reason`    |
-| `decoder`     | `xflow_last_flow_timestamp_seconds`        | Gauge   | Unix time of the exporter's last decode              |
-| `decoder`     | `xflow_templates`                          | Gauge   | Unexpired templates per domain and `type`            |
-| `decoder`     | `xflow_sequence_missed_total`              | Counter | Export packets lost per domain                       |
-| `decoder`     | `xflow_sampling_rate`                      | Gauge   | Declared rate per domain, absent until one arrives   |
-| `decoder`     | `xflow_domains_refused_total`              | Counter | Datagrams discarded at the per-device domain budget  |
-| `decoder`     | `xflow_vendor_strings_refused_total`       | Counter | Unrepresentable string fields, counted per field     |
-| `decoder`     | `xflow_applications_refused_total`         | Counter | Announcements refused at the per-device app budget   |
-| `decoder`     | `xflow_exporters_refused_total`            | Counter | Datagrams left unattributed at the exporter budget   |
-| `aggregation` | `xflow_aggregation_entries`                | Gauge   | Entries held per `aggregation` table                 |
-| `aggregation` | `xflow_aggregation_evictions_total`        | Counter | Idle entries evicted per `aggregation`               |
-| `aggregation` | `xflow_aggregation_overflow_records_total` | Counter | Records folded into `other` by the entry bound       |
-| `enrichment`  | `xflow_enrichment_lookups_total`           | Counter | Records per `enricher` and `result`                  |
-| `enrichment`  | `xflow_threat_entries`                     | Gauge   | Flagged addresses held from the list files           |
-| `enrichment`  | `xflow_threat_skipped_lines`               | Gauge   | List lines that name no address, in the set in force |
-| `enrichment`  | `xflow_threat_reloads_total`               | Counter | List loads that succeeded, the initial one included  |
-| `enrichment`  | `xflow_threat_reload_failures_total`       | Counter | List loads that failed, keeping the previous set     |
+| Subsystem     | Metric                                     | Type    | Description                                   |
+| :------------ | :----------------------------------------- | :------ | :-------------------------------------------- |
+| `build`       | `xflow_build_info`                         | Gauge   | Exporter version, always 1                    |
+| `receiver`    | `xflow_receiver_packets_total`             | Counter | Datagrams read per `listener`, drops included |
+| `receiver`    | `xflow_receiver_bytes_total`               | Counter | Payload bytes received per `listener`         |
+| `receiver`    | `xflow_receiver_read_errors_total`         | Counter | Socket read failures per `listener`           |
+| `receiver`    | `xflow_receiver_dropped_packets_total`     | Counter | Drops per `listener` and `reason`             |
+| `receiver`    | `xflow_receiver_queue_length`              | Gauge   | Datagrams queued ahead of the decoders        |
+| `receiver`    | `xflow_receiver_queue_capacity`            | Gauge   | Bound of that queue                           |
+| `decoder`     | `xflow_flows_total`                        | Counter | Records per `exporter` and `version`          |
+| `decoder`     | `xflow_decode_errors_total`                | Counter | Rejections per device and `reason`            |
+| `decoder`     | `xflow_last_flow_timestamp_seconds`        | Gauge   | Unix time of the last decode                  |
+| `decoder`     | `xflow_templates`                          | Gauge   | Templates held per domain and `type`          |
+| `decoder`     | `xflow_sequence_missed_total`              | Counter | Export packets lost per domain                |
+| `decoder`     | `xflow_sampling_rate`                      | Gauge   | Declared sampling rate per domain             |
+| `decoder`     | `xflow_domains_refused_total`              | Counter | Datagrams past the domain budget              |
+| `decoder`     | `xflow_vendor_strings_refused_total`       | Counter | Unrepresentable strings, per field            |
+| `decoder`     | `xflow_applications_refused_total`         | Counter | Announcements past the app budget             |
+| `decoder`     | `xflow_exporters_refused_total`            | Counter | Datagrams past the device budget              |
+| `aggregation` | `xflow_aggregation_entries`                | Gauge   | Entries held per `aggregation`                |
+| `aggregation` | `xflow_aggregation_evictions_total`        | Counter | Idle entries evicted per `aggregation`        |
+| `aggregation` | `xflow_aggregation_overflow_records_total` | Counter | Records folded into `other`                   |
+| `enrichment`  | `xflow_enrichment_lookups_total`           | Counter | Lookups per `enricher` and `result`           |
+| `enrichment`  | `xflow_threat_entries`                     | Gauge   | Flagged addresses held                        |
+| `enrichment`  | `xflow_threat_skipped_lines`               | Gauge   | List lines naming no address                  |
+| `enrichment`  | `xflow_threat_reloads_total`               | Counter | List loads that succeeded                     |
+| `enrichment`  | `xflow_threat_reload_failures_total`       | Counter | List loads that failed                        |
 
 ## Labels
 
@@ -93,7 +93,7 @@ neither carries a `listener`, the queue being one for every read loop, so the ra
 
 all three are keyed by the device, so a device refused at the exporter budget reaches none of them while its datagrams still decode and still feed every aggregation table.
 
-- Alert on `time() - xflow_last_flow_timestamp_seconds`, because a silent device stops moving its timestamp while every counter freezes and nothing else can tell that from a healthy quiet network.
+- Alert per device on `time() - xflow_last_flow_timestamp_seconds`: a device that stopped exporting freezes its instant along with every counter it feeds, and no other series separates that from a quiet link.
 
 **`xflow_decode_errors_total`**
 

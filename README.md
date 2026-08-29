@@ -99,7 +99,7 @@ The exporter serves four endpoints:
 - `/` — landing page, which confirms the exporter is running when reached at <http://localhost:10052/>
 - `/metrics` — metrics endpoint, configurable via `--web.telemetry-path`
 - `/healthz` — liveness probe, which returns a static 200 and deliberately ignores flow reception
-- `/-/reload` — re-reads the enrichment sources on POST or PUT, exposed only with `--web.enable-lifecycle`. A `SIGHUP` does the same without the flag
+- `/-/reload` — [re-reads the enrichment sources](docs/README.md#reloading) on POST or PUT, needs `--web.enable-lifecycle`
 
 ## Metrics
 
@@ -112,40 +112,51 @@ Eleven modules aggregate the flows, and the exporter publishes its own health be
 
 The series a dashboard usually starts from:
 
-| Module          | Metric                                 | Type             | Description                               |
-| :-------------- | :------------------------------------- | :--------------- | :---------------------------------------- |
-| `exporters`     | `xflow_exporter_bytes_total`           | Counter          | Sampling-corrected bytes per device       |
-| `hosts`         | `xflow_host_pair_bytes_total`          | Counter          | Sampling-corrected bytes per address pair |
-| `services`      | `xflow_service_bytes_total`            | Counter          | Sampling-corrected bytes per service      |
-| `applications`  | `xflow_application_bytes_total`        | Counter          | Sampling-corrected bytes per application  |
-| `distributions` | `xflow_flow_bytes`                     | Native histogram | Flow size distribution per device         |
-| health          | `xflow_flows_total`                    | Counter          | Records decoded per device and version    |
-| health          | `xflow_last_flow_timestamp_seconds`    | Gauge            | Unix time of the exporter's last decode   |
-| health          | `xflow_decode_errors_total`            | Counter          | Rejections per device, version and reason |
-| health          | `xflow_receiver_dropped_packets_total` | Counter          | Pre-decode drops per listener and reason  |
-| health          | `xflow_sampling_rate`                  | Gauge            | Declared rate per observation domain      |
-| health          | `xflow_aggregation_entries`            | Gauge            | Entries held per aggregation table        |
+| Module          | Metric                          | Type             | Description            |
+| :-------------- | :------------------------------ | :--------------- | :--------------------- |
+| `exporters`     | `xflow_exporter_bytes_total`    | Counter          | Throughput per device  |
+| `hosts`         | `xflow_host_pair_bytes_total`   | Counter          | Top talkers            |
+| `services`      | `xflow_service_bytes_total`     | Counter          | Top conversations      |
+| `applications`  | `xflow_application_bytes_total` | Counter          | Traffic by application |
+| `distributions` | `xflow_flow_bytes`              | Native histogram | Flow size distribution |
 
-See [docs/README.md](docs/README.md) for the absence, folding, eviction and sampling-correction semantics every module shares.
+See [docs/README.md](docs/README.md) for the absence, folding and sampling rules every module shares.
 
 > [!Important]
 >
 > All collector modules are **disabled by default** to bound cardinality, and `distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration.
 
+### Exporter Health Metrics
+
+These series describe the exporter itself rather than the traffic it aggregates. They have no module and no collector flag, and [docs/health.md](docs/health.md) carries the whole set with its labels and reason values.
+
+| Metric                                 | Type    | Description                      |
+| :------------------------------------- | :------ | :------------------------------- |
+| `xflow_flows_total`                    | Counter | Records decoded per device       |
+| `xflow_decode_errors_total`            | Counter | Rejections per device and reason |
+| `xflow_last_flow_timestamp_seconds`    | Gauge   | Unix time of the last decode     |
+| `xflow_receiver_dropped_packets_total` | Counter | Pre-decode drops per listener    |
+| `xflow_sampling_rate`                  | Gauge   | Declared rate per domain         |
+| `xflow_aggregation_entries`            | Gauge   | Entries held per table           |
+
+> [!Important]
+>
+> Alert on freshness with `time() - xflow_last_flow_timestamp_seconds`. A silent device stops moving its timestamp while every counter freezes, and nothing else can tell that from a healthy quiet network.
+
 ### Remote Write Metrics
 
 These series describe the shipping path rather than the exporter, and appear only while `--remote-write.url` is set. See [Remote write](docs/README.md#remote-write) for what a long-term store accumulates and how to bound it.
 
-| Metric                                              | Type    | Description                                   |
-| :-------------------------------------------------- | :------ | :-------------------------------------------- |
-| `xflow_remote_write_sends_total`                    | Counter | Writes the remote endpoint accepted           |
-| `xflow_remote_write_failures_total`                 | Counter | Writes that failed, a gather failure included |
-| `xflow_remote_write_samples_total`                  | Counter | Samples shipped, one per series per write     |
-| `xflow_remote_write_last_success_timestamp_seconds` | Gauge   | Unix time of the last accepted write          |
+| Metric                                              | Type    | Description                     |
+| :-------------------------------------------------- | :------ | :------------------------------ |
+| `xflow_remote_write_sends_total`                    | Counter | Writes the endpoint accepted    |
+| `xflow_remote_write_failures_total`                 | Counter | Writes that failed              |
+| `xflow_remote_write_samples_total`                  | Counter | One sample per series per write |
+| `xflow_remote_write_last_success_timestamp_seconds` | Gauge   | Unix time of the last success   |
 
 > [!Important]
 >
-> Alert on `xflow_remote_write_failures_total` rather than on the timestamp. Shipping runs on its own interval, so a rejected write leaves `/metrics` and `up` untouched, and the timestamp series is absent until the first write succeeds — a client that has never reached its endpoint publishes no instant to go stale.
+> Alert on `xflow_remote_write_failures_total` rather than on the timestamp. Shipping runs on its own interval, so a rejected write leaves `/metrics` and `up` untouched, and the timestamp is absent until the first write succeeds — a client that has never reached its endpoint publishes no instant to go stale. A registry gather that fails counts on that same counter.
 
 ## Use Cases
 
@@ -190,7 +201,7 @@ Import [examples/grafana_dashboard.json](./examples/grafana_dashboard.json), who
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the `make` targets, the Docker build, the release process and how to open a pull request.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the `make` targets, the Docker build and the release process.
 
 ## Licence
 
