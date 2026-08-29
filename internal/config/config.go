@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v3"
 )
@@ -37,6 +38,18 @@ const (
 	// covers a jumbo frame; a larger datagram is counted and dropped rather
 	// than decoded from a truncated buffer.
 	DefaultReceiverMaxPacketSize = 9216
+	// DefaultReceiverWorkers of zero sizes the decode worker pool to
+	// GOMAXPROCS at startup.
+	DefaultReceiverWorkers = 0
+
+	// DefaultParserMaxFieldsPerTemplate bounds a NetFlow v9 or IPFIX template
+	// against memory exhaustion by a template defining tens of thousands of
+	// tiny fields.
+	DefaultParserMaxFieldsPerTemplate = 128
+	// DefaultParserTemplateTTL is how long an unrefreshed template stays
+	// usable. Devices resend templates every few minutes, so half an hour of
+	// silence means the template is orphaned.
+	DefaultParserTemplateTTL = 30 * time.Minute
 	// HealthPath lives here so Validate can reject a telemetry path that takes it.
 	// The server package already depends on this one, so the reverse would cycle.
 	HealthPath       = "/healthz"
@@ -48,6 +61,7 @@ const (
 type Config struct {
 	Web               Web               `json:"web"`
 	Receiver          Receiver          `json:"receiver"`
+	Parser            Parser            `json:"parser"`
 	Log               Log               `json:"log"`
 	InternalCollector InternalCollector `json:"internal_collector"`
 	DryRun            bool              `json:"dry_run"`
@@ -67,6 +81,13 @@ type Receiver struct {
 	QueueSize     int      `json:"queue_size"`
 	SockBufBytes  int      `json:"sock_buf_bytes"`
 	MaxPacketSize int      `json:"max_packet_size"`
+	Workers       int      `json:"workers"`
+}
+
+// Parser holds the protocol parser limits.
+type Parser struct {
+	MaxFieldsPerTemplate int           `json:"max_fields_per_template"`
+	TemplateTTL          time.Duration `json:"template_ttl"`
 }
 
 // Log holds logging configuration.
@@ -95,6 +116,11 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			QueueSize:     cmd.Int("receiver.queue-size"),
 			SockBufBytes:  cmd.Int("receiver.buffer-bytes"),
 			MaxPacketSize: cmd.Int("receiver.max-packet-size"),
+			Workers:       cmd.Int("receiver.workers"),
+		},
+		Parser: Parser{
+			MaxFieldsPerTemplate: cmd.Int("parser.max-fields-per-template"),
+			TemplateTTL:          cmd.Duration("parser.template-ttl"),
 		},
 		Log: Log{
 			Level:  cmd.String("log.level"),
@@ -171,6 +197,42 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("receiver validation failed: %w", err)
 	}
 
+	if err := c.validateParser(); err != nil {
+		return fmt.Errorf("parser validation failed: %w", err)
+	}
+
+	return nil
+}
+
+// validateParser validates the protocol parser limits.
+func (c *Config) validateParser() error {
+	// maxTemplateFields is the most fields one template may ever declare: a
+	// record must fit a flowset, whose length field caps it at 65535 bytes.
+	const maxTemplateFields = 16383
+
+	p := &c.Parser
+
+	validationRules := []struct {
+		condition bool
+		message   string
+	}{
+		{
+			p.MaxFieldsPerTemplate < 1 || p.MaxFieldsPerTemplate > maxTemplateFields,
+			fmt.Sprintf("invalid parser max fields per template: %d (must be 1-%d)",
+				p.MaxFieldsPerTemplate, maxTemplateFields),
+		},
+		{
+			p.TemplateTTL <= 0,
+			fmt.Sprintf("parser template TTL must be positive, got: %v", p.TemplateTTL),
+		},
+	}
+
+	for _, rule := range validationRules {
+		if rule.condition {
+			return errors.New(rule.message)
+		}
+	}
+
 	return nil
 }
 
@@ -178,6 +240,7 @@ func (c *Config) Validate() error {
 func (c *Config) validateReceiver() error {
 	const (
 		maxBatchSize = 1024
+		maxWorkers   = 256
 		// minPacketSize is the IPv4 minimum reassembly buffer, below which no
 		// conforming exporter can be expected to fit a message.
 		minPacketSize = 576
@@ -211,6 +274,10 @@ func (c *Config) validateReceiver() error {
 			r.MaxPacketSize < minPacketSize || r.MaxPacketSize > maxPacketSize,
 			fmt.Sprintf("invalid receiver max packet size: %d (must be %d-%d)",
 				r.MaxPacketSize, minPacketSize, maxPacketSize),
+		},
+		{
+			r.Workers < 0 || r.Workers > maxWorkers,
+			fmt.Sprintf("invalid receiver workers: %d (must be 0 for auto, or 1-%d)", r.Workers, maxWorkers),
 		},
 	}
 

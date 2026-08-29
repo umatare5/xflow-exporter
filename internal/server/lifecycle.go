@@ -8,7 +8,9 @@ import (
 	"net"
 	"net/http"
 	"os/signal"
+	"runtime"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -16,6 +18,8 @@ import (
 
 	"github.com/umatare5/xflow-exporter/internal/collector"
 	"github.com/umatare5/xflow-exporter/internal/config"
+	"github.com/umatare5/xflow-exporter/internal/decoder"
+	"github.com/umatare5/xflow-exporter/internal/flow"
 	"github.com/umatare5/xflow-exporter/internal/receiver"
 )
 
@@ -52,10 +56,13 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		return err
 	}
 
+	dec := decoder.New(cfg.Parser)
+
 	// Create and setup collector manager
 	collectorMgr := collector.NewCollector(cfg)
 	collectorMgr.Setup(version)
 	collectorMgr.RegisterReceiverCollector(recv)
+	collectorMgr.RegisterDecoderCollector(dec)
 
 	// The receiver stops when this context ends, which Run ties to the
 	// shutdown signals.
@@ -68,13 +75,20 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		recv.Serve(ctx)
 	}()
 
-	// Drain and discard until the decoders land: the receive path and its
-	// metrics stay honest, and no queue backs up behind a missing consumer.
-	go func() {
-		for pkt := range recv.Packets() {
-			recv.Release(pkt)
-		}
-	}()
+	// Decode workers consume the queue. Records are decoded and accounted,
+	// then discarded until the aggregator lands.
+	workers := cfg.Receiver.Workers
+	if workers == 0 {
+		workers = runtime.GOMAXPROCS(0)
+	}
+	var decodeWG sync.WaitGroup
+	for range workers {
+		decodeWG.Add(1)
+		go func() {
+			defer decodeWG.Done()
+			decodeLoop(recv, dec)
+		}()
+	}
 
 	// Create and run server lifecycle manager
 	serverMgr := NewLifecycleManager(collectorMgr.Registry(), cfg)
@@ -82,7 +96,25 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 
 	cancel()
 	<-receiverDone
+	decodeWG.Wait()
 	return err
+}
+
+// decodeLoop drains the receive queue through the decoder until the queue
+// closes. The records slice is reused across datagrams, so a steady worker
+// allocates nothing per packet.
+func decodeLoop(recv *receiver.Receiver, dec *decoder.Decoder) {
+	var records []flow.Record
+
+	for pkt := range recv.Packets() {
+		var err error
+		records, err = dec.Decode(pkt.Src.Addr(), pkt.Data, records[:0])
+		if err != nil {
+			slog.Debug("Rejected a flow datagram",
+				"exporter", pkt.Src.Addr(), "listener", pkt.Listener, "error", err)
+		}
+		recv.Release(pkt)
+	}
 }
 
 // Run starts the HTTP server and handles graceful shutdown.

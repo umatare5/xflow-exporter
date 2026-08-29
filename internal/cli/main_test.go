@@ -11,7 +11,7 @@ func TestRegisterFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerFlags()
-	if got, want := len(flags), 13; got != want {
+	if got, want := len(flags), 16; got != want {
 		t.Errorf("registerFlags() returned %d flags, want %d", got, want)
 	}
 }
@@ -48,7 +48,7 @@ func TestRegisterReceiverFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerReceiverFlags()
-	if got, want := len(flags), 5; got != want {
+	if got, want := len(flags), 6; got != want {
 		t.Fatalf("registerReceiverFlags() returned %d flags, want %d", got, want)
 	}
 
@@ -59,6 +59,22 @@ func TestRegisterReceiverFlags(t *testing.T) {
 		if _, ok := flag.(*cli.IntFlag); !ok {
 			t.Errorf("flag[%d] is %T, want *cli.IntFlag", i+1, flag)
 		}
+	}
+}
+
+// TestRegisterParserFlags verifies the protocol parser limit flags.
+func TestRegisterParserFlags(t *testing.T) {
+	t.Parallel()
+
+	flags := registerParserFlags()
+	if got, want := len(flags), 2; got != want {
+		t.Fatalf("registerParserFlags() returned %d flags, want %d", got, want)
+	}
+	if _, ok := flags[0].(*cli.IntFlag); !ok {
+		t.Errorf("flag[0] is %T, want *cli.IntFlag", flags[0])
+	}
+	if _, ok := flags[1].(*cli.DurationFlag); !ok {
+		t.Errorf("flag[1] is %T, want *cli.DurationFlag", flags[1])
 	}
 }
 

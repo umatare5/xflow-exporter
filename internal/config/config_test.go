@@ -21,6 +21,9 @@ func parseFlags() []cli.Flag {
 		&cli.IntFlag{Name: "receiver.queue-size", Value: DefaultReceiverQueueSize},
 		&cli.IntFlag{Name: "receiver.buffer-bytes", Value: DefaultReceiverSockBufBytes},
 		&cli.IntFlag{Name: "receiver.max-packet-size", Value: DefaultReceiverMaxPacketSize},
+		&cli.IntFlag{Name: "receiver.workers", Value: DefaultReceiverWorkers},
+		&cli.IntFlag{Name: "parser.max-fields-per-template", Value: DefaultParserMaxFieldsPerTemplate},
+		&cli.DurationFlag{Name: "parser.template-ttl", Value: DefaultParserTemplateTTL},
 		&cli.StringFlag{Name: "log.level", Value: DefaultLogLevel},
 		&cli.StringFlag{Name: "log.format", Value: DefaultLogFormat},
 		&cli.BoolFlag{Name: "collector.internal.go-runtime"},
@@ -82,6 +85,16 @@ func TestParse_Defaults(t *testing.T) {
 	}
 	if cfg.Receiver.MaxPacketSize != DefaultReceiverMaxPacketSize {
 		t.Errorf("Receiver.MaxPacketSize = %d, want %d", cfg.Receiver.MaxPacketSize, DefaultReceiverMaxPacketSize)
+	}
+	if cfg.Receiver.Workers != DefaultReceiverWorkers {
+		t.Errorf("Receiver.Workers = %d, want %d", cfg.Receiver.Workers, DefaultReceiverWorkers)
+	}
+	if cfg.Parser.MaxFieldsPerTemplate != DefaultParserMaxFieldsPerTemplate {
+		t.Errorf("Parser.MaxFieldsPerTemplate = %d, want %d",
+			cfg.Parser.MaxFieldsPerTemplate, DefaultParserMaxFieldsPerTemplate)
+	}
+	if cfg.Parser.TemplateTTL != DefaultParserTemplateTTL {
+		t.Errorf("Parser.TemplateTTL = %v, want %v", cfg.Parser.TemplateTTL, DefaultParserTemplateTTL)
 	}
 	if cfg.Log.Level != DefaultLogLevel {
 		t.Errorf("Log.Level = %q, want %q", cfg.Log.Level, DefaultLogLevel)
@@ -179,6 +192,10 @@ func validConfig() *Config {
 			QueueSize:     DefaultReceiverQueueSize,
 			SockBufBytes:  DefaultReceiverSockBufBytes,
 			MaxPacketSize: DefaultReceiverMaxPacketSize,
+		},
+		Parser: Parser{
+			MaxFieldsPerTemplate: DefaultParserMaxFieldsPerTemplate,
+			TemplateTTL:          DefaultParserTemplateTTL,
 		},
 		Log: Log{
 			Level:  DefaultLogLevel,
@@ -339,6 +356,31 @@ func TestConfig_Validate(t *testing.T) {
 			name:    "receiver max packet size above maximum",
 			mutate:  func(c *Config) { c.Receiver.MaxPacketSize = 70000 },
 			wantErr: "invalid receiver max packet size",
+		},
+		{
+			name:    "receiver negative workers",
+			mutate:  func(c *Config) { c.Receiver.Workers = -1 },
+			wantErr: "invalid receiver workers",
+		},
+		{
+			name:    "receiver workers above bound",
+			mutate:  func(c *Config) { c.Receiver.Workers = 257 },
+			wantErr: "invalid receiver workers",
+		},
+		{
+			name:    "parser max fields zero",
+			mutate:  func(c *Config) { c.Parser.MaxFieldsPerTemplate = 0 },
+			wantErr: "invalid parser max fields per template",
+		},
+		{
+			name:    "parser max fields above the flowset bound",
+			mutate:  func(c *Config) { c.Parser.MaxFieldsPerTemplate = 16384 },
+			wantErr: "invalid parser max fields per template",
+		},
+		{
+			name:    "parser template TTL zero",
+			mutate:  func(c *Config) { c.Parser.TemplateTTL = 0 },
+			wantErr: "parser template TTL must be positive",
 		},
 		{
 			name:    "invalid log level",
