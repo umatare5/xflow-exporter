@@ -36,9 +36,9 @@ GLOBAL OPTIONS:
    * Aggregation Options
 
    --aggregation.entry-ttl duration  How long an idle aggregation entry keeps its series (default: 15m0s)
-   --aggregation.max-entries int     Entry bound per aggregation table; new keys past it fold into other (default: 100000)
+   --aggregation.max-entries int     Entry bound per aggregation table, folding new keys into other past it (default: 100000)
    --aggregation.min-bytes int       Bytes below which an entry folds into other at scrape time (0 publishes all) (default: 0)
-   --aggregation.top-k int           Entries each table publishes as their own series; the rest fold into other (default: 1000)
+   --aggregation.top-k int           Entries each table publishes as their own series, folding the rest into other (default: 1000)
 
    * Internal Collector Options
 
@@ -55,7 +55,7 @@ GLOBAL OPTIONS:
    --receiver.address string [ --receiver.address string ]  Address to receive flow datagrams on (repeatable) (default: ":2055")
    --receiver.batch-size int                                Maximum datagrams read per kernel round trip (default: 64)
    --receiver.buffer-bytes int                              UDP socket receive buffer size in bytes (0 keeps the OS default) (default: 4194304)
-   --receiver.max-packet-size int                           Largest datagram in bytes kept whole; larger ones are dropped (default: 9216)
+   --receiver.max-packet-size int                           Largest datagram in bytes kept whole, dropping larger ones (default: 9216)
    --receiver.queue-size int                                Datagrams buffered between the read loops and the decoders (default: 8192)
    --receiver.workers int                                   Decode workers consuming the queue (0 sizes to the CPU count) (default: 0)
 
@@ -63,6 +63,6 @@ GLOBAL OPTIONS:
 
 ## Notes
 
-`--receiver.buffer-bytes` asks the kernel for that SO_RCVBUF; Linux clamps the grant to `net.core.rmem_max`, which this exporter cannot raise. Size it, and `--receiver.queue-size`, to absorb the export storms Flexible NetFlow emits after a cache flush.
+`--receiver.buffer-bytes` asks the kernel for that SO_RCVBUF, and Linux clamps the grant to `net.core.rmem_max`, which this exporter cannot raise. Size it, and `--receiver.queue-size`, to absorb the export storms Flexible NetFlow emits after a cache flush.
 
 A listener accepts every supported protocol, identified per datagram, so `--receiver.address` entries separate networks or ports rather than protocols.

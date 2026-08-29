@@ -35,6 +35,9 @@ const (
 	// ReasonReservedSet marks a flowset in the reserved 2-255 range, a
 	// dialect this exporter does not speak.
 	ReasonReservedSet = "reserved_set"
+	// ReasonDomainLimit marks a datagram whose observation domain the
+	// exporter refused, the device being at its domain budget.
+	ReasonDomainLimit = "domain_limit"
 )
 
 // decodeError carries the reason a datagram was rejected, for the error
@@ -102,6 +105,17 @@ func (d *Decoder) resolveApplication(exporter netip.Addr, r *flow.Record) {
 		return
 	}
 	r.AppName, r.AppCategory = d.apps.resolve(exporter, r.AppID)
+}
+
+// SweepDomains drops the observation domains idle past the template TTL,
+// returning their slots to each exporter's budget.
+func (d *Decoder) SweepDomains() int {
+	return d.templates.sweep()
+}
+
+// DomainsRefused reports how many domains the per-exporter budget turned away.
+func (d *Decoder) DomainsRefused() uint64 {
+	return d.templates.refused()
 }
 
 // Domains returns the per-observation-domain state for the metrics collector.

@@ -63,7 +63,11 @@ xflow_host_pair_flows_total{dst="other",exporter="other",src="other"} 0
 	}
 }
 
-func TestFlowCollector_TopKFoldsTheTail(t *testing.T) {
+// TestFlowCollector_TopKWithholdsTheLiveTail pins that entries below the cut
+// are withheld rather than summed into other. Their totals are still moving,
+// so adding them per scrape would make the other counter fall whenever one is
+// evicted or grows into the cut.
+func TestFlowCollector_TopKWithholdsTheLiveTail(t *testing.T) {
 	t.Parallel()
 
 	cfg := aggConfig()
@@ -84,7 +88,7 @@ func TestFlowCollector_TopKFoldsTheTail(t *testing.T) {
 # TYPE xflow_host_pair_bytes_total counter
 xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.1"} 5000
 xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.2"} 3000
-xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 150
+xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_host_pair_bytes_total"); err != nil {
@@ -92,7 +96,10 @@ xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 150
 	}
 }
 
-func TestFlowCollector_MinBytesFoldsMice(t *testing.T) {
+// TestFlowCollector_MinBytesWithholdsMice pins the same contract for the byte
+// threshold: a mouse flow is withheld while it lives and reaches other only
+// once it is evicted.
+func TestFlowCollector_MinBytesWithholdsMice(t *testing.T) {
 	t.Parallel()
 
 	cfg := aggConfig()
@@ -110,7 +117,7 @@ func TestFlowCollector_MinBytesFoldsMice(t *testing.T) {
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other folds the rest
 # TYPE xflow_host_pair_bytes_total counter
 xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.1"} 5000
-xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 999
+xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_host_pair_bytes_total"); err != nil {

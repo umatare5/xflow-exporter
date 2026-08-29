@@ -61,6 +61,10 @@ func (d *Decoder) decodeSFlowV5(
 	}
 
 	domain := d.templates.domain(domainKey{exporter: exporter, odid: subAgentID})
+	if domain == nil {
+		issue(ReasonDomainLimit)
+		return dst, nil
+	}
 	domain.trackSequence(sequence)
 
 	for range numSamples {

@@ -46,8 +46,8 @@ func TestDecoderCollector_Describe(t *testing.T) {
 	for range ch {
 		count++
 	}
-	if count != 6 {
-		t.Errorf("Describe() emitted %d descriptors, want 6", count)
+	if count != 7 {
+		t.Errorf("Describe() emitted %d descriptors, want 7", count)
 	}
 }
 
@@ -56,8 +56,14 @@ func TestDecoderCollector_EmptyUntilTraffic(t *testing.T) {
 
 	c := NewDecoderCollector(newTestDecoder())
 
-	if got := testutil.CollectAndCount(c); got != 0 {
-		t.Errorf("CollectAndCount() = %d series before any datagram, want 0", got)
+	// Only the refusal counter, which is seeded so a first refusal reads as
+	// a rise rather than as a new series. Nothing is published per exporter
+	// until a datagram names one.
+	if got := testutil.CollectAndCount(c); got != 1 {
+		t.Errorf("CollectAndCount() = %d series before any datagram, want only the seeded counter", got)
+	}
+	if got := testutil.CollectAndCount(c, "xflow_domains_refused_total"); got != 1 {
+		t.Errorf("refusal counter series = %d, want 1 seeded", got)
 	}
 }
 

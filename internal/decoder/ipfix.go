@@ -41,6 +41,10 @@ func (d *Decoder) decodeIPFIX(
 	sequence := binary.BigEndian.Uint32(payload[8:12])
 	key := domainKey{exporter: exporter, odid: binary.BigEndian.Uint32(payload[12:16])}
 	domain := d.templates.domain(key)
+	if domain == nil {
+		issue(ReasonDomainLimit)
+		return dst, nil
+	}
 
 	dataRecords, complete := 0, true
 

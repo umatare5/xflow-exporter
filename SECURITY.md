@@ -14,9 +14,17 @@ One maintainer works on this in their own time, so no response time is promised.
 
 This exporter receives traffic flow records (NetFlow, IPFIX, sFlow) from network devices over UDP, and exposes aggregates of them as Prometheus metrics. Flow records reveal who talked to whom, so both the receiver and the metrics endpoint deserve a controlled network path.
 
-- **Flow records** — IP addresses, ports and traffic volumes of monitored networks; keep the receiver reachable from the exporting devices alone.
-- **Parser input** — every received datagram is untrusted input, and the parsers enforce hard limits on field counts and record sizes; report a way around those limits as a vulnerability.
+- **Flow records** — IP addresses, ports and traffic volumes of monitored networks, so keep the receiver reachable from the exporting devices alone.
+- **Parser input** — every received datagram is untrusted input, and the parsers enforce hard limits on field counts, record sizes, observation domains per device and interned vendor strings. Report a way around those limits as a vulnerability.
+- **Permitted senders** — restrict the receiver port to your own devices at the packet filter. State keyed by the source address grows with the number of distinct senders, and a push protocol cannot choose them. A proxy is not a substitute: it replaces the source address, which collapses every device into one and breaks the template scoping RFC 7011 requires.
 - **Metrics** — unauthenticated plain HTTP whose label sets can carry monitored IP addresses, so keep it on a controlled path.
+
+Restricting the port looks like this with nftables.
+
+```bash
+nft add rule inet filter input udp dport 2055 ip saddr { 10.0.0.0/24, 192.0.2.10 } accept
+nft add rule inet filter input udp dport 2055 drop
+```
 
 ## Out of scope
 

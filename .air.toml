@@ -5,7 +5,13 @@ tmp_dir = "tmp"
 
 [build]
   cmd = "go build -o ./tmp/xflow-exporter ./cmd/main.go"
-  full_bin = 'tmp/xflow-exporter'
+  full_bin = 'tmp/xflow-exporter \
+                  --collector.exporters \
+                  --collector.hosts \
+                  --collector.services \
+                  --collector.asns \
+                  --collector.applications \
+                  --collector.distributions'
 
   exclude_dir = ["assets", "tmp", "vendor", "test_data", ".git", ".github", ".vscode", "node_modules", "dist", "build"]
   exclude_regex = ["_test\\.go"]

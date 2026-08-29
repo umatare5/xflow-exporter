@@ -96,8 +96,6 @@ type Record struct {
 	// table options, or carried inline where the vendor exports strings.
 	AppName     string
 	AppCategory string
-	// User is the vendor-exported user identity (PAN-OS User-ID).
-	User string
 }
 
 // Duration returns the flow duration, and false when the record did not carry

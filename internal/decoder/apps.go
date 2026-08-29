@@ -82,6 +82,13 @@ func (a *appTables) resolve(exporter netip.Addr, appID uint32) (name, category s
 	return t.names[appID], t.categories[appID]
 }
 
+// maxInternedStrings bounds the interner against a device exporting an
+// unbounded set of vendor strings, whose values are wire data rather than a
+// property of the fleet. Past the bound a value is copied per occurrence
+// instead of being interned: the cost is an allocation on a path that is no
+// longer the steady state, never a wrong or missing reading.
+const maxInternedStrings = 65536
+
 // interner deduplicates the strings vendors embed in every record, so one
 // application name allocates once rather than per flow.
 type interner struct {
@@ -114,6 +121,9 @@ func (i *interner) intern(value []byte) string {
 	defer i.mu.Unlock()
 	if s, ok := i.m[string(trimmed)]; ok {
 		return s
+	}
+	if len(i.m) >= maxInternedStrings {
+		return string(trimmed)
 	}
 	s = string(trimmed)
 	i.m[s] = s

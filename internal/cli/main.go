@@ -113,7 +113,7 @@ func registerReceiverFlags() []cli.Flag {
 		},
 		&cli.IntFlag{
 			Name:     "receiver.max-packet-size",
-			Usage:    "Largest datagram in bytes kept whole; larger ones are dropped",
+			Usage:    "Largest datagram in bytes kept whole, dropping larger ones",
 			Value:    config.DefaultReceiverMaxPacketSize,
 			Category: "* Receiver Options",
 		},
@@ -155,13 +155,13 @@ func registerAggregationFlags() []cli.Flag {
 		},
 		&cli.IntFlag{
 			Name:     "aggregation.max-entries",
-			Usage:    "Entry bound per aggregation table; new keys past it fold into other",
+			Usage:    "Entry bound per aggregation table, folding new keys into other past it",
 			Value:    config.DefaultAggregationMaxEntries,
 			Category: "* Aggregation Options",
 		},
 		&cli.IntFlag{
 			Name:     "aggregation.top-k",
-			Usage:    "Entries each table publishes as their own series; the rest fold into other",
+			Usage:    "Entries each table publishes as their own series, folding the rest into other",
 			Value:    config.DefaultAggregationTopK,
 			Category: "* Aggregation Options",
 		},

@@ -83,6 +83,10 @@ func (d *Decoder) decodeNetFlowV9(
 	key := domainKey{exporter: exporter, odid: binary.BigEndian.Uint32(payload[16:20])}
 
 	domain := d.templates.domain(key)
+	if domain == nil {
+		issue(ReasonDomainLimit)
+		return dst, nil
+	}
 	domain.trackSequence(sequence)
 
 	bootTime := time.Unix(int64(exportSecs), 0).Add(-time.Duration(sysUptimeMs) * time.Millisecond)

@@ -19,7 +19,7 @@ Each table family carries three metrics sharing one label set: `_bytes_total` an
 - `exporter` — the device's UDP source address, IPv4-mapped addresses unmapped.
 - `port` — the destination port: the service side of the conversation as exported.
 - `proto` — the conventional protocol name for the common IANA numbers, the number itself otherwise.
-- `src_asn`/`dst_asn` — as exported; `0` is a device that did not know the AS. A record with neither AS feeds no entry.
+- `src_asn`/`dst_asn` — as exported, where `0` is a device that did not know the AS. A record with neither AS feeds no entry.
 - `application` — the device-announced AVC name, the inline vendor string, or the `engine:selector` split of `applicationId` when only the number is known.
 - The `exporters` family publishes unfolded: its cardinality is the fleet's, which no Top-K needs to guard.
 
@@ -52,11 +52,27 @@ These series describe the exporter itself. They have no module flag.
 | `xflow_aggregation_entries`                | Gauge   | Entries held per `aggregation` table                 |
 | `xflow_aggregation_evictions_total`        | Counter | Idle entries evicted per `aggregation`               |
 | `xflow_aggregation_overflow_records_total` | Counter | Records folded into `other` by the entry bound       |
+| `xflow_domains_refused_total`              | Counter | Observation domains refused at the per-device budget |
 
 ### Reason values
 
-**Decode error reasons** — `unsupported_version` for a datagram no decoder claims; `malformed` for a structure that does not fit its bytes; `unsupported_aggregation` for a NetFlow v8 method outside the fourteen known; `missing_template` while a v9/IPFIX template has not arrived; `invalid_template` for an announcement the limits refuse; `reserved_set` for a flowset in the reserved 2-255 range.
+`xflow_decode_errors_total` carries one of a closed set of reasons:
 
-**Drop reasons** — `queue_full` for a burst the queue could not absorb; `truncated` for a datagram larger than `--receiver.max-packet-size`.
+| Reason                    | Meaning                                              |
+| :------------------------ | :--------------------------------------------------- |
+| `unsupported_version`     | A datagram no decoder claims                         |
+| `malformed`               | A structure that does not fit its bytes              |
+| `unsupported_aggregation` | A NetFlow v8 method outside the fourteen known       |
+| `missing_template`        | A v9/IPFIX template that has not arrived yet         |
+| `invalid_template`        | A template announcement the parser limits refuse     |
+| `reserved_set`            | A flowset in the reserved 2-255 range                |
+| `domain_limit`            | An observation domain past the device's budget       |
+
+`xflow_receiver_dropped_packets_total` carries one of two:
+
+| Reason       | Meaning                                              |
+| :----------- | :--------------------------------------------------- |
+| `queue_full` | A burst the queue could not absorb                   |
+| `truncated`  | A datagram larger than `--receiver.max-packet-size`  |
 
 **Freshness** — alert on `time() - xflow_last_flow_timestamp_seconds`: a silent device stops moving its timestamp while every counter freezes, and nothing else can tell that from a healthy quiet network.

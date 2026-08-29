@@ -8,8 +8,8 @@ rule_files:
 evaluation_interval: 1m
 
 tests:
-  # The timestamp freezes at t=0; the threshold is crossed at 15m. keep the
-  # silent edge at 14m and assert firing at 16m.
+  # The timestamp freezes at t=0 and the threshold is crossed at 15m. Keep
+  # the silent edge at 14m and assert firing at 16m.
   - interval: 1m
     input_series:
       - series: 'xflow_last_flow_timestamp_seconds{job="xflow",instance="localhost:10052",exporter="192.0.2.1"}'
@@ -25,8 +25,8 @@ tests:
           - labels: 'ALERTS{alertname="XflowExporterSilent", alertstate="firing", exporter="192.0.2.1", instance="localhost:10052", job="xflow", severity="warning"}'
             value: 1
 
-  # for: 5m puts the firing edge past 5m of a sustained increase; a flat
-  # counter must stay silent.
+  # for: 5m puts the firing edge past 5m of a sustained increase, while a
+  # flat counter must stay silent.
   - interval: 1m
     input_series:
       - series: 'xflow_receiver_dropped_packets_total{job="xflow",instance="localhost:10052",listener=":2055",reason="queue_full"}'

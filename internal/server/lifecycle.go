@@ -104,6 +104,14 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		}
 	}()
 
+	// Idle observation domains are swept on the same schedule, so a device
+	// that renumbers its domains does not hold its budget forever.
+	domainSweepDone := make(chan struct{})
+	go func() {
+		defer close(domainSweepDone)
+		sweepDomains(ctx, dec, cfg.Parser.TemplateTTL)
+	}()
+
 	// Decode workers consume the queue. Records are decoded and accounted,
 	// then discarded until the aggregator lands.
 	workers := cfg.Receiver.Workers
@@ -127,7 +135,34 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	<-receiverDone
 	decodeWG.Wait()
 	<-aggDone
+	<-domainSweepDone
 	return err
+}
+
+// sweepDomains drops idle observation domains until ctx ends. The interval is
+// a quarter of the template TTL, so an idle domain outlives its slot by at
+// most that much.
+func sweepDomains(ctx context.Context, dec *decoder.Decoder, ttl time.Duration) {
+	const sweepDivisor = 4
+
+	interval := ttl / sweepDivisor
+	if interval < time.Second {
+		interval = time.Second
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if evicted := dec.SweepDomains(); evicted > 0 {
+				slog.Debug("Swept idle observation domains", "evicted", evicted)
+			}
+		}
+	}
 }
 
 // decodeLoop drains the receive queue through the decoder into the enabled

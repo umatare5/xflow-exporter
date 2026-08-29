@@ -31,10 +31,11 @@ const (
 	// options reader captures.
 	fieldApplicationID = 95
 
-	// PAN-OS exports these string fields inside NetFlow v9 records using
-	// private type numbers, there being no enterprise bit in v9.
-	fieldPanAppID  = 56701
-	fieldPanUserID = 56702
+	// PAN-OS exports its application name inside NetFlow v9 records using a
+	// private type number, there being no enterprise bit in v9. The User-ID
+	// beside it is not read: a user identity is high-cardinality and
+	// personally identifying, so no series would be allowed to carry it.
+	fieldPanAppID = 56701
 )
 
 // ciscoPEN is the Cisco private enterprise number, under which the AVC
@@ -262,8 +263,6 @@ func applyRareField(r *flow.Record, state *fieldState, fieldType uint16, value [
 		r.AppName = state.intern.intern(value)
 	case fieldPanAppID:
 		r.AppName = state.intern.intern(value)
-	case fieldPanUserID:
-		r.User = state.intern.intern(value)
 	}
 }
 

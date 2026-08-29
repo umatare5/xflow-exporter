@@ -182,7 +182,14 @@ func (c *FlowCollector) collectExporters(ch chan<- prometheus.Metric) {
 }
 
 // collectFamily publishes one folded table: the Top-K entries at or above the
-// byte threshold keep their labels, and everything else joins the fold.
+// byte threshold keep their labels, and the other series carries what the
+// table folded at ingest or at eviction.
+//
+// The live tail below the cut is not added to that series. Its entries are
+// still accumulating, so summing them per scrape would make a counter that
+// falls whenever one of them is evicted or grows into the cut, which rate()
+// reports as a reset. A tail entry reaches the other series when it is
+// evicted, and until then it is simply not published.
 func collectFamily[K comparable](
 	c *FlowCollector, ch chan<- prometheus.Metric, descs *familyDescs,
 	read func() ([]aggregator.EntrySnapshot[K], aggregator.Totals),
@@ -205,11 +212,7 @@ func collectFamily[K comparable](
 	for i, e := range entries {
 		if i < c.topK && e.Bytes >= c.minBytes {
 			descs.emit(ch, e.Totals, labels(e.Key)...)
-			continue
 		}
-		fold.Bytes += e.Bytes
-		fold.Packets += e.Packets
-		fold.Flows += e.Flows
 	}
 
 	descs.emit(ch, fold, otherLabels(labels)...)
