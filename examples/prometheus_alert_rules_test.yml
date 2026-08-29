@@ -12,7 +12,7 @@ tests:
   # silent edge at 14m and assert firing at 16m.
   - interval: 1m
     input_series:
-      - series: 'xflow_last_flow_timestamp_seconds{job="xflow",instance="localhost:10040",exporter="192.0.2.1"}'
+      - series: 'xflow_last_flow_timestamp_seconds{job="xflow",instance="localhost:10052",exporter="192.0.2.1"}'
         values: "0+0x20"
     alert_rule_test:
       - eval_time: 14m
@@ -22,14 +22,14 @@ tests:
       - expr: ALERTS{alertname="XflowExporterSilent"}
         eval_time: 16m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowExporterSilent", alertstate="firing", exporter="192.0.2.1", instance="localhost:10040", job="xflow", severity="warning"}'
+          - labels: 'ALERTS{alertname="XflowExporterSilent", alertstate="firing", exporter="192.0.2.1", instance="localhost:10052", job="xflow", severity="warning"}'
             value: 1
 
   # for: 5m puts the firing edge past 5m of a sustained increase; a flat
   # counter must stay silent.
   - interval: 1m
     input_series:
-      - series: 'xflow_receiver_dropped_packets_total{job="xflow",instance="localhost:10040",listener=":2055",reason="queue_full"}'
+      - series: 'xflow_receiver_dropped_packets_total{job="xflow",instance="localhost:10052",listener=":2055",reason="queue_full"}'
         values: "0+0x5 0+10x15"
     alert_rule_test:
       - eval_time: 4m
@@ -39,13 +39,13 @@ tests:
       - expr: ALERTS{alertname="XflowReceiverDropping", alertstate="firing"}
         eval_time: 15m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowReceiverDropping", alertstate="firing", instance="localhost:10040", job="xflow", listener=":2055", reason="queue_full", severity="warning"}'
+          - labels: 'ALERTS{alertname="XflowReceiverDropping", alertstate="firing", instance="localhost:10052", job="xflow", listener=":2055", reason="queue_full", severity="warning"}'
             value: 1
 
   # missing_template is excluded from the general decode alert.
   - interval: 1m
     input_series:
-      - series: 'xflow_decode_errors_total{job="xflow",instance="localhost:10040",exporter="192.0.2.1",version="netflow_v9",reason="missing_template"}'
+      - series: 'xflow_decode_errors_total{job="xflow",instance="localhost:10052",exporter="192.0.2.1",version="netflow_v9",reason="missing_template"}'
         values: "0+5x20"
     alert_rule_test:
       - eval_time: 15m
@@ -55,38 +55,38 @@ tests:
       - expr: ALERTS{alertname="XflowTemplatesMissing", alertstate="firing"}
         eval_time: 35m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowTemplatesMissing", alertstate="firing", exporter="192.0.2.1", instance="localhost:10040", job="xflow", reason="missing_template", severity="warning", version="netflow_v9"}'
+          - labels: 'ALERTS{alertname="XflowTemplatesMissing", alertstate="firing", exporter="192.0.2.1", instance="localhost:10052", job="xflow", reason="missing_template", severity="warning", version="netflow_v9"}'
             value: 1
 
   - interval: 1m
     input_series:
-      - series: 'xflow_decode_errors_total{job="xflow",instance="localhost:10040",exporter="192.0.2.1",version="netflow_v9",reason="malformed"}'
+      - series: 'xflow_decode_errors_total{job="xflow",instance="localhost:10052",exporter="192.0.2.1",version="netflow_v9",reason="malformed"}'
         values: "0+0x2 0+3x15"
     promql_expr_test:
       - expr: ALERTS{alertname="XflowDecodeErrors", alertstate="firing"}
         eval_time: 12m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowDecodeErrors", alertstate="firing", exporter="192.0.2.1", instance="localhost:10040", job="xflow", reason="malformed", severity="warning", version="netflow_v9"}'
+          - labels: 'ALERTS{alertname="XflowDecodeErrors", alertstate="firing", exporter="192.0.2.1", instance="localhost:10052", job="xflow", reason="malformed", severity="warning", version="netflow_v9"}'
             value: 1
 
   - interval: 1m
     input_series:
-      - series: 'xflow_sequence_missed_total{job="xflow",instance="localhost:10040",exporter="192.0.2.1",odid="256"}'
+      - series: 'xflow_sequence_missed_total{job="xflow",instance="localhost:10052",exporter="192.0.2.1",odid="256"}'
         values: "0+0x2 0+2x15"
     promql_expr_test:
       - expr: ALERTS{alertname="XflowSequenceLoss", alertstate="firing"}
         eval_time: 12m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowSequenceLoss", alertstate="firing", exporter="192.0.2.1", instance="localhost:10040", job="xflow", odid="256", severity="warning"}'
+          - labels: 'ALERTS{alertname="XflowSequenceLoss", alertstate="firing", exporter="192.0.2.1", instance="localhost:10052", job="xflow", odid="256", severity="warning"}'
             value: 1
 
   - interval: 1m
     input_series:
-      - series: 'xflow_aggregation_overflow_records_total{job="xflow",instance="localhost:10040",aggregation="hosts"}'
+      - series: 'xflow_aggregation_overflow_records_total{job="xflow",instance="localhost:10052",aggregation="hosts"}'
         values: "0+0x2 0+50x15"
     promql_expr_test:
       - expr: ALERTS{alertname="XflowAggregationOverflow", alertstate="firing"}
         eval_time: 12m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowAggregationOverflow", alertstate="firing", aggregation="hosts", instance="localhost:10040", job="xflow", severity="warning"}'
+          - labels: 'ALERTS{alertname="XflowAggregationOverflow", alertstate="firing", aggregation="hosts", instance="localhost:10052", job="xflow", severity="warning"}'
             value: 1

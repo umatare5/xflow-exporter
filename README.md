@@ -27,7 +27,7 @@ Configure each device to export flows to the exporter's address, UDP port 2055 b
 ### 2. Run the exporter with Docker
 
 ```bash
-docker run -p 10040:10040 -p 2055:2055/udp   ghcr.io/umatare5/xflow-exporter:latest   --collector.exporters --collector.hosts
+docker run -p 10052:10052 -p 2055:2055/udp   ghcr.io/umatare5/xflow-exporter:latest   --collector.exporters --collector.hosts
 ```
 
 > [!Tip]
@@ -37,7 +37,7 @@ docker run -p 10040:10040 -p 2055:2055/udp   ghcr.io/umatare5/xflow-exporter:lat
 
 ### 3. Scrape it
 
-Add a job for `localhost:10040` using [examples/prometheus.yml](examples/prometheus.yml) as a reference, and the alerting rules from [examples/prometheus_alert_rules.yml](examples/prometheus_alert_rules.yml).
+Add a job for `localhost:10052` using [examples/prometheus.yml](examples/prometheus.yml) as a reference, and the alerting rules from [examples/prometheus_alert_rules.yml](examples/prometheus_alert_rules.yml).
 
 ## Protocol Support
 
@@ -85,7 +85,7 @@ On Linux the read loops use `recvmmsg` batching; other platforms read one datagr
 
 The exporter serves three endpoints:
 
-- `/` — landing page, which confirms the exporter is running when reached at <http://localhost:10040/>
+- `/` — landing page, which confirms the exporter is running when reached at <http://localhost:10052/>
 - `/metrics` — metrics endpoint, configurable via `--web.telemetry-path`
 - `/healthz` — liveness probe, which returns a static 200 and deliberately ignores flow reception
 

@@ -15,8 +15,8 @@ COPY LICENSE NOTICE /
 USER 65534:65534
 
 # Declare the ports; publishing them still requires docker run -p.
-# 10040 serves /metrics and 2055/udp is the default flow receiver port.
-EXPOSE 10040
+# 10052 serves /metrics and 2055/udp is the default flow receiver port.
+EXPOSE 10052
 EXPOSE 2055/udp
 
 # Set the entrypoint

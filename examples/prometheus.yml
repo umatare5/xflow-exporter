@@ -9,4 +9,4 @@ rule_files:
 scrape_configs:
   - job_name: "xflow"
     static_configs:
-      - targets: [localhost:10040]
+      - targets: [localhost:10052]

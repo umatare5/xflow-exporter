@@ -14,7 +14,7 @@
 
 - `cmd/` — Entry point (`main.go`); calls `internal/cli` for app setup
 - `internal/cli/` — CLI flag definitions and app wiring (urfave/cli/v3)
-- `internal/config/` — flag/env parsing, defaults (`0.0.0.0:10040`), and validation
+- `internal/config/` — flag/env parsing, defaults (`0.0.0.0:10052`), and validation
 - `internal/server/` — HTTP server (`/metrics`, `/healthz`, `/`), graceful shutdown
 - `internal/collector/` — `prometheus.Collector` implementations and registry management
 - `internal/log/` — `log/slog` setup; structured logging helpers

@@ -21,7 +21,7 @@ GLOBAL OPTIONS:
    --log.level string           Log level (debug, info, warn, error) (default: "info")
    --version, -v                print the version
    --web.listen-address string  Address to bind the HTTP server to (default: "0.0.0.0")
-   --web.listen-port int        Port number to bind the HTTP server to (default: 10040)
+   --web.listen-port int        Port number to bind the HTTP server to (default: 10052)
    --web.telemetry-path string  Path for the metrics endpoint (default: "/metrics")
 
    # Collector Options
