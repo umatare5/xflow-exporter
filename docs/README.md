@@ -171,7 +171,7 @@ A NetFlow-Lite record carries one sampled packet section instead of parsed flow 
 
 ### Dashboards
 
-[`examples/grafana_dashboard.json`](../examples/grafana_dashboard.json) covers reception and decoding, throughput per device, the Top-K composition views, the aggregation tables and the enrichment sources, with the data source and the devices as variables.
+[`examples/grafana_xflow-exporter-dashboard.json`](../examples/grafana_xflow-exporter-dashboard.json) covers reception and decoding, throughput per device, the Top-K composition views, the aggregation tables and the enrichment sources, with the data source and the devices as variables.
 
 - **Panels rank by packets, not bytes** — a byte figure adds packet-size variance on top.
 - **A ranking, not a total** — entries below the Top-K cut publish nothing at all.

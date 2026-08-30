@@ -192,7 +192,16 @@ Add the rules from [`examples/prometheus_alert_rules.yml`](./examples/prometheus
 
 ### Grafana Dashboard
 
-Import [`examples/grafana_dashboard.json`](./examples/grafana_dashboard.json), whose data source and devices are variables.
+Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json), whose data source and devices are variables.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard.png">
+  <img src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard.png">
+</picture>
+
+> [!Tip]
+> See [`xflow-exporter-dashboard_full.png`](https://github.com/umatare5/xflow-exporter/blob/main/docs/assets/xflow-exporter-dashboard_full.png) for the full capture image of the example.
 
 > [!Note]
 > Panels rank by packets rather than bytes, and the composition panels rank rather than total — [Dashboards](docs/README.md#dashboards) carries what each panel covers and why.
