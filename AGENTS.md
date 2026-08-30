@@ -36,7 +36,9 @@ Install required tools (one-time):
 - `pre-commit` - See <https://pre-commit.com/#install>
 - `goreleaser` release builds (see [`.goreleaser.yml`](.goreleaser.yml))
 
-`make pre-commit-install` wires `golangci-lint`, `gitleaks` and `markdownlint-cli2` (see [`.pre-commit-config.yaml`](.pre-commit-config.yaml)). Only `gitleaks` is taken from `PATH`, because pre-commit builds the other two at the versions the config pins. Reach markdown style through `make pre-commit-test`, not through whichever `markdownlint-cli2` sits on `PATH`.
+`make pre-commit-install` wires [`scripts/no-commit-to-main.sh`](scripts/no-commit-to-main.sh), `golangci-lint`, `actionlint`, `gitleaks` and `markdownlint-cli2` (see [`.pre-commit-config.yaml`](.pre-commit-config.yaml)). Only `gitleaks` is taken from `PATH`, because pre-commit builds the rest at the versions the config pins. Reach markdown style through `make pre-commit-test`, not through whichever `markdownlint-cli2` sits on `PATH`.
+
+The branch guard runs first and carries `fail_fast`, so a commit on `main` stops there rather than paying for the linters. Work on a branch.
 
 Make targets ([`Makefile`](Makefile)):
 
