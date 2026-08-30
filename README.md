@@ -3,7 +3,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/logo_dark.png" width="115px" />
     <source media="(prefers-color-scheme: light)" srcset="./docs/assets/logo.png" width="115px" />
-    <img alt="xflow-exporter" src="./docs/assets/logo.png" width="180px" />
+    <img alt="xflow-exporter" src="./docs/assets/logo.png" width="115px" />
   </picture>
 
   <h1>xflow-exporter</h1>
