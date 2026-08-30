@@ -15,10 +15,8 @@ repos:
         # positional argument as the repository path
         pass_filenames: false
 
-  - repo: local
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.23.2
     hooks:
       - id: markdownlint-cli2
-        name: markdownlint-cli2
-        entry: markdownlint-cli2 --fix
-        language: system
-        types: [markdown]
+        args: ["--fix"]
