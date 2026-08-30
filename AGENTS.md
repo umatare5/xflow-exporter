@@ -5,10 +5,10 @@
 
 ## Tech Stack
 
-- Go 1.27+ (see [go.mod](go.mod))
+- Go 1.27+ (see [`go.mod`](go.mod))
 - [`prometheus/client_golang`](https://github.com/prometheus/client_golang) v1.24+ — metric registration and HTTP handler
 - [`urfave/cli/v3`](https://github.com/urfave/cli) v3.11+ — CLI flags and application lifecycle
-- [`goreleaser`](https://goreleaser.com/) v2 — cross-platform release builds (see [.goreleaser.yml](.goreleaser.yml))
+- [`goreleaser`](https://goreleaser.com/) v2 — cross-platform release builds (see [`.goreleaser.yml`](.goreleaser.yml))
 
 ## Repository Structure
 
@@ -48,8 +48,9 @@ Make targets ([Makefile](Makefile)):
 
 - Linting and formatting are enforced by `golangci-lint` in the pre-commit hook (see [.golangci.yml](.golangci.yml)).
 - Comments record only what the code cannot say, and never address the reader.
+- Keep minimal for all changes, coding, testing, commenting, and documentation.
 
-## Testing Instructions
+## Testing
 
 - Run `make test-unit` before committing.
 - Place tests next to code under test (`*_test.go`).
