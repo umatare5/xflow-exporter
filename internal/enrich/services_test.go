@@ -196,6 +196,73 @@ func TestChain_EmptyIsANoOp(t *testing.T) {
 	}
 }
 
+// TestServices_NamesTheCurrentTable covers what the table gained or
+// re-pointed: 443 and 853 carry a different protocol on each transport, and
+// the tunnels exist on UDP alone.
+func TestServices_NamesTheCurrentTable(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		protocol uint8
+		port     uint16
+		want     string
+	}{
+		{name: "tls over tcp 443", protocol: protocolTCP, port: 443, want: "https"},
+		{name: "quic over udp 443", protocol: protocolUDP, port: 443, want: "http3"},
+		{name: "dot over tcp 853", protocol: protocolTCP, port: 853, want: "dns-over-tls"},
+		{name: "doq over udp 853", protocol: protocolUDP, port: 853, want: "dns-over-quic"},
+		{name: "radsec over tcp", protocol: protocolTCP, port: 2083, want: "radsec"},
+		{name: "vxlan over udp", protocol: protocolUDP, port: 4789, want: "vxlan"},
+		{name: "vxlan not over tcp", protocol: protocolTCP, port: 4789, want: ""},
+		{name: "wireguard over udp", protocol: protocolUDP, port: 51820, want: "wireguard"},
+		{name: "kerberos over either", protocol: protocolUDP, port: 88, want: "kerberos"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := NewServices()
+			r := serviceRecord(tt.protocol, 51234, tt.port)
+			s.Enrich(&r)
+
+			if r.AppName != tt.want {
+				t.Errorf("AppName = %q, want %q", r.AppName, tt.want)
+			}
+		})
+	}
+}
+
+// TestServices_RetiredNumbersNameNothing keeps the numbers the table dropped
+// from growing back. A name that outlives the service it points at reads as
+// a measurement rather than as the stale guess it is.
+func TestServices_RetiredNumbersNameNothing(t *testing.T) {
+	t.Parallel()
+
+	for _, port := range []uint16{20, 110, 119, 515, 520, 1194, 1723, 5900, 11211} {
+		s := NewServices()
+		r := serviceRecord(protocolTCP, 51234, port)
+		s.Enrich(&r)
+
+		if r.AppName != "" {
+			t.Errorf("port %d named %q, want nothing", port, r.AppName)
+		}
+	}
+}
+
+// TestServiceNames_StaysWithinItsCeiling holds the table to its bound. The 60
+// registrations expand to this many entries, a shared number holding two.
+func TestServiceNames_StaysWithinItsCeiling(t *testing.T) {
+	t.Parallel()
+
+	const ceiling = 99
+
+	if got := len(serviceNames); got > ceiling {
+		t.Errorf("serviceNames holds %d entries, want at most %d", got, ceiling)
+	}
+}
+
 func BenchmarkServices_Enrich(b *testing.B) {
 	s := NewServices()
 	r := serviceRecord(protocolTCP, 51234, 443)
