@@ -24,14 +24,26 @@ const (
 // name in the table below written once rather than per port.
 const serviceNetBIOS = "netbios"
 
-// serviceTableSize is the table's capacity hint, two entries per number for
-// the transports each is registered under.
-const serviceTableSize = 128
+// serviceTableSize is the table's capacity hint: a number registered under
+// both transports holds two entries, a single-transport one holds one.
+const serviceTableSize = 100
 
 // tcpudp registers one name under both transports, which is how IANA assigns
 // the overwhelming majority of these.
 func tcpudp(port uint16, name string, table map[servicePort]string) {
 	table[servicePort{protocolTCP, port}] = name
+	table[servicePort{protocolUDP, port}] = name
+}
+
+// tcpOnly registers a name under TCP alone, for a service the other transport
+// never carries: registering it under both would name a flow that merely
+// reused the number as an ephemeral port.
+func tcpOnly(port uint16, name string, table map[servicePort]string) {
+	table[servicePort{protocolTCP, port}] = name
+}
+
+// udpOnly is tcpOnly's counterpart.
+func udpOnly(port uint16, name string, table map[servicePort]string) {
 	table[servicePort{protocolUDP, port}] = name
 }
 
@@ -46,48 +58,35 @@ var serviceNames = buildServiceNames()
 func buildServiceNames() map[servicePort]string {
 	table := make(map[servicePort]string, serviceTableSize)
 
+	// A well-known client port is absent where the server port already names
+	// the exchange in both directions: Enrich falls back to the source port,
+	// so DHCP's 68 and DHCPv6's 546 would name nothing 67 and 547 do not.
 	for port, name := range map[uint16]string{
-		20:    "ftp-data",
 		21:    "ftp",
 		22:    "ssh",
 		23:    "telnet",
 		25:    "smtp",
 		53:    "dns",
 		67:    "dhcp",
-		68:    "dhcp",
 		69:    "tftp",
 		80:    "http",
-		110:   "pop3",
-		119:   "nntp",
+		88:    "kerberos",
 		123:   "ntp",
 		135:   "msrpc",
 		137:   serviceNetBIOS,
 		138:   serviceNetBIOS,
 		139:   serviceNetBIOS,
-		143:   "imap",
 		161:   "snmp",
 		162:   "snmp-trap",
 		179:   "bgp",
 		389:   "ldap",
-		443:   "https",
 		445:   "smb",
-		465:   "smtps",
 		514:   "syslog",
-		515:   "printer",
-		520:   "rip",
-		546:   "dhcpv6",
 		547:   "dhcpv6",
 		587:   "submission",
 		636:   "ldaps",
-		853:   "dns-over-tls",
-		873:   "rsync",
 		993:   "imaps",
-		995:   "pop3s",
-		1194:  "openvpn",
 		1433:  "mssql",
-		1521:  "oracle",
-		1701:  "l2tp",
-		1723:  "pptp",
 		1812:  "radius",
 		1813:  "radius-acct",
 		2049:  "nfs",
@@ -96,25 +95,50 @@ func buildServiceNames() map[servicePort]string {
 		3389:  "rdp",
 		4500:  "ipsec-nat-t",
 		5060:  "sip",
-		5061:  "sips",
 		5432:  "postgresql",
-		5900:  "vnc",
 		6379:  "redis",
 		8080:  "http-alt",
 		8443:  "https-alt",
 		9090:  "prometheus",
-		9100:  "node-exporter",
-		11211: "memcached",
 		27017: "mongodb",
 	} {
 		tcpudp(port, name, table)
 	}
 
-	// The numbers whose service differs by transport, or exists on one only.
-	table[servicePort{protocolUDP, 500}] = "isakmp"
-	table[servicePort{protocolUDP, 2055}] = "netflow"
-	table[servicePort{protocolUDP, 4739}] = "ipfix"
-	table[servicePort{protocolUDP, 6343}] = "sflow"
+	// The stream services, and the two numbers whose UDP side below carries a
+	// different protocol rather than the same one over datagrams.
+	for port, name := range map[uint16]string{
+		443:  "https",
+		853:  "dns-over-tls",
+		2083: "radsec",
+		3000: "dev-server",
+		3100: "loki",
+		4317: "otlp-grpc",
+		4318: "otlp-http",
+		6443: "kubernetes-api",
+		9092: "kafka",
+		9100: "raw",
+		9115: "blackbox-exporter",
+		9116: "snmp-exporter",
+		9200: "elasticsearch",
+	} {
+		tcpOnly(port, name, table)
+	}
+
+	// The tunnels, the flow protocols, and the QUIC-borne successors to two
+	// of the TCP services above.
+	for port, name := range map[uint16]string{
+		443:   "http3",
+		500:   "isakmp",
+		853:   "dns-over-quic",
+		2055:  "netflow",
+		4739:  "ipfix",
+		4789:  "vxlan",
+		6343:  "sflow",
+		51820: "wireguard",
+	} {
+		udpOnly(port, name, table)
+	}
 
 	return table
 }
