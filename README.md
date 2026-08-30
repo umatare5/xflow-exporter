@@ -35,7 +35,7 @@ This exporter receives flow records from on-premises devices and serves them as 
 Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it.
 
 <picture>
-  <img alt="Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/readme_architecture.png">
+  <img alt="Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/readme_architecture.png" width="705px">
 </picture>
 
 A scrape reads the in-memory aggregation tables and never waits on flow arrival — see [`docs/README.md`](docs/README.md).
