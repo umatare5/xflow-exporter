@@ -34,11 +34,11 @@ Install required tools (one-time):
 - `golangci-lint` - See <https://golangci-lint.run/docs/welcome/install/local/>
 - `gitleaks` - See <https://github.com/gitleaks/gitleaks#installing>
 - `pre-commit` - See <https://pre-commit.com/#install>
-- `goreleaser` release builds (see [.goreleaser.yml](.goreleaser.yml))
+- `goreleaser` release builds (see [`.goreleaser.yml`](.goreleaser.yml))
 
-`make pre-commit-install` wires `golangci-lint`, `gitleaks` and `markdownlint-cli2` (see [.pre-commit-config.yaml](.pre-commit-config.yaml)). Only `gitleaks` is taken from `PATH`, because pre-commit builds the other two at the versions the config pins. Reach markdown style through `make pre-commit-test`, not through whichever `markdownlint-cli2` sits on `PATH`.
+`make pre-commit-install` wires `golangci-lint`, `gitleaks` and `markdownlint-cli2` (see [`.pre-commit-config.yaml`](.pre-commit-config.yaml)). Only `gitleaks` is taken from `PATH`, because pre-commit builds the other two at the versions the config pins. Reach markdown style through `make pre-commit-test`, not through whichever `markdownlint-cli2` sits on `PATH`.
 
-Make targets ([Makefile](Makefile)):
+Make targets ([`Makefile`](Makefile)):
 
 - `make build` — Build binary into `tmp/xflow-exporter`
 - `make lint` — `golangci-lint run` + `go mod tidy`
@@ -46,15 +46,15 @@ Make targets ([Makefile](Makefile)):
 - `make test-unit-coverage` — Generate HTML report at `coverage/report.html`
 - `make clean` — Remove build artifacts and `.bak*` files
 - `make image` — Build Docker image (`$USER/xflow-exporter`)
-- `make pre-commit-install` — Install the hooks from [.pre-commit-config.yaml](.pre-commit-config.yaml)
+- `make pre-commit-install` — Install the hooks from [`.pre-commit-config.yaml`](.pre-commit-config.yaml)
 - `make pre-commit-test` — Run every hook across the tree without committing
 - `make pre-commit-uninstall` — Remove the hooks
 
-Markdown style is checked again in CI, and links are checked there only (see [.github/workflows/markdownlint.yml](.github/workflows/markdownlint.yml) and [.github/workflows/lychee.yml](.github/workflows/lychee.yml)). Links carry no hook, because the run reaches third-party hosts. `lychee .` reproduces that run locally and discovers [lychee.toml](lychee.toml) on its own.
+Markdown style is checked again in CI, and links are checked there only (see [`.github/workflows/markdownlint.yml`](.github/workflows/markdownlint.yml) and [`.github/workflows/lychee.yml`](.github/workflows/lychee.yml)). Links carry no hook, because the run reaches third-party hosts. `lychee .` reproduces that run locally and discovers [`lychee.toml`](lychee.toml) on its own.
 
 ## Code Style
 
-- Linting and formatting are enforced by `golangci-lint` in the pre-commit hook (see [.golangci.yml](.golangci.yml)).
+- Linting and formatting are enforced by `golangci-lint` in the pre-commit hook (see [`.golangci.yml`](.golangci.yml)).
 - Comments record only what the code cannot say, and never address the reader.
 - Keep minimal for all changes, coding, testing, commenting, and documentation.
 
@@ -62,7 +62,7 @@ Markdown style is checked again in CI, and links are checked there only (see [.g
 
 - Run `make test-unit` before committing.
 - Place tests next to code under test (`*_test.go`).
-- Coverage threshold is enforced by [.github/workflows/go-test-coverage.yml](.github/workflows/go-test-coverage.yml).
+- Coverage threshold is enforced by [`.github/workflows/go-test-coverage.yml`](.github/workflows/go-test-coverage.yml).
 
 ## Commits and PRs
 
