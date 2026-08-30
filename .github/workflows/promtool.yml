@@ -15,8 +15,10 @@ jobs:
     with:
       promtool_version: "3.14.0"
       rule_files: |
+        examples/prometheus_record_rules.yml
         examples/prometheus_alert_rules.yml
       test_files: |
+        examples/prometheus_record_rules_test.yml
         examples/prometheus_alert_rules_test.yml
       config_files: |
         examples/prometheus.yml

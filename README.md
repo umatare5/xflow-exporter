@@ -181,6 +181,13 @@ For complete monitoring, see [`.air.toml`](https://github.com/umatare5/xflow-exp
 
 Add the job from [`examples/prometheus.yml`](./examples/prometheus.yml) to your Prometheus configuration.
 
+#### Recording Rules Configuration Example
+
+Add the rules from [`examples/prometheus_record_rules.yml`](./examples/prometheus_record_rules.yml) to your configuration.
+
+> [!Note]
+> The rules collapse the pair- and tuple-keyed families onto one dimension, which is what makes a country, AS or port breakdown affordable to retain — [Recording rules](docs/README.md#recording-rules) carries what each group answers.
+
 #### Alerting Rules Configuration Example
 
 Add the rules from [`examples/prometheus_alert_rules.yml`](./examples/prometheus_alert_rules.yml) to your configuration.

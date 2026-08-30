@@ -8,6 +8,7 @@ global:
   scrape_native_histograms: true
 
 rule_files:
+  - prometheus_record_rules.yml
   - prometheus_alert_rules.yml
 
 scrape_configs:
