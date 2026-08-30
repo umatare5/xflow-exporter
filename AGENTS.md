@@ -1,7 +1,7 @@
 # Repository Instructions
 
 > [!IMPORTANT]
-> Read [README.md](README.md) for project overview and architecture.
+> Read [`README.md`](README.md) for project overview and architecture.
 
 ## Tech Stack
 
@@ -33,7 +33,7 @@ Install required tools (one-time):
 - `go install gotest.tools/gotestsum@latest`
 - `golangci-lint` - See <https://golangci-lint.run/docs/welcome/install/local/>
 - `goreleaser` release builds (see [.goreleaser.yml](.goreleaser.yml))
-- `pre-commit install` wires `golangci-lint` with the formatters from [.golangci.yml](.golangci.yml), `markdownlint-cli2` and `gitleaks` (see [.pre-commit-config.yaml](.pre-commit-config.yaml))
+- `pre-commit install` wires `golangci-lint`, `markdownlint-cli2` and `gitleaks` (see [.pre-commit-config.yaml](.pre-commit-config.yaml))
 
 Make targets ([Makefile](Makefile)):
 

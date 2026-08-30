@@ -33,40 +33,28 @@ This exporter receives flow records from on-premises devices and serves them as 
 
 Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it.
 
-```mermaid
-flowchart LR
-    FE["Flow Exporters<br>(Catalyst / SRX ...)"]
-    XF["Flow Receiver<br>(xflow-exporter)"]
-    PROM["Flow Analyzer<br>(Prometheus)"]
-    AM["Alertmanager"]
-    GF["Grafana"]
+<picture>
+  <img src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/readme_architecture.png">
+</picture>
 
-    FE -- "NetFlow / IPFIX / sFlow<br>UDP push" --> XF
-    PROM -- "scrape /metrics<br>HTTP pull" --> XF
-    PROM -- "alerts" --> AM
-    GF -- "PromQL" --> PROM
-```
-
-A scrape reads the in-memory aggregation tables and never waits on flow arrival.
+A scrape reads the in-memory aggregation tables and never waits on flow arrival. See [`docs/README.md`](docs/README.md) for more details.
 
 ## Quick Start
 
 ### 1. Point your devices at the exporter
 
-Configure each device to export flows to the exporter's address, UDP port 2055 by default. Every listener accepts every supported protocol, identified per datagram.
+Configure each device to export flows to the exporter's address, `2055/udp` by default.
 
 ### 2. Run the exporter with Docker
 
 ```bash
-docker run -p 10053:10053 -p 2055:2055/udp \
-  ghcr.io/umatare5/xflow-exporter:latest \
-  --collector.exporters --collector.hosts
+docker run -p 10053:10053 -p 2055:2055/udp ghcr.io/umatare5/xflow-exporter:latest
 ```
 
 > [!Tip]
-> If you prefer using binaries, download them from the [release page](https://github.com/umatare5/xflow-exporter/releases).
+> If you prefer using binaries, download them from the [Release](https://github.com/umatare5/xflow-exporter/releases).
 >
-> Supported Platforms are: `linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64` and `windows_amd64`
+> **Supported Platform:** `linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64` and `windows_amd64`
 
 ### 3. Scrape it
 
@@ -180,8 +168,7 @@ The receiver listens and the health series count every datagram, but no traffic 
 ### Essential Usage
 
 ```bash
-./xflow-exporter \
-  --collector.exporters --collector.hosts --collector.services
+./xflow-exporter --collector.exporters --collector.hosts --collector.services
 ```
 
 ### Complete Usage
@@ -209,7 +196,7 @@ Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xfl
 </picture>
 
 > [!Tip]
-> See [`xflow-exporter-dashboard_full.png`](https://github.com/umatare5/xflow-exporter/blob/main/docs/assets/xflow-exporter-dashboard_full.png) for the full capture image of the example.
+> See [`docs/assets/xflow-exporter-dashboard_full.png`](https://github.com/umatare5/xflow-exporter/blob/main/docs/assets/xflow-exporter-dashboard_full.png) for the full capture image of the example.
 
 > [!Note]
 > Panels rank by packets rather than bytes, and the composition panels rank rather than total — [Dashboards](docs/README.md#dashboards) carries what each panel covers and why.

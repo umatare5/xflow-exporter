@@ -110,7 +110,7 @@ Lookups are local: nothing is fetched and no credential is held. Neither databas
 - **Atomic** — a new set is built whole before it replaces the old one, so no lookup pauses.
 
 > [!NOTE]
-> A list gone missing would otherwise unflag every address at once, which reads as a network that had just gone clean; `xflow_threat_reload_failures_total` counts those loads. Each mmdb reader is replaced rather than reopened, so a lookup never sees a half-loaded set and the decode path never pauses. [SECURITY.md](../SECURITY.md) covers the exposure.
+> A list gone missing would otherwise unflag every address at once, which reads as a network that had just gone clean; `xflow_threat_reload_failures_total` counts those loads. Each mmdb reader is replaced rather than reopened, so a lookup never sees a half-loaded set and the decode path never pauses. [`SECURITY.md`](../SECURITY.md) covers the exposure.
 
 ### Bounded state
 
@@ -130,7 +130,7 @@ Every map keyed by wire data carries a bound, a push protocol not choosing its s
 - **Refusal counters** — the four `_refused_total` series count attempts, not entities.
 - **Fallback** — a refused vendor string leaves the record numbered, or with no name.
 - **Sweeps** — idle domains go on the template TTL, idle devices only at the budget.
-- **Not wire-keyed** — bound the source-address maps at the receiver ([SECURITY.md](../SECURITY.md)).
+- **Not wire-keyed** — bound the source-address maps at the receiver ([`SECURITY.md`](../SECURITY.md)).
 
 > [!NOTE]
 > A refused device keeps decoding and keeps feeding every aggregation table, but reaches no per-device health series; a device that has gone silent keeps the freshness series an alert on silence has to read. The per-device application tables and the distribution histograms key on the source address alone. [Health](health.md) carries what each refusal costs the records behind it.
