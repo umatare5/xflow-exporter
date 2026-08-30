@@ -1,0 +1,5 @@
+include_verbatim = true
+include_fragments = "full"
+require_https = true
+exclude_all_private = true
+exclude = ["^https://www\\.cisco\\.com/"]
