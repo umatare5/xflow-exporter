@@ -37,7 +37,7 @@ Devices push flow datagrams into the exporter, and Prometheus pulls aggregates o
   <img alt="Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/readme_architecture.png">
 </picture>
 
-A scrape reads the in-memory aggregation tables and never waits on flow arrival. See [`docs/README.md`](docs/README.md) for more details.
+A scrape reads the in-memory aggregation tables and never waits on flow arrival — see [`docs/README.md`](docs/README.md).
 
 ## Quick Start
 
@@ -211,4 +211,4 @@ I launched this project with the help of **Claude Code by Anthropic**, and I am 
 
 ## Licence
 
-[MIT](LICENSE). The binary statically links Apache-2.0, MIT, ISC and BSD 3-Clause dependencies, whose notices are reproduced in [`NOTICE`](NOTICE) and shipped alongside `LICENSE` in every release archive and container image.
+**MIT**. The binary statically links Apache-2.0, MIT, ISC and BSD 3-Clause dependencies, whose notices are reproduced in [`NOTICE`](NOTICE) and shipped alongside [`LICENSE`](LICENSE) in every release archive and container image.
