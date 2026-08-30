@@ -31,6 +31,14 @@
     {
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "matchStrings": ["lychee_version:\\s*\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\""],
+      "depNameTemplate": "lycheeverse/lychee",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^lychee-(?<version>v\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
       "matchStrings": ["promtool_version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""],
       "depNameTemplate": "prometheus/prometheus",
       "datasourceTemplate": "github-releases",
