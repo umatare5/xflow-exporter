@@ -3,7 +3,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/logo_dark.png" width="180px" />
     <source media="(prefers-color-scheme: light)" srcset="./docs/assets/logo.png" width="180px" />
-    <img src="./docs/assets/logo.png" width="180px" />
+    <img alt="xflow-exporter" src="./docs/assets/logo.png" width="180px" />
   </picture>
 
   <h1>xflow-exporter</h1>
@@ -34,7 +34,7 @@ This exporter receives flow records from on-premises devices and serves them as 
 Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it.
 
 <picture>
-  <img src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/readme_architecture.png">
+  <img alt="Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/readme_architecture.png">
 </picture>
 
 A scrape reads the in-memory aggregation tables and never waits on flow arrival. See [`docs/README.md`](docs/README.md) for more details.
@@ -192,7 +192,7 @@ Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xfl
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard_dark.png">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard.png">
-  <img src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard.png">
+  <img alt="Grafana dashboard showing flow volume, composition and exporter health panels" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard.png">
 </picture>
 
 > [!Tip]

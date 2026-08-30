@@ -40,7 +40,7 @@ The workflow also accepts a manual run from the Actions tab. That is for the rel
 
 ## Pull requests
 
-1. Fork ([https://github.com/umatare5/xflow-exporter/fork](https://github.com/umatare5/xflow-exporter/fork))
+1. [Fork](https://github.com/umatare5/xflow-exporter/fork) the repository
 2. Create a feature branch
 3. Commit your changes
 4. Record any change to the metric surface under the `## [Unreleased]` section in `CHANGELOG.md`, adding the section if it is not there yet

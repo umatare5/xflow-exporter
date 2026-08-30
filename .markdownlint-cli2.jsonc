@@ -1,20 +1,197 @@
 {
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-cli2-config-schema.json",
   "config": {
     "default": true,
-    "line_length": false,
-    "no-inline-html": false,
-    "no-trailing-punctuation": false,
-    "no-duplicate-heading": false,
-    "no-bare-urls": false,
-    "header-increment": false,
-    "no-alt-text": false,
-    "no-blanks-blockquote": false,
-    "first-line-heading": false
+    "MD003": { "style": "atx" },
+    "MD004": { "style": "dash" },
+    "MD013": false,
+    "MD024": { "siblings_only": true },
+    // Two adjacent GitHub alerts cannot be written without a blank line between them
+    "MD028": false,
+    "MD029": { "style": "ordered" },
+    "MD046": { "style": "fenced" },
+    "MD048": { "style": "backtick" },
+    "MD050": { "style": "asterisk" },
+    "MD054": { "url_inline": false },
+    "MD055": { "style": "leading_and_trailing" },
+    "MD060": { "style": "aligned", "aligned_delimiter": true }
   },
-  "ignores": [
-    "vendor/**",
-    ".github/copilot-instructions.md",
-    ".claude/CLAUDE.md",
+  "overrides": [
+    {
+      "filter": ["AGENTS.md"],
+      "combine": "merge",
+      "config": {
+        "MD043": {
+          "match_case": true,
+          "headings": [
+            "# Repository Instructions",
+            "## Tech Stack", "*",
+            "## Repository Structure", "*",
+            "## Setup and Commands", "*",
+            "## Code Style", "*",
+            "## Testing Instructions", "*",
+            "## Commits and PRs", "*",
+            "## Domain Knowledge", "*"
+          ]
+        }
+      }
+    },
+    {
+      "filter": ["CHANGELOG.md"],
+      "combine": "merge",
+      "config": {
+        // Release headings accrue, so only the standing section is pinned
+        "MD043": {
+          "match_case": true,
+          "headings": [
+            "# Changelog",
+            "## [Unreleased]",
+            "*"
+          ]
+        }
+      }
+    },
+    {
+      "filter": ["CONTRIBUTING.md"],
+      "combine": "merge",
+      "config": {
+        "MD043": {
+          "match_case": true,
+          "headings": [
+            "# Contributing",
+            "## Commands", "*",
+            "## Build", "*",
+            "## Release", "*",
+            "## Pull requests"
+          ]
+        }
+      }
+    },
+    {
+      "filter": ["README.md"],
+      "combine": "merge",
+      "config": {
+        // The logo, badges and title block are HTML; the heading they carry is an <h1>
+        "MD033": {
+          "allowed_elements": ["a", "br", "div", "h1", "img", "p", "picture", "source"]
+        },
+        "MD041": { "allow_preamble": true },
+        "MD043": {
+          "match_case": true,
+          "headings": [
+            "## Overview", "*",
+            "## Architecture", "*",
+            "## Quick Start", "*",
+            "## Protocol Support", "*",
+            "## Syntax", "*",
+            "## Endpoints", "*",
+            "## Metrics", "*",
+            "## Use Cases", "*",
+            "## Contributing", "*",
+            "## Acknowledgement", "*",
+            "## Licence"
+          ]
+        }
+      }
+    },
+    {
+      "filter": ["SECURITY.md"],
+      "combine": "merge",
+      "config": {
+        "MD043": {
+          "match_case": true,
+          "headings": [
+            "# Security Policy",
+            "## Supported versions", "*",
+            "## Reporting a vulnerability", "*",
+            "## What this exporter holds and exposes", "*",
+            "## What leaves the host", "*",
+            "## Out of scope"
+          ]
+        }
+      }
+    },
+    {
+      "filter": ["docs/README.md"],
+      "combine": "merge",
+      "config": {
+        "MD043": {
+          "match_case": true,
+          "headings": [
+            "# Documentation",
+            "## Technical Information",
+            "*"
+          ]
+        }
+      }
+    },
+    {
+      "filter": ["docs/collectors.md"],
+      "combine": "merge",
+      "config": {
+        "MD043": {
+          "match_case": true,
+          "headings": [
+            "# Collectors",
+            "## Metrics", "*",
+            "## Labels", "*",
+            "## Specifications"
+          ]
+        }
+      }
+    },
+    {
+      "filter": ["docs/configuration.md"],
+      "combine": "merge",
+      "config": {
+        "MD043": {
+          "match_case": true,
+          "headings": [
+            "# Configuration",
+            "## Flags", "*",
+            "## Notes"
+          ]
+        }
+      }
+    },
+    {
+      "filter": ["docs/health.md"],
+      "combine": "merge",
+      "config": {
+        "MD043": {
+          "match_case": true,
+          "headings": [
+            "# Exporter health",
+            "## Metrics", "*",
+            "## Labels", "*",
+            "## Specifications"
+          ]
+        }
+      }
+    },
+    {
+      "filter": ["docs/protocols.md"],
+      "combine": "merge",
+      "config": {
+        "MD043": {
+          "match_case": true,
+          "headings": [
+            "# Protocol Support",
+            "## Version identification", "*",
+            "## NetFlow v5", "*",
+            "## NetFlow v8", "*",
+            "## NetFlow v9 and IPFIX", "*",
+            "## NetFlow-Lite", "*",
+            "## sFlow v5", "*",
+            "## Options and enrichment", "*",
+            "## References"
+          ]
+        }
+      }
+    }
   ],
   "globs": ["**/*.md"],
+  "gitignore": true,
+  // Both are symlinks to AGENTS.md, which is linted on its own path
+  "ignores": [".claude/CLAUDE.md", ".github/copilot-instructions.md"]
 }
