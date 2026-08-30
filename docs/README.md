@@ -158,6 +158,19 @@ A NetFlow-Lite record carries one sampled packet section instead of parsed flow 
 > [!NOTE]
 > The address-keyed families turn their Top-K over as talkers come and go, measured at 5.3× the live series count per hour for `xflow_service_*` on a quiet link, and before the ordering fix that removed the share a byte tie was causing. The dimensional families — `asns`, `applications`, `tcp_flags`, `dscp` and `countries` — stay flat at 1.0×.
 
+### Recording rules
+
+[`examples/prometheus_record_rules.yml`](../examples/prometheus_record_rules.yml) collapses the pair- and tuple-keyed families onto one dimension, in seven groups.
+
+- **A ranking, not a total** — the tail below the Top-K cut reaches no recorded series.
+- **The one exception** — `xflow_exporter_*` takes no cut, so the ratios divide by it.
+- **`exporter` is kept** — two observation points in one path export a flow twice.
+- **Ordering** — a derived rule reads only rules recorded earlier in its own group.
+- **Scrape path only** — `--remote-write.url` ships the registry no rule has seen.
+
+> [!NOTE]
+> The volumetric aggregates read `destinations` rather than `services`: the service family keys on the source as well, so a distributed flood opens one entry per attacker and falls out of the cut, where the destination family folds the source at ingest and stays the largest entry in its table. A reflected flood arrives with a randomized destination port and scatters past the cut in either, which is what `exporter:xflow_destination_bytes:ratio5m` exists to show. The rate window assumes the 60s `scrape_interval` of [`examples/prometheus.yml`](../examples/prometheus.yml).
+
 ### Native histograms
 
 `--collector.distributions` publishes `xflow_flow_bytes` and `xflow_flow_duration_seconds` as native histograms, one series per exporter with exponential buckets.

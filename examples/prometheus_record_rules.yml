@@ -1,0 +1,110 @@
+---
+# Recording rules for xflow-exporter. The level names the flow dimension a
+# rule keeps; aggregations use without(), so job and instance ride through,
+# and exporter stays on every rule: two observation points in one path
+# export the same flow twice. Read each recorded rate as a Top-K ranking,
+# not a total -- the tail below --aggregation.top-k publishes nothing and
+# is not folded into other. The 5m windows assume the 60s scrape_interval
+# of prometheus.yml, and a derived rule reads only its own group.
+groups:
+  # The per-device family takes neither the Top-K nor the min-bytes cut, so
+  # these three are the one true total and the denominator the rest divide by.
+  - name: xflow-exporter.baseline
+    rules:
+      - record: exporter:xflow_exporter_bytes:rate5m
+        expr: sum without (version) (rate(xflow_exporter_bytes_total[5m]))
+
+      - record: exporter:xflow_exporter_packets:rate5m
+        expr: sum without (version) (rate(xflow_exporter_packets_total[5m]))
+
+      - record: exporter:xflow_exporter_flows:rate5m
+        expr: sum without (version) (rate(xflow_exporter_flows_total[5m]))
+
+      # The > 0 guard withholds the ratio where nothing was counted rather
+      # than recording a NaN.
+      - record: exporter:xflow_exporter_bytes_per_packet:ratio5m
+        expr: >-
+          exporter:xflow_exporter_bytes:rate5m
+          / (exporter:xflow_exporter_packets:rate5m > 0)
+
+  - name: xflow-exporter.countries
+    rules:
+      - record: exporter_src_country:xflow_country_pair_bytes:rate5m
+        expr: sum without (dst_country) (rate(xflow_country_pair_bytes_total[5m]))
+
+      - record: exporter_dst_country:xflow_country_pair_bytes:rate5m
+        expr: sum without (src_country) (rate(xflow_country_pair_bytes_total[5m]))
+
+      - record: exporter_src_country:xflow_country_pair_flows:rate5m
+        expr: sum without (dst_country) (rate(xflow_country_pair_flows_total[5m]))
+
+      - record: exporter_dst_country:xflow_country_pair_flows:rate5m
+        expr: sum without (src_country) (rate(xflow_country_pair_flows_total[5m]))
+
+  # The organization name is left to a query-time join with xflow_asn_info:
+  # recording it would put a database's spelling in the series identity.
+  - name: xflow-exporter.asns
+    rules:
+      - record: exporter_src_asn:xflow_asn_pair_bytes:rate5m
+        expr: sum without (dst_asn) (rate(xflow_asn_pair_bytes_total[5m]))
+
+      - record: exporter_dst_asn:xflow_asn_pair_bytes:rate5m
+        expr: sum without (src_asn) (rate(xflow_asn_pair_bytes_total[5m]))
+
+  - name: xflow-exporter.dscp
+    rules:
+      - record: exporter_dscp:xflow_dscp_bytes:rate5m
+        expr: rate(xflow_dscp_bytes_total[5m])
+
+      # The denominator is the family's own published classes, not the device
+      # total: a class the cut withheld is missing from both sides, so the
+      # remaining shares read high. The > 0 guard sits inside the sum because
+      # a parenthesis after group_left parses as its label list.
+      - record: exporter_dscp:xflow_dscp_bytes:ratio5m
+        expr: >-
+          exporter_dscp:xflow_dscp_bytes:rate5m
+          / ignoring (dscp) group_left
+          sum without (dscp) (exporter_dscp:xflow_dscp_bytes:rate5m > 0)
+
+  - name: xflow-exporter.destinations
+    rules:
+      - record: exporter_proto_port:xflow_destination_bytes:rate5m
+        expr: sum without (dst) (rate(xflow_destination_bytes_total[5m]))
+
+      - record: exporter_proto_port:xflow_destination_packets:rate5m
+        expr: sum without (dst) (rate(xflow_destination_packets_total[5m]))
+
+      - record: exporter_proto_port:xflow_destination_flows:rate5m
+        expr: sum without (dst) (rate(xflow_destination_flows_total[5m]))
+
+      - record: exporter_proto:xflow_destination_packets:rate5m
+        expr: sum without (port) (exporter_proto_port:xflow_destination_packets:rate5m)
+
+      # The share of the device's bytes the published destination entries
+      # account for. Steady state sits below one, so alert on the change,
+      # not the level.
+      - record: exporter:xflow_destination_bytes:ratio5m
+        expr: >-
+          sum without (proto, port) (exporter_proto_port:xflow_destination_bytes:rate5m)
+          / (sum without (version) (rate(xflow_exporter_bytes_total[5m])) > 0)
+
+  - name: xflow-exporter.tcp-flags
+    rules:
+      - record: exporter_flags:xflow_tcp_flags_flows:rate5m
+        expr: rate(xflow_tcp_flags_flows_total[5m])
+
+      # The syn profile's share is the device's half-open rate. The guard
+      # sits inside the sum for the reason the dscp ratio carries.
+      - record: exporter_flags:xflow_tcp_flags_flows:ratio5m
+        expr: >-
+          exporter_flags:xflow_tcp_flags_flows:rate5m
+          / ignoring (flags) group_left
+          sum without (flags) (exporter_flags:xflow_tcp_flags_flows:rate5m > 0)
+
+  - name: xflow-exporter.threats
+    rules:
+      - record: exporter_direction:xflow_threat_bytes:rate5m
+        expr: sum without (address) (rate(xflow_threat_bytes_total[5m]))
+
+      - record: exporter_direction:xflow_threat_flows:rate5m
+        expr: sum without (address) (rate(xflow_threat_flows_total[5m]))
