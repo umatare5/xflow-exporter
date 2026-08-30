@@ -50,7 +50,7 @@ Make targets ([Makefile](Makefile)):
 - `make pre-commit-test` — Run every hook across the tree without committing
 - `make pre-commit-uninstall` — Remove the hooks
 
-Links are checked in CI (see [.github/workflows/lychee.yml](.github/workflows/lychee.yml)) rather than by a hook, because the run reaches third-party hosts. `lychee .` reproduces it locally and discovers [lychee.toml](lychee.toml) on its own.
+Markdown style is checked again in CI, and links are checked there only (see [.github/workflows/markdownlint.yml](.github/workflows/markdownlint.yml) and [.github/workflows/lychee.yml](.github/workflows/lychee.yml)). Links carry no hook, because the run reaches third-party hosts. `lychee .` reproduces that run locally and discovers [lychee.toml](lychee.toml) on its own.
 
 ## Code Style
 

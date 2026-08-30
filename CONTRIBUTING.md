@@ -19,7 +19,7 @@ The following `make` commands are available for development and testing:
 | `make pre-commit-test`      | Run every hook across the tree               |
 | `make pre-commit-uninstall` | Remove the pre-commit hooks                  |
 
-Markdown style is enforced by the `markdownlint-cli2` hook, which `make pre-commit-install` wires in. Links are checked in CI instead, because that run reaches third-party hosts. Run `lychee .` to reproduce a link failure locally.
+Markdown style is enforced by the `markdownlint-cli2` hook that `make pre-commit-install` wires in, and again in CI. Links are checked in CI only, because that run reaches third-party hosts. Run `lychee .` to reproduce a link failure locally.
 
 ## Build
 

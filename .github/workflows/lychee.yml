@@ -5,10 +5,12 @@ on:
     paths:
       - "**/*.md"
       - "lychee.toml"
+      - ".github/workflows/lychee.yml"
   pull_request:
     paths:
       - "**/*.md"
       - "lychee.toml"
+      - ".github/workflows/lychee.yml"
 
 permissions:
   contents: read
