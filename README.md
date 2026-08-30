@@ -10,6 +10,14 @@
 
   <p>A Prometheus Exporter for traffic flows: NetFlow, IPFIX and sFlow.</p>
 
+  <p>
+    <img alt="GitHub Tag" src="https://img.shields.io/github/v/tag/umatare5/xflow-exporter?label=Latest%20version" />
+    <a href="https://github.com/umatare5/xflow-exporter/actions/workflows/go-test-build.yml"><img alt="Test and Build" src="https://github.com/umatare5/xflow-exporter/actions/workflows/go-test-build.yml/badge.svg?branch=main" /></a>
+    <img alt="Test Coverage" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/coverage.svg" /><br>
+    <a href="https://www.bestpractices.dev/projects/14363"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/14363/badge" /></a>
+    <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" /></a>
+  </p>
+
 </div>
 
 ## Overview
@@ -25,40 +33,28 @@ This exporter receives flow records from on-premises devices and serves them as 
 
 Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it.
 
-```mermaid
-flowchart LR
-    FE["Flow Exporters<br>(Catalyst / SRX ...)"]
-    XF["Flow Receiver<br>(xflow-exporter)"]
-    PROM["Flow Analyzer<br>(Prometheus)"]
-    AM["Alertmanager"]
-    GF["Grafana"]
+<picture>
+  <img src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/readme_architecture.png">
+</picture>
 
-    FE -- "NetFlow / IPFIX / sFlow<br>UDP push" --> XF
-    PROM -- "scrape /metrics<br>HTTP pull" --> XF
-    PROM -- "alerts" --> AM
-    GF -- "PromQL" --> PROM
-```
-
-A scrape reads the in-memory aggregation tables and never waits on flow arrival.
+A scrape reads the in-memory aggregation tables and never waits on flow arrival. See [`docs/README.md`](docs/README.md) for more details.
 
 ## Quick Start
 
 ### 1. Point your devices at the exporter
 
-Configure each device to export flows to the exporter's address, UDP port 2055 by default. Every listener accepts every supported protocol, identified per datagram.
+Configure each device to export flows to the exporter's address, `2055/udp` by default.
 
 ### 2. Run the exporter with Docker
 
 ```bash
-docker run -p 10053:10053 -p 2055:2055/udp \
-  ghcr.io/umatare5/xflow-exporter:latest \
-  --collector.exporters --collector.hosts
+docker run -p 10053:10053 -p 2055:2055/udp ghcr.io/umatare5/xflow-exporter:latest
 ```
 
 > [!Tip]
-> If you prefer using binaries, download them from the [release page](https://github.com/umatare5/xflow-exporter/releases).
+> If you prefer using binaries, download them from the [Release](https://github.com/umatare5/xflow-exporter/releases).
 >
-> Supported Platforms are: `linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64` and `windows_amd64`
+> **Supported Platform:** `linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64` and `windows_amd64`
 
 ### 3. Scrape it
 
@@ -172,8 +168,7 @@ The receiver listens and the health series count every datagram, but no traffic 
 ### Essential Usage
 
 ```bash
-./xflow-exporter \
-  --collector.exporters --collector.hosts --collector.services
+./xflow-exporter --collector.exporters --collector.hosts --collector.services
 ```
 
 ### Complete Usage
@@ -192,7 +187,16 @@ Add the rules from [`examples/prometheus_alert_rules.yml`](./examples/prometheus
 
 ### Grafana Dashboard
 
-Import [`examples/grafana_dashboard.json`](./examples/grafana_dashboard.json), whose data source and devices are variables.
+Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json), whose data source and devices are variables.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard.png">
+  <img src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard.png">
+</picture>
+
+> [!Tip]
+> See [`docs/assets/xflow-exporter-dashboard_full.png`](https://github.com/umatare5/xflow-exporter/blob/main/docs/assets/xflow-exporter-dashboard_full.png) for the full capture image of the example.
 
 > [!Note]
 > Panels rank by packets rather than bytes, and the composition panels rank rather than total — [Dashboards](docs/README.md#dashboards) carries what each panel covers and why.
@@ -200,6 +204,10 @@ Import [`examples/grafana_dashboard.json`](./examples/grafana_dashboard.json), w
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the `make` targets, the Docker build and the release process.
+
+## Acknowledgement
+
+I launched this project with the help of **Claude Code by Anthropic**, and I am grateful to the global developer community for their contributions to open source projects and public repositories.
 
 ## Licence
 

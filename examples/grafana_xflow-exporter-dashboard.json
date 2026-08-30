@@ -1,4 +1,72 @@
 {
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    },
+    {
+      "name": "VAR_TOP_K",
+      "type": "constant",
+      "label": "Top-K bound",
+      "value": "1000",
+      "description": ""
+    }
+  ],
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "panel",
+      "id": "bargauge",
+      "name": "Bar gauge",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "gauge",
+      "name": "Gauge",
+      "version": ""
+    },
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "13.2.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "13.1.7"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "state-timeline",
+      "name": "State timeline",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
   "annotations": {
     "list": [
       {
@@ -21,79 +89,6 @@
   "graphTooltip": 1,
   "links": [],
   "panels": [
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "How many of five conditions that would make every traffic panel below untrustworthy are true now: a device silent past the entry TTL, receiver drops, decode rejects other than a missing template, export sequence loss, and records folded at the entry bound. Each term is wrapped in a zero vector because this counts breached checks rather than measured traffic, so a zero here is a real reading rather than a fabricated one.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "#ad46ff",
-            "mode": "thresholds"
-          },
-          "decimals": 0,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "semi-dark-blue",
-                "value": 0
-              },
-              {
-                "color": "dark-orange",
-                "value": 2
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 4,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "13.2.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(count(time() - xflow_last_flow_timestamp_seconds{exporter=~\"$exporter\",exporter!=\"other\"} > 900) or vector(0))\n+ (count(increase(xflow_receiver_dropped_packets_total[15m]) > 0) or vector(0))\n+ (count(increase(xflow_decode_errors_total{exporter=~\"$exporter\",exporter!=\"other\",reason!=\"missing_template\"}[15m]) > 0) or vector(0))\n+ (count(increase(xflow_sequence_missed_total{exporter=~\"$exporter\",exporter!=\"other\"}[15m]) > 0) or vector(0))\n+ (count(increase(xflow_aggregation_overflow_records_total[15m]) > 0) or vector(0))",
-          "instant": true,
-          "legendFormat": "",
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Trust checks failing",
-      "type": "stat"
-    },
     {
       "datasource": {
         "type": "prometheus",
@@ -125,7 +120,7 @@
       "gridPos": {
         "h": 3,
         "w": 5,
-        "x": 4,
+        "x": 0,
         "y": 0
       },
       "id": 3,
@@ -196,7 +191,7 @@
       "gridPos": {
         "h": 6,
         "w": 6,
-        "x": 9,
+        "x": 5,
         "y": 0
       },
       "id": 4,
@@ -272,7 +267,7 @@
       "gridPos": {
         "h": 6,
         "w": 4,
-        "x": 15,
+        "x": 11,
         "y": 0
       },
       "id": 5,
@@ -340,7 +335,7 @@
       "gridPos": {
         "h": 6,
         "w": 5,
-        "x": 19,
+        "x": 15,
         "y": 0
       },
       "id": 6,
@@ -383,6 +378,79 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "How many of five conditions that would make every traffic panel below untrustworthy are true now: a device silent past the entry TTL, receiver drops, decode rejects other than a missing template, export sequence loss, and records folded at the entry bound. Each term is wrapped in a zero vector because this counts breached checks rather than measured traffic, so a zero here is a real reading rather than a fabricated one.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#ad46ff",
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-blue",
+                "value": 0
+              },
+              {
+                "color": "dark-orange",
+                "value": 2
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(count(time() - xflow_last_flow_timestamp_seconds{exporter=~\"$exporter\",exporter!=\"other\"} > 900) or vector(0))\n+ (count(increase(xflow_receiver_dropped_packets_total[15m]) > 0) or vector(0))\n+ (count(increase(xflow_decode_errors_total{exporter=~\"$exporter\",exporter!=\"other\",reason!=\"missing_template\"}[15m]) > 0) or vector(0))\n+ (count(increase(xflow_sequence_missed_total{exporter=~\"$exporter\",exporter!=\"other\"}[15m]) > 0) or vector(0))\n+ (count(increase(xflow_aggregation_overflow_records_total[15m]) > 0) or vector(0))",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Trust checks failing",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Seconds since each device's last decoded record. Flow export is push, so there is no up-style reachability toward a sender and this is the only signal that a device has gone quiet. The warning line is the entry TTL its own alerting rule fires on, past which that device's entries start disappearing. A device that has never decoded has no series and no tile.",
       "fieldConfig": {
         "defaults": {
@@ -411,7 +479,7 @@
       "gridPos": {
         "h": 3,
         "w": 5,
-        "x": 4,
+        "x": 0,
         "y": 3
       },
       "id": 2,
@@ -1365,7 +1433,7 @@
       "type": "bargauge"
     },
     {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1373,526 +1441,527 @@
         "y": 32
       },
       "id": 16,
-      "panels": [],
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "What is being served on the campus. Two filters are deliberate heuristics: the destination is restricted to RFC 1918, and the port to four digits, which drops the ephemeral ports a reverse-direction record puts in the port label and with them any genuine listener above 9999. Read the protocol column -- for ICMP the port label is the type and code word rather than a port, so such a row is not a listening service. Ranks from a table whose cut is by byte volume, so a quiet listener can be withheld before it is ranked.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "fixedColor": "blue",
+                "mode": "fixed"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "footer": {
+                  "reducers": []
+                },
+                "inspect": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Bitrate"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bps"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.align",
+                    "value": "right"
+                  },
+                  {
+                    "id": "custom.minWidth",
+                    "value": 96
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "mode": "gradient",
+                      "type": "gauge"
+                    }
+                  },
+                  {
+                    "id": "min",
+                    "value": 0
+                  },
+                  {
+                    "id": "fieldMinMax",
+                    "value": true
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "port"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "none"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 61
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "proto"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 66
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "dst",
+                  "scope": "series"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 122
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 33
+          },
+          "id": 17,
+          "options": {
+            "cellHeight": "sm",
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Bitrate"
+              }
+            ]
+          },
+          "pluginVersion": "13.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\",port=~\"[0-9]{1,4}\"}[$rollup_interval])) * 8)",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Services reached inside the LAN",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {
+                  "Bitrate": 3,
+                  "dst": 0,
+                  "port": 2,
+                  "proto": 1
+                },
+                "renameByName": {
+                  "Value": "Bitrate"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Every RFC 1918 to RFC 1918 pair the observation point sees, to read against what the access policy is meant to permit. East-west never reaches the transit circuit and is buried under it in any unfiltered ranking, which is why it needs its own panel. The trailing test drops entries still held within the entry TTL whose rate over the window is zero, so only live pairs appear. Ranked from a Top-K table, so the absence of a pair is not proof it did not happen.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "fixedColor": "blue",
+                "mode": "fixed"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "footer": {
+                  "reducers": []
+                },
+                "inspect": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Bitrate"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bps"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.align",
+                    "value": "right"
+                  },
+                  {
+                    "id": "custom.minWidth",
+                    "value": 96
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "mode": "gradient",
+                      "type": "gauge"
+                    }
+                  },
+                  {
+                    "id": "min",
+                    "value": 0
+                  },
+                  {
+                    "id": "fieldMinMax",
+                    "value": true
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "src",
+                  "scope": "series"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 118
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "dst",
+                  "scope": "series"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 117
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 33
+          },
+          "id": 18,
+          "options": {
+            "cellHeight": "sm",
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Bitrate"
+              }
+            ]
+          },
+          "pluginVersion": "13.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "topk(20,\n  sum by (src, dst) (rate(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\"}[$rollup_interval])) * 8\n  or\n  sum by (src, dst) (rate(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\"}[$rollup_interval])) * 8\n) > 0",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "East-west traffic across the LAN",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {
+                  "Bitrate": 2,
+                  "dst": 1,
+                  "src": 0
+                },
+                "renameByName": {
+                  "Value": "Bitrate"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Flooded traffic hits every port in the VLAN and every wireless client individually, so its cost is per frame: this is the one composition panel correctly ranked by packets rather than bits. The selector covers 224.0.0.0/4 and the limited broadcast address. It cannot catch a subnet-directed broadcast, which no prefix test can distinguish from a host address. Packets are sampling-corrected.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "fixedColor": "blue",
+                "mode": "fixed"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "footer": {
+                  "reducers": []
+                },
+                "inspect": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Packets/s"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "pps"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 1
+                  },
+                  {
+                    "id": "custom.align",
+                    "value": "right"
+                  },
+                  {
+                    "id": "custom.minWidth",
+                    "value": 96
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "mode": "gradient",
+                      "type": "gauge"
+                    }
+                  },
+                  {
+                    "id": "min",
+                    "value": 0
+                  },
+                  {
+                    "id": "fieldMinMax",
+                    "value": true
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "port"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "none"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 73
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "proto"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 66
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "dst",
+                  "scope": "series"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 133
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 33
+          },
+          "id": 19,
+          "options": {
+            "cellHeight": "sm",
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Packets/s"
+              }
+            ]
+          },
+          "pluginVersion": "13.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_packets_total{exporter=~\"$exporter\",exporter!=\"other\",dst=~\"22[4-9]\\\\..*|23[0-9]\\\\..*|255\\\\.255\\\\.255\\\\.255\",dst=~\"$focus\"}[$rollup_interval])))",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Broadcast and multicast destinations",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {
+                  "Packets/s": 3,
+                  "dst": 0,
+                  "port": 2,
+                  "proto": 1
+                },
+                "renameByName": {
+                  "Value": "Packets/s"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        }
+      ],
       "title": "LAN operation",
       "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "What is being served on the campus. Two filters are deliberate heuristics: the destination is restricted to RFC 1918, and the port to four digits, which drops the ephemeral ports a reverse-direction record puts in the port label and with them any genuine listener above 9999. Read the protocol column -- for ICMP the port label is the type and code word rather than a port, so such a row is not a listening service. Ranks from a table whose cut is by byte volume, so a quiet listener can be withheld before it is ranked.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "blue",
-            "mode": "fixed"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "footer": {
-              "reducers": []
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Bitrate"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "bps"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.align",
-                "value": "right"
-              },
-              {
-                "id": "custom.minWidth",
-                "value": 96
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "mode": "gradient",
-                  "type": "gauge"
-                }
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "fieldMinMax",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "port"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "none"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.width",
-                "value": 61
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "proto"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 66
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "dst",
-              "scope": "series"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 122
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 33
-      },
-      "id": 17,
-      "options": {
-        "cellHeight": "sm",
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Bitrate"
-          }
-        ]
-      },
-      "pluginVersion": "13.2.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\",port=~\"[0-9]{1,4}\"}[$rollup_interval])) * 8)",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Services reached inside the LAN",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "indexByName": {
-              "Bitrate": 3,
-              "dst": 0,
-              "port": 2,
-              "proto": 1
-            },
-            "renameByName": {
-              "Value": "Bitrate"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "Every RFC 1918 to RFC 1918 pair the observation point sees, to read against what the access policy is meant to permit. East-west never reaches the transit circuit and is buried under it in any unfiltered ranking, which is why it needs its own panel. The trailing test drops entries still held within the entry TTL whose rate over the window is zero, so only live pairs appear. Ranked from a Top-K table, so the absence of a pair is not proof it did not happen.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "blue",
-            "mode": "fixed"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "footer": {
-              "reducers": []
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Bitrate"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "bps"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.align",
-                "value": "right"
-              },
-              {
-                "id": "custom.minWidth",
-                "value": 96
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "mode": "gradient",
-                  "type": "gauge"
-                }
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "fieldMinMax",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "src",
-              "scope": "series"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 118
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "dst",
-              "scope": "series"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 117
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 33
-      },
-      "id": 18,
-      "options": {
-        "cellHeight": "sm",
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Bitrate"
-          }
-        ]
-      },
-      "pluginVersion": "13.2.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "topk(20,\n  sum by (src, dst) (rate(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\"}[$rollup_interval])) * 8\n  or\n  sum by (src, dst) (rate(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\"}[$rollup_interval])) * 8\n) > 0",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "East-west traffic across the LAN",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "indexByName": {
-              "Bitrate": 2,
-              "dst": 1,
-              "src": 0
-            },
-            "renameByName": {
-              "Value": "Bitrate"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "Flooded traffic hits every port in the VLAN and every wireless client individually, so its cost is per frame: this is the one composition panel correctly ranked by packets rather than bits. The selector covers 224.0.0.0/4 and the limited broadcast address. It cannot catch a subnet-directed broadcast, which no prefix test can distinguish from a host address. Packets are sampling-corrected.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "blue",
-            "mode": "fixed"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "footer": {
-              "reducers": []
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Packets/s"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "pps"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              },
-              {
-                "id": "custom.align",
-                "value": "right"
-              },
-              {
-                "id": "custom.minWidth",
-                "value": 96
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "mode": "gradient",
-                  "type": "gauge"
-                }
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "fieldMinMax",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "port"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "none"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "custom.width",
-                "value": 73
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "proto"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 66
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "dst",
-              "scope": "series"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 133
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 33
-      },
-      "id": 19,
-      "options": {
-        "cellHeight": "sm",
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Packets/s"
-          }
-        ]
-      },
-      "pluginVersion": "13.2.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_packets_total{exporter=~\"$exporter\",exporter!=\"other\",dst=~\"22[4-9]\\\\..*|23[0-9]\\\\..*|255\\\\.255\\\\.255\\\\.255\",dst=~\"$focus\"}[$rollup_interval])))",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Broadcast and multicast destinations",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "indexByName": {
-              "Packets/s": 3,
-              "dst": 0,
-              "port": 2,
-              "proto": 1
-            },
-            "renameByName": {
-              "Value": "Packets/s"
-            }
-          }
-        }
-      ],
-      "type": "table"
     },
     {
       "collapsed": true,
@@ -1900,7 +1969,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 33
       },
       "id": 27,
       "panels": [
@@ -2738,7 +2807,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 58
+        "y": 34
       },
       "id": 33,
       "panels": [
@@ -3443,7 +3512,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 75
+        "y": 35
       },
       "id": 37,
       "panels": [
@@ -3863,7 +3932,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 84
+        "y": 36
       },
       "id": 46,
       "panels": [
@@ -4790,7 +4859,11 @@
   "templating": {
     "list": [
       {
-        "current": {},
+        "current": {
+          "text": "",
+          "value": "${DS_PROMETHEUS}",
+          "selected": true
+        },
         "includeAll": false,
         "label": "Datasource",
         "name": "datasource",
@@ -4807,19 +4880,40 @@
         },
         "label": "Rollup",
         "name": "rollup_interval",
-        "options": [],
+        "options": [
+          {
+            "selected": true,
+            "text": "5m",
+            "value": "5m"
+          },
+          {
+            "selected": false,
+            "text": "10m",
+            "value": "10m"
+          },
+          {
+            "selected": false,
+            "text": "15m",
+            "value": "15m"
+          },
+          {
+            "selected": false,
+            "text": "30m",
+            "value": "30m"
+          },
+          {
+            "selected": false,
+            "text": "60m",
+            "value": "60m"
+          }
+        ],
         "query": "5m,10m,15m,30m,60m",
         "type": "custom",
         "valuesFormat": "csv"
       },
       {
         "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": [
-            "$__all"
-          ]
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
@@ -4843,10 +4937,7 @@
       {
         "allValue": ".*",
         "allowCustomValue": true,
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
@@ -4870,28 +4961,36 @@
         "type": "query"
       },
       {
-        "current": {
-          "text": "1000",
-          "value": "1000"
-        },
         "description": "The --aggregation.top-k the exporter runs with. Read by the truncation panel.",
         "hide": 2,
         "label": "Top-K bound",
         "name": "top_k",
-        "query": "1000",
+        "query": "${VAR_TOP_K}",
         "skipUrlSync": true,
-        "type": "constant"
+        "type": "constant",
+        "current": {
+          "value": "${VAR_TOP_K}",
+          "text": "${VAR_TOP_K}",
+          "selected": false
+        },
+        "options": [
+          {
+            "value": "${VAR_TOP_K}",
+            "text": "${VAR_TOP_K}",
+            "selected": false
+          }
+        ]
       }
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "xflow-exporter",
   "uid": "xflow-exporter",
-  "version": 38,
+  "version": 54,
   "weekStart": ""
 }
