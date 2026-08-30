@@ -26,9 +26,9 @@
 This exporter receives flow records from on-premises devices and serves them as Prometheus metrics.
 
 - 📥 **Push-to-Pull Bridge**: Receives UDP flow exports and serves them to Prometheus scrapes
+- 🏷️ **Enriched Labels**: Applications, AS numbers, countries and flagged addresses, from local files
+- 📊 **Native Histograms**: Flow size and duration quantiles within five percent, Prometheus 3.8+
 - 🧮 **In-Memory Aggregation**: Bounded-cardinality tables with Top-K and idle eviction
-- 📊 **Native Histograms**: Flow size and duration quantiles within five percent, no buckets to choose
-- 🔬 **Auditable Sampling**: Counts scaled by the rate in force, and that rate published beside them
 
 ## Architecture
 
