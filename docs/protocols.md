@@ -553,6 +553,17 @@ The expanded form widens the source ID and the interface fields from one packed 
 | Output interface | 4       | 8        |
 | Record count     | 4       | 4        |
 
+An interface field is a format and a value rather than a plain index. The compact form packs the format into the top two bits and the value into the low 30; the expanded form spells the two out as separate words, so the compact split must not be applied to it.
+
+| Format | Value        | Read as      |
+| :----- | :----------- | :----------- |
+| 0      | ifIndex      | The index    |
+| 0      | `0x3FFFFFFF` | No interface |
+| 1      | Discard code | No interface |
+| 2      | Destinations | No interface |
+
+Formats 1 and 2 are defined for an output interface and never for an input one, so a non-zero format on the input side is a nonconformant export. Either way the value is not an interface, and the decoder folds it to `0` rather than publishing a number a device never assigned to a port.
+
 The records follow, each a type, a length and its body, framed exactly as the samples are.
 
 | Format | Flow record       | Handling                         |

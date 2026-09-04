@@ -641,3 +641,124 @@ func TestDecodeSFlowV5_SampledRecordRefusesAnOverwideWord(t *testing.T) {
 		})
 	}
 }
+
+// sflowSampleWithInterfaces builds one flow sample whose interface fields are
+// the given words: one word each side in the compact form, a format and a
+// value each side in the expanded form.
+func sflowSampleWithInterfaces(expanded bool, in, out []uint32, record []byte) []byte {
+	p := be32(nil, 900) // sample sequence
+	if expanded {
+		p = be32(p, 0) // source id type
+		p = be32(p, 3) // source id index
+	} else {
+		p = be32(p, 0x01_000003) // packed source id
+	}
+	p = be32(p, 1000)      // sampling rate
+	p = be32(p, 1_000_000) // sample pool
+	p = be32(p, 2)         // drops
+	for _, w := range append(append([]uint32{}, in...), out...) {
+		p = be32(p, w)
+	}
+	p = be32(p, 1) // record count
+	p = append(p, record...)
+
+	if expanded {
+		return sflowSample(sflowFlowSampleExpanded, p)
+	}
+	return sflowSample(sflowFlowSample, p)
+}
+
+// TestDecodeSFlowV5_InterfaceFormats is the regression test for interface
+// words read as plain indices. sFlow spells an interface as a format and a
+// value: only format 0 carries an ifIndex, 1 carries a discard reason and 2 a
+// destination count, and 0x3FFFFFFF under format 0 says the agent itself is
+// the source or sink. The walk took the whole word and, in the expanded form,
+// skipped the format outright -- so a discard reason of 1 published as
+// OutputIf=1, a port a mapping file goes on to name, and the sentinel host
+// sFlow really sends published as 1073741823.
+func TestDecodeSFlowV5_InterfaceFormats(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		expanded bool
+		in, out  []uint32
+		wantIn   uint32
+		wantOut  uint32
+	}{
+		{
+			name: "compact output discard reason",
+			in:   []uint32{3}, out: []uint32{0x4000_0001},
+			wantIn: 3,
+		},
+		{
+			name: "compact output destination count",
+			in:   []uint32{3}, out: []uint32{0x8000_0007},
+			wantIn: 3,
+		},
+		{
+			name: "compact output sentinel",
+			in:   []uint32{3}, out: []uint32{0x3FFF_FFFF},
+			wantIn: 3,
+		},
+		{
+			name: "compact input sentinel",
+			in:   []uint32{0x3FFF_FFFF}, out: []uint32{4},
+			wantOut: 4,
+		},
+		{
+			name: "compact input discard reason",
+			in:   []uint32{0x4000_0003}, out: []uint32{4},
+			wantOut: 4,
+		},
+		{
+			name: "compact input index below the format bits",
+			in:   []uint32{0x00FF_FFFF}, out: []uint32{4},
+			wantIn: 16_777_215, wantOut: 4,
+		},
+		{
+			name: "expanded output discard reason", expanded: true,
+			in: []uint32{0, 3}, out: []uint32{1, 1},
+			wantIn: 3,
+		},
+		{
+			name: "expanded output sentinel", expanded: true,
+			in: []uint32{0, 3}, out: []uint32{0, 0x3FFF_FFFF},
+			wantIn: 3,
+		},
+		{
+			name: "expanded input discard reason", expanded: true,
+			in: []uint32{1, 5}, out: []uint32{0, 4},
+			wantOut: 4,
+		},
+		{
+			name: "expanded input sentinel", expanded: true,
+			in: []uint32{0, 0x3FFF_FFFF}, out: []uint32{0, 4},
+			wantOut: 4,
+		},
+		{
+			name: "expanded output index above the compact mask", expanded: true,
+			in: []uint32{0, 3}, out: []uint32{0, 0x4000_0001},
+			wantIn: 3, wantOut: 1_073_741_825,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			datagram := sflowDatagram(1, sflowSampleWithInterfaces(tt.expanded, tt.in, tt.out,
+				rawHeaderRecord(tcpFrame(false), 1518)))
+
+			records, err := d.Decode(testExporter, datagram, nil)
+			if err != nil || len(records) != 1 {
+				t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
+			}
+			if records[0].InputIf != tt.wantIn || records[0].OutputIf != tt.wantOut {
+				t.Errorf("interfaces = (%d, %d), want (%d, %d)",
+					records[0].InputIf, records[0].OutputIf, tt.wantIn, tt.wantOut)
+			}
+		})
+	}
+}
