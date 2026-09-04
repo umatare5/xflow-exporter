@@ -37,6 +37,8 @@ When remote write is enabled, the exporter holds that endpoint's credentials: `-
 
 Every enrichment source reads a file on local disk, and a lookup sends no address anywhere. Fetching the threat lists and the MaxMind-format databases is a separate job, run by the operator through [`scripts/fetch-enrichment-data.sh`](scripts/fetch-enrichment-data.sh) or any equivalent.
 
+The same holds for the mapping file: this exporter speaks no SNMP, and [`scripts/fetch-device-names.sh`](scripts/fetch-device-names.sh) is what walks the devices. Its `SNMP_OPTIONS` reaches `snmpwalk` on the command line, where every account on the host reads it out of `ps`. Set that variable empty and put `defCommunity` in `snmp.conf` wherever the community string is not already public.
+
 `--web.enable-lifecycle` exposes `/-/reload`, which re-reads those files. It is unauthenticated, like the metrics endpoint, so keep it on a controlled path. It is off by default, and a `SIGHUP` reloads without exposing anything.
 
 ## Out of scope

@@ -26,7 +26,7 @@
 This exporter receives flow records from on-premises devices and serves them as Prometheus metrics.
 
 - 🔬 **Auditable Sampling**: Counts scaled by the rate in force, and that rate published where declared
-- 🏷️ **Enriched Labels**: Applications, AS numbers, countries and flagged addresses, from local files
+- 🏷️ **Enriched Labels**: Applications, AS numbers, countries, flagged addresses and device names, from local files
 - 📊 **Native Histograms**: Flow size and duration quantiles within five percent, Prometheus 3.8+
 - 🧮 **In-Memory Aggregation**: Bounded-cardinality tables with Top-K and idle eviction
 

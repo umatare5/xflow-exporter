@@ -123,6 +123,9 @@ services: # port/proto, ahead of the built-in table
 - **A `~` key is dropped by YAML itself**, reaching no check here, and a `%YAML 1.2` directive is refused by the parser.
 - **`services:` wins the ports the built-in table also names**, but the tables are consulted whole in turn, so a source port this file names beats a destination port the built-in table does.
 
+> [!TIP]
+> [`scripts/fetch-device-names.sh`](../scripts/fetch-device-names.sh) walks the devices over SNMP and writes the file. Nothing here speaks SNMP; the exporter reads what that left behind, so run it from cron and reload afterwards. It refuses a device answering no usable name rather than writing it out unnamed, and installs by rename, so a failed walk leaves the previous names in force. [`SECURITY.md`](../SECURITY.md) covers where the community string ends up.
+
 This joins a name onto the per-interface traffic of one device, keeping the rows no name reaches:
 
 ```promql
