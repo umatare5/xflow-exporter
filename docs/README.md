@@ -9,7 +9,7 @@ Reference pages for xflow-exporter. The [README](../README.md) covers getting fl
 | [Health](health.md)               | The exporter's own metrics and reasons |
 | [Configuration](configuration.md) | Flags and defaults, as `--help` prints |
 
-## Technical Information
+## Technical information
 
 ### Push and pull
 

@@ -119,7 +119,7 @@
           "match_case": true,
           "headings": [
             "# Documentation",
-            "## Technical Information",
+            "## Technical information",
             "*"
           ]
         }
