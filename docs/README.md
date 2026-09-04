@@ -16,7 +16,7 @@ Reference pages for xflow-exporter. The [README](../README.md) covers getting fl
 - **Scrapes never wait** — a scrape reads the tables as they stand, whatever is arriving.
 - **No target to probe** — nothing answers an `up`-style reachability check toward a sender.
 - **Liveness** — `xflow_last_flow_timestamp_seconds` is what silence is read from.
-- **Naming** — RFC 7011 calls the device the exporter, and the `exporter_address` label carries the address it exported from.
+- **Naming** — RFC 7011 calls the device the exporter, and `exporter_address` is where it lands.
 - **Tuning** — `--receiver.*`, `--parser.*` and `--aggregation.*` bound the receive path.
 - **Batching** — Linux read loops use `recvmmsg`, and elsewhere it is one per call.
 
@@ -77,7 +77,7 @@ An `--enrich.*` source supplies what the device did not: a dimension of the reco
 Lookups are local: nothing is fetched and no credential is held. Neither database ships here, so point the flag at a GeoLite2 or DB-IP file or fetch one with [`scripts/fetch-enrichment-data.sh`](../scripts/fetch-enrichment-data.sh). A path that cannot be opened fails startup.
 
 - **Never overwrites** — an exported reading wins, so enrichment fills absence alone.
-- **Feeds the existing families** — a filled dimension keys the module that publishes it, while a looked-up name rides an info series of its own.
+- **Feeds the existing families** — a dimension keys its module, a name rides its own series.
 - **Cardinality** — filling a dimension creates series that were absent, hence the opt-in.
 - **Observability** — `xflow_enrichment_lookups_total` splits by `enricher` and `result`.
 
@@ -116,12 +116,13 @@ services: # port/proto, ahead of the built-in table
   5246/udp: capwap-control
 ```
 
-- **The names ride `xflow_device_info` and `xflow_interface_info`** — join on `exporter_address` and `ifindex`, plus `job` and `instance`.
-- **Strict** — an unknown key, a key that is not an address, an out-of-range ifIndex or port, a leading zero, a blank or unprintable name, or two spellings of one address each fail the whole load.
-- **Exactly one document** — an empty file and a trailing `---` are both refused, so a truncated write leaves the previous names in force.
-- **`devices: {}` loads** — an operator emptying the file on purpose is how names are taken away at reload.
-- **A `~` key is dropped by YAML itself**, reaching no check here, and a `%YAML 1.2` directive is refused by the parser.
-- **`services:` wins the ports the built-in table also names**, but the tables are consulted whole in turn, so a source port this file names beats a destination port the built-in table does.
+- **Two info series** — `xflow_device_info` and `xflow_interface_info` carry the names.
+- **Strict** — an unusable key or name, or one address spelled twice, fails the whole load.
+- **Exactly one document** — an empty file and a trailing `---` are both refused.
+- **`devices: {}` loads** — emptying the file on purpose is how a reload takes names away.
+- **YAML acts first** — a `~` key is dropped before any check, `%YAML 1.2` is refused.
+- **`services:` outranks the built-in table** — on any port both of them name.
+- **One table at a time** — a source port here beats a destination port in the built-in one.
 
 > [!TIP]
 > [`scripts/fetch-device-names.sh`](../scripts/fetch-device-names.sh) walks the devices over SNMP and writes the file. Nothing here speaks SNMP; the exporter reads what that left behind, so run it from cron and reload afterwards. It refuses a device answering no usable name rather than writing it out unnamed, and installs by rename, so a failed walk leaves the previous names in force. [`SECURITY.md`](../SECURITY.md) covers where the community string ends up.
@@ -152,8 +153,8 @@ sum by (exporter_address, input_ifindex) (
 - **POST or PUT only**, and unexposed by default, a reload being a write rather than a read.
 - **A failed reload keeps the previous data** — the set already loaded stays in force.
 - **Atomic** — a new set is built whole before it replaces the old one, so no lookup pauses.
-- **The sources are the ones startup configured** — a reload re-reads their files rather than reading the flags again.
-- **`--dry-run` validates the flags alone** — it opens no source, so a mapping file it accepts may still fail startup.
+- **Only the sources startup opened** — a reload re-reads their files, never the flags.
+- **`--dry-run` opens no source** — a mapping file it accepts can still fail startup.
 
 > [!NOTE]
 > A list gone missing would otherwise unflag every address at once, which reads as a network that had just gone clean; `xflow_threat_reload_failures_total` counts those loads. The mapping file has no such counter, mirroring the databases: a failed load answers `/-/reload` with 500 and logs its reason. Each mmdb reader is replaced rather than reopened, so a lookup never sees a half-loaded set and the decode path never pauses. [`SECURITY.md`](../SECURITY.md) covers the exposure.
