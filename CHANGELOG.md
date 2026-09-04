@@ -6,6 +6,13 @@ A minor release may rename or remove a metric. Every collector module flag is of
 
 ## [Unreleased]
 
+- [#21](https://github.com/umatare5/xflow-exporter/pull/21) — Add the govulncheck badge to the README
+- [#22](https://github.com/umatare5/xflow-exporter/pull/22) — Give each overview point something only it says
+- [#23](https://github.com/umatare5/xflow-exporter/pull/23) — Hold the architecture diagram to the line it illustrates
+- [#24](https://github.com/umatare5/xflow-exporter/pull/24) — Update dependency golangci/golangci-lint to v2.13.2
+- [#25](https://github.com/umatare5/xflow-exporter/pull/25) — Rename exporter to exporter_address, add the interface pair and the naming series
+- [#26](https://github.com/umatare5/xflow-exporter/pull/26) — Update umatare5/common action to v0.18.0
+
 ## [v0.8.0]
 
 - [#10](https://github.com/umatare5/xflow-exporter/pull/10) — Release only on a VERSION change, and configure gitleaks
