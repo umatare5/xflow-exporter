@@ -149,9 +149,9 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "xflow_sampling_rate{exporter=~\"$exporter\",exporter!=\"other\"}",
+          "expr": "xflow_sampling_rate{exporter_address=~\"$exporter\",exporter_address!=\"other\"}",
           "instant": true,
-          "legendFormat": "{{exporter}} odid {{odid}}",
+          "legendFormat": "{{exporter_address}} odid {{odid}}",
           "range": false,
           "refId": "A"
         }
@@ -227,7 +227,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "label_replace(sum(rate(xflow_host_pair_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])) / sum(rate(xflow_exporter_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])), \"table\", \"hosts\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_service_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])) / sum(rate(xflow_exporter_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])), \"table\", \"services\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_destination_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])) / sum(rate(xflow_exporter_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])), \"table\", \"destinations\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_asn_pair_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])) / sum(rate(xflow_exporter_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])), \"table\", \"asns\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_application_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])) / sum(rate(xflow_exporter_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])), \"table\", \"applications\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_country_pair_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])) / sum(rate(xflow_exporter_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])), \"table\", \"countries\", \"\", \"\")",
+          "expr": "label_replace(sum(rate(xflow_host_pair_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])) / sum(rate(xflow_exporter_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])), \"table\", \"hosts\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_service_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])) / sum(rate(xflow_exporter_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])), \"table\", \"services\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_destination_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])) / sum(rate(xflow_exporter_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])), \"table\", \"destinations\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_asn_pair_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])) / sum(rate(xflow_exporter_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])), \"table\", \"asns\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_application_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])) / sum(rate(xflow_exporter_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])), \"table\", \"applications\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_country_pair_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])) / sum(rate(xflow_exporter_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])), \"table\", \"countries\", \"\", \"\")",
           "instant": true,
           "legendFormat": "{{table}}",
           "range": false,
@@ -296,8 +296,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (exporter) (rate(xflow_exporter_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])) * 8",
-          "legendFormat": "{{exporter}}",
+          "expr": "sum by (exporter_address) (rate(xflow_exporter_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])) * 8",
+          "legendFormat": "{{exporter_address}}",
           "range": true,
           "refId": "A"
         }
@@ -364,8 +364,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (exporter, version) (rate(xflow_flows_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))",
-          "legendFormat": "{{exporter}} {{version}}",
+          "expr": "sum by (exporter_address, version) (rate(xflow_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval]))",
+          "legendFormat": "{{exporter_address}} {{version}}",
           "range": true,
           "refId": "A"
         }
@@ -436,7 +436,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(count(time() - xflow_last_flow_timestamp_seconds{exporter=~\"$exporter\",exporter!=\"other\"} > 900) or vector(0))\n+ (count(increase(xflow_receiver_dropped_packets_total[15m]) > 0) or vector(0))\n+ (count(increase(xflow_decode_errors_total{exporter=~\"$exporter\",exporter!=\"other\",reason!=\"missing_template\"}[15m]) > 0) or vector(0))\n+ (count(increase(xflow_sequence_missed_total{exporter=~\"$exporter\",exporter!=\"other\"}[15m]) > 0) or vector(0))\n+ (count(increase(xflow_aggregation_overflow_records_total[15m]) > 0) or vector(0))",
+          "expr": "(count(time() - xflow_last_flow_timestamp_seconds{exporter_address=~\"$exporter\",exporter_address!=\"other\"} > 900) or vector(0))\n+ (count(increase(xflow_receiver_dropped_packets_total[15m]) > 0) or vector(0))\n+ (count(increase(xflow_decode_errors_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",reason!=\"missing_template\"}[15m]) > 0) or vector(0))\n+ (count(increase(xflow_sequence_missed_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[15m]) > 0) or vector(0))\n+ (count(increase(xflow_aggregation_overflow_records_total[15m]) > 0) or vector(0))",
           "instant": true,
           "legendFormat": "",
           "range": false,
@@ -508,9 +508,9 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sort_desc(time() - xflow_last_flow_timestamp_seconds{exporter=~\"$exporter\",exporter!=\"other\"})",
+          "expr": "sort_desc(time() - xflow_last_flow_timestamp_seconds{exporter_address=~\"$exporter\",exporter_address!=\"other\"})",
           "instant": true,
-          "legendFormat": "{{exporter}}",
+          "legendFormat": "{{exporter_address}}",
           "range": false,
           "refId": "A"
         }
@@ -674,7 +674,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "label_replace(sum(rate(xflow_country_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src_country=\"private\",dst_country!=\"private\",dst_country!=\"other\"}[$rollup_interval])) * 8, \"direction\", \"egress (LAN to internet)\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_country_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",dst_country=\"private\",src_country!=\"private\",src_country!=\"other\"}[$rollup_interval])) * 8, \"direction\", \"ingress (internet to LAN)\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_country_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src_country=\"private\",dst_country=\"private\"}[$rollup_interval])) * 8, \"direction\", \"internal (LAN to LAN)\", \"\", \"\")",
+          "expr": "label_replace(sum(rate(xflow_country_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src_country=\"private\",dst_country!=\"private\",dst_country!=\"other\"}[$rollup_interval])) * 8, \"direction\", \"egress (LAN to internet)\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_country_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst_country=\"private\",src_country!=\"private\",src_country!=\"other\"}[$rollup_interval])) * 8, \"direction\", \"ingress (internet to LAN)\", \"\", \"\") or\nlabel_replace(sum(rate(xflow_country_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src_country=\"private\",dst_country=\"private\"}[$rollup_interval])) * 8, \"direction\", \"internal (LAN to LAN)\", \"\", \"\")",
           "legendFormat": "{{direction}}",
           "range": true,
           "refId": "A"
@@ -809,7 +809,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(15, sum by (src) (rate(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\",dst!~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\"}[$rollup_interval])) * 8)",
+          "expr": "topk(15, sum by (src) (rate(xflow_host_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\",dst!~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\"}[$rollup_interval])) * 8)",
           "format": "table",
           "instant": true,
           "range": false,
@@ -968,7 +968,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(15,\n  sum by (src, dst) (rate(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"$focus\"}[$rollup_interval])) * 8\n  or\n  sum by (src, dst) (rate(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",dst=~\"$focus\"}[$rollup_interval])) * 8\n)",
+          "expr": "topk(15,\n  sum by (src, dst) (rate(xflow_host_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"$focus\"}[$rollup_interval])) * 8\n  or\n  sum by (src, dst) (rate(xflow_host_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst=~\"$focus\"}[$rollup_interval])) * 8\n)",
           "format": "table",
           "instant": true,
           "range": false,
@@ -1080,7 +1080,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(12, sum by (dst_asn) (rate(xflow_asn_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src_asn=\"0\",dst_asn!=\"0\"}[$rollup_interval])) * 8)\n* on (dst_asn) group_left (as_name)\n  (\n    label_replace(label_join(label_replace(xflow_asn_info, \"dst_asn\", \"$1\", \"asn\", \"(.+)\"), \"as_name\", \" (AS\", \"organization\", \"asn\"), \"as_name\", \"$1)\", \"as_name\", \"(.+)\")\n    or\n    label_replace(group by (dst_asn) (xflow_asn_pair_bytes_total) unless on (dst_asn) label_replace(xflow_asn_info, \"dst_asn\", \"$1\", \"asn\", \"(.+)\"), \"as_name\", \"AS$1\", \"dst_asn\", \"(.+)\")\n  )",
+          "expr": "topk(12, sum by (dst_asn) (rate(xflow_asn_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src_asn=\"0\",dst_asn!=\"0\"}[$rollup_interval])) * 8)\n* on (dst_asn) group_left (as_name)\n  (\n    label_replace(label_join(label_replace(xflow_asn_info, \"dst_asn\", \"$1\", \"asn\", \"(.+)\"), \"as_name\", \" (AS\", \"organization\", \"asn\"), \"as_name\", \"$1)\", \"as_name\", \"(.+)\")\n    or\n    label_replace(group by (dst_asn) (xflow_asn_pair_bytes_total) unless on (dst_asn) label_replace(xflow_asn_info, \"dst_asn\", \"$1\", \"asn\", \"(.+)\"), \"as_name\", \"AS$1\", \"dst_asn\", \"(.+)\")\n  )",
           "instant": true,
           "legendFormat": "{{as_name}}",
           "range": false,
@@ -1161,7 +1161,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(12, sum by (src_asn) (rate(xflow_asn_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",dst_asn=\"0\",src_asn!=\"0\"}[$rollup_interval])) * 8)\n* on (src_asn) group_left (as_name)\n  (\n    label_replace(label_join(label_replace(xflow_asn_info, \"src_asn\", \"$1\", \"asn\", \"(.+)\"), \"as_name\", \" (AS\", \"organization\", \"asn\"), \"as_name\", \"$1)\", \"as_name\", \"(.+)\")\n    or\n    label_replace(group by (src_asn) (xflow_asn_pair_bytes_total) unless on (src_asn) label_replace(xflow_asn_info, \"src_asn\", \"$1\", \"asn\", \"(.+)\"), \"as_name\", \"AS$1\", \"src_asn\", \"(.+)\")\n  )",
+          "expr": "topk(12, sum by (src_asn) (rate(xflow_asn_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst_asn=\"0\",src_asn!=\"0\"}[$rollup_interval])) * 8)\n* on (src_asn) group_left (as_name)\n  (\n    label_replace(label_join(label_replace(xflow_asn_info, \"src_asn\", \"$1\", \"asn\", \"(.+)\"), \"as_name\", \" (AS\", \"organization\", \"asn\"), \"as_name\", \"$1)\", \"as_name\", \"(.+)\")\n    or\n    label_replace(group by (src_asn) (xflow_asn_pair_bytes_total) unless on (src_asn) label_replace(xflow_asn_info, \"src_asn\", \"$1\", \"asn\", \"(.+)\"), \"as_name\", \"AS$1\", \"src_asn\", \"(.+)\")\n  )",
           "instant": true,
           "legendFormat": "{{as_name}}",
           "range": false,
@@ -1321,7 +1321,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",dst!=\"other\",dst=~\"$focus\"}[$rollup_interval])) * 8)",
+          "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst!=\"other\",dst=~\"$focus\"}[$rollup_interval])) * 8)",
           "format": "table",
           "instant": true,
           "range": false,
@@ -1422,7 +1422,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(10, sum by (application) (rate(xflow_application_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",application!=\"other\"}[$rollup_interval])) * 8)",
+          "expr": "topk(10, sum by (application) (rate(xflow_application_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",application!=\"other\"}[$rollup_interval])) * 8)",
           "instant": true,
           "legendFormat": "{{application}}",
           "range": false,
@@ -1592,7 +1592,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\",port=~\"[0-9]{1,4}\"}[$rollup_interval])) * 8)",
+              "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\",port=~\"[0-9]{1,4}\"}[$rollup_interval])) * 8)",
               "format": "table",
               "instant": true,
               "range": false,
@@ -1752,7 +1752,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(20,\n  sum by (src, dst) (rate(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\"}[$rollup_interval])) * 8\n  or\n  sum by (src, dst) (rate(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\"}[$rollup_interval])) * 8\n) > 0",
+              "expr": "topk(20,\n  sum by (src, dst) (rate(xflow_host_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\"}[$rollup_interval])) * 8\n  or\n  sum by (src, dst) (rate(xflow_host_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\"}[$rollup_interval])) * 8\n) > 0",
               "format": "table",
               "instant": true,
               "range": false,
@@ -1930,7 +1930,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_packets_total{exporter=~\"$exporter\",exporter!=\"other\",dst=~\"22[4-9]\\\\..*|23[0-9]\\\\..*|255\\\\.255\\\\.255\\\\.255\",dst=~\"$focus\"}[$rollup_interval])))",
+              "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst=~\"22[4-9]\\\\..*|23[0-9]\\\\..*|255\\\\.255\\\\.255\\\\.255\",dst=~\"$focus\"}[$rollup_interval])))",
               "format": "table",
               "instant": true,
               "range": false,
@@ -2045,7 +2045,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (dscp) (rate(xflow_dscp_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))\n/ ignoring(dscp) group_left\nsum(rate(xflow_dscp_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))",
+              "expr": "sum by (dscp) (rate(xflow_dscp_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval]))\n/ ignoring(dscp) group_left\nsum(rate(xflow_dscp_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval]))",
               "instant": true,
               "legendFormat": "{{dscp}}",
               "range": false,
@@ -2217,7 +2217,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (outcome) (\n   label_replace(rate(xflow_tcp_flags_flows_total{exporter=~\"$exporter\",exporter!=\"other\",flags=~\".*rst.*\"}[$rollup_interval]), \"outcome\", \"reset seen\", \"\", \"\")\nor label_replace(rate(xflow_tcp_flags_flows_total{exporter=~\"$exporter\",exporter!=\"other\",flags=~\".*syn.*\",flags!~\".*ack.*\",flags!~\".*rst.*\"}[$rollup_interval]), \"outcome\", \"syn, never acked\", \"\", \"\")\nor label_replace(rate(xflow_tcp_flags_flows_total{exporter=~\"$exporter\",exporter!=\"other\",flags=~\".*fin.*\",flags!~\".*ack.*\",flags!~\".*rst.*\"}[$rollup_interval]), \"outcome\", \"fin, never acked\", \"\", \"\")\nor label_replace(rate(xflow_tcp_flags_flows_total{exporter=~\"$exporter\",exporter!=\"other\",flags=\"none\"}[$rollup_interval]), \"outcome\", \"no bits set (NULL scan)\", \"\", \"\")\nor label_replace(rate(xflow_tcp_flags_flows_total{exporter=~\"$exporter\",exporter!=\"other\",flags=~\".*syn.*\",flags=~\".*ack.*\",flags!~\".*rst.*\"}[$rollup_interval]), \"outcome\", \"handshake (syn+ack)\", \"\", \"\")\nor label_replace(rate(xflow_tcp_flags_flows_total{exporter=~\"$exporter\",exporter!=\"other\",flags=~\".*ack.*\",flags!~\".*rst.*\",flags!~\".*syn.*\"}[$rollup_interval]), \"outcome\", \"acked (established)\", \"\", \"\")\n)",
+              "expr": "sum by (outcome) (\n   label_replace(rate(xflow_tcp_flags_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",flags=~\".*rst.*\"}[$rollup_interval]), \"outcome\", \"reset seen\", \"\", \"\")\nor label_replace(rate(xflow_tcp_flags_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",flags=~\".*syn.*\",flags!~\".*ack.*\",flags!~\".*rst.*\"}[$rollup_interval]), \"outcome\", \"syn, never acked\", \"\", \"\")\nor label_replace(rate(xflow_tcp_flags_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",flags=~\".*fin.*\",flags!~\".*ack.*\",flags!~\".*rst.*\"}[$rollup_interval]), \"outcome\", \"fin, never acked\", \"\", \"\")\nor label_replace(rate(xflow_tcp_flags_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",flags=\"none\"}[$rollup_interval]), \"outcome\", \"no bits set (NULL scan)\", \"\", \"\")\nor label_replace(rate(xflow_tcp_flags_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",flags=~\".*syn.*\",flags=~\".*ack.*\",flags!~\".*rst.*\"}[$rollup_interval]), \"outcome\", \"handshake (syn+ack)\", \"\", \"\")\nor label_replace(rate(xflow_tcp_flags_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",flags=~\".*ack.*\",flags!~\".*rst.*\",flags!~\".*syn.*\"}[$rollup_interval]), \"outcome\", \"acked (established)\", \"\", \"\")\n)",
               "instant": true,
               "legendFormat": "{{outcome}}",
               "range": false,
@@ -2355,7 +2355,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum(rate(xflow_tcp_flags_flows_total{exporter=~\"$exporter\",exporter!=\"other\",flags=~\"syn(,(ece|cwr))*\"}[$rollup_interval]))",
+              "expr": "sum(rate(xflow_tcp_flags_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",flags=~\"syn(,(ece|cwr))*\"}[$rollup_interval]))",
               "legendFormat": "syn only",
               "range": true,
               "refId": "A"
@@ -2366,7 +2366,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum(rate(xflow_tcp_flags_flows_total{exporter=~\"$exporter\",exporter!=\"other\",flags=~\"syn,ack(,ece)?(,cwr)?\"}[$rollup_interval]))",
+              "expr": "sum(rate(xflow_tcp_flags_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",flags=~\"syn,ack(,ece)?(,cwr)?\"}[$rollup_interval]))",
               "legendFormat": "syn+ack",
               "range": true,
               "refId": "B"
@@ -2446,7 +2446,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(12,\n  sum by (src_country,dst_country) (rate(xflow_country_pair_packets_total{exporter=~\"$exporter\",exporter!=\"other\",src_country!=\"private\"}[$rollup_interval]))\n  or\n  sum by (src_country,dst_country) (rate(xflow_country_pair_packets_total{exporter=~\"$exporter\",exporter!=\"other\",dst_country!=\"private\"}[$rollup_interval]))\n)",
+              "expr": "topk(12,\n  sum by (src_country,dst_country) (rate(xflow_country_pair_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src_country!=\"private\"}[$rollup_interval]))\n  or\n  sum by (src_country,dst_country) (rate(xflow_country_pair_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst_country!=\"private\"}[$rollup_interval]))\n)",
               "instant": true,
               "legendFormat": "{{src_country}} -> {{dst_country}}",
               "range": false,
@@ -2599,8 +2599,8 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "label_replace(histogram_quantile(0.50, sum by (exporter) (rate(xflow_flow_duration_seconds{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))), \"q\", \"p50\", \"\", \"\") or\nlabel_replace(histogram_quantile(0.90, sum by (exporter) (rate(xflow_flow_duration_seconds{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))), \"q\", \"p90\", \"\", \"\") or\nlabel_replace(histogram_quantile(0.99, sum by (exporter) (rate(xflow_flow_duration_seconds{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))), \"q\", \"p99\", \"\", \"\")",
-              "legendFormat": "{{q}} -- {{exporter}}",
+              "expr": "label_replace(histogram_quantile(0.50, sum by (exporter_address) (rate(xflow_flow_duration_seconds{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval]))), \"q\", \"p50\", \"\", \"\") or\nlabel_replace(histogram_quantile(0.90, sum by (exporter_address) (rate(xflow_flow_duration_seconds{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval]))), \"q\", \"p90\", \"\", \"\") or\nlabel_replace(histogram_quantile(0.99, sum by (exporter_address) (rate(xflow_flow_duration_seconds{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval]))), \"q\", \"p99\", \"\", \"\")",
+              "legendFormat": "{{q}} -- {{exporter_address}}",
               "range": true,
               "refId": "A"
             }
@@ -2684,7 +2684,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "histogram_fraction(0, 1, sum(rate(xflow_flow_duration_seconds{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])))",
+              "expr": "histogram_fraction(0, 1, sum(rate(xflow_flow_duration_seconds{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])))",
               "instant": true,
               "legendFormat": "",
               "range": false,
@@ -2788,8 +2788,8 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (exporter) (rate(xflow_exporter_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval])) / sum by (exporter) (rate(xflow_exporter_packets_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))",
-              "legendFormat": "{{exporter}}",
+              "expr": "sum by (exporter_address) (rate(xflow_exporter_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval])) / sum by (exporter_address) (rate(xflow_exporter_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval]))",
+              "legendFormat": "{{exporter_address}}",
               "range": true,
               "refId": "A"
             }
@@ -2980,7 +2980,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(20, sum by (address, direction) (rate(xflow_threat_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",address!=\"other\",address=~\"$focus\"}[$rollup_interval])) * 8)",
+              "expr": "topk(20, sum by (address, direction) (rate(xflow_threat_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",address!=\"other\",address=~\"$focus\"}[$rollup_interval])) * 8)",
               "format": "table",
               "instant": true,
               "range": false,
@@ -2992,7 +2992,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (address, direction) (rate(xflow_threat_flows_total{exporter=~\"$exporter\",exporter!=\"other\",address!=\"other\",address=~\"$focus\"}[$rollup_interval]))",
+              "expr": "sum by (address, direction) (rate(xflow_threat_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",address!=\"other\",address=~\"$focus\"}[$rollup_interval]))",
               "format": "table",
               "instant": true,
               "range": false,
@@ -3097,7 +3097,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(10, count by (src) (group by (src, dst) (rate(xflow_host_pair_flows_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\"}[$rollup_interval]) > 0)))",
+              "expr": "topk(10, count by (src) (group by (src, dst) (rate(xflow_host_pair_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\"}[$rollup_interval]) > 0)))",
               "instant": true,
               "legendFormat": "{{src}}",
               "range": false,
@@ -3178,7 +3178,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(10, count by (dst) (rate(xflow_host_pair_flows_total{exporter=~\"$exporter\",exporter!=\"other\",dst=~\"$focus\"}[$rollup_interval]) > 0))",
+              "expr": "topk(10, count by (dst) (rate(xflow_host_pair_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst=~\"$focus\"}[$rollup_interval]) > 0))",
               "instant": true,
               "legendFormat": "{{dst}}",
               "range": false,
@@ -3326,7 +3326,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(15, sum by (dst, port) (rate(xflow_destination_flows_total{exporter=~\"$exporter\",exporter!=\"other\",proto=\"udp\",dst=~\"$focus\",port=~\"53|123|161|389|1900|5353|11211|19|111|137|1194|3283|27015\"}[$rollup_interval])))",
+              "expr": "topk(15, sum by (dst, port) (rate(xflow_destination_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",proto=\"udp\",dst=~\"$focus\",port=~\"53|123|161|389|1900|5353|11211|19|111|137|1194|3283|27015\"}[$rollup_interval])))",
               "format": "table",
               "instant": true,
               "range": false,
@@ -3474,7 +3474,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "(\n  group by (src, dst, proto, port) (rate(xflow_service_flows_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\"}[$rollup_interval]) > 0)\n  or\n  group by (src, dst, proto, port) (rate(xflow_service_flows_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\"}[$rollup_interval]) > 0)\n)\nunless\n(\n  group by (src, dst, proto, port) (rate(xflow_service_flows_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\"}[6h] offset $rollup_interval) > 0)\n  or\n  group by (src, dst, proto, port) (rate(xflow_service_flows_total{exporter=~\"$exporter\",exporter!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\"}[6h] offset $rollup_interval) > 0)\n)",
+              "expr": "(\n  group by (src, dst, proto, port) (rate(xflow_service_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\"}[$rollup_interval]) > 0)\n  or\n  group by (src, dst, proto, port) (rate(xflow_service_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\"}[$rollup_interval]) > 0)\n)\nunless\n(\n  group by (src, dst, proto, port) (rate(xflow_service_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\"}[6h] offset $rollup_interval) > 0)\n  or\n  group by (src, dst, proto, port) (rate(xflow_service_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\"}[6h] offset $rollup_interval) > 0)\n)",
               "format": "table",
               "instant": true,
               "range": false,
@@ -3575,7 +3575,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "quantile_over_time(0.95, (sum(rate(xflow_asn_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src_asn=\"0\",dst_asn!=\"0\"}[5m])) * 8)[$__range:5m])",
+              "expr": "quantile_over_time(0.95, (sum(rate(xflow_asn_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src_asn=\"0\",dst_asn!=\"0\"}[5m])) * 8)[$__range:5m])",
               "instant": true,
               "legendFormat": "egress p95",
               "range": false,
@@ -3587,7 +3587,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "quantile_over_time(0.95, (sum(rate(xflow_asn_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",dst_asn=\"0\",src_asn!=\"0\"}[5m])) * 8)[$__range:5m])",
+              "expr": "quantile_over_time(0.95, (sum(rate(xflow_asn_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst_asn=\"0\",src_asn!=\"0\"}[5m])) * 8)[$__range:5m])",
               "instant": true,
               "legendFormat": "ingress p95",
               "range": false,
@@ -3668,7 +3668,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(10, quantile_over_time(0.95, (sum by (dst_asn) (rate(xflow_asn_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src_asn=\"0\",dst_asn!=\"0\"}[5m])) * 8)[$__range:5m]))\n* on (dst_asn) group_left (as_name)\n  (\n    label_replace(label_join(label_replace(xflow_asn_info, \"dst_asn\", \"$1\", \"asn\", \"(.+)\"), \"as_name\", \" (AS\", \"organization\", \"asn\"), \"as_name\", \"$1)\", \"as_name\", \"(.+)\")\n    or\n    label_replace(group by (dst_asn) (xflow_asn_pair_bytes_total) unless on (dst_asn) label_replace(xflow_asn_info, \"dst_asn\", \"$1\", \"asn\", \"(.+)\"), \"as_name\", \"AS$1\", \"dst_asn\", \"(.+)\")\n  )",
+              "expr": "topk(10, quantile_over_time(0.95, (sum by (dst_asn) (rate(xflow_asn_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src_asn=\"0\",dst_asn!=\"0\"}[5m])) * 8)[$__range:5m]))\n* on (dst_asn) group_left (as_name)\n  (\n    label_replace(label_join(label_replace(xflow_asn_info, \"dst_asn\", \"$1\", \"asn\", \"(.+)\"), \"as_name\", \" (AS\", \"organization\", \"asn\"), \"as_name\", \"$1)\", \"as_name\", \"(.+)\")\n    or\n    label_replace(group by (dst_asn) (xflow_asn_pair_bytes_total) unless on (dst_asn) label_replace(xflow_asn_info, \"dst_asn\", \"$1\", \"asn\", \"(.+)\"), \"as_name\", \"AS$1\", \"dst_asn\", \"(.+)\")\n  )",
               "instant": true,
               "legendFormat": "{{as_name}}",
               "range": false,
@@ -3844,7 +3844,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (asn) (label_replace(sum by (src_asn) (rate(xflow_asn_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",dst_asn=\"0\",src_asn!=\"0\"}[$rollup_interval])), \"asn\", \"$1\", \"src_asn\", \"(.*)\")) * 8",
+              "expr": "sum by (asn) (label_replace(sum by (src_asn) (rate(xflow_asn_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst_asn=\"0\",src_asn!=\"0\"}[$rollup_interval])), \"asn\", \"$1\", \"src_asn\", \"(.*)\")) * 8",
               "format": "table",
               "instant": true,
               "range": false,
@@ -3856,7 +3856,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (asn) (label_replace(sum by (dst_asn) (rate(xflow_asn_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src_asn=\"0\",dst_asn!=\"0\"}[$rollup_interval])), \"asn\", \"$1\", \"dst_asn\", \"(.*)\")) * 8",
+              "expr": "sum by (asn) (label_replace(sum by (dst_asn) (rate(xflow_asn_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src_asn=\"0\",dst_asn!=\"0\"}[$rollup_interval])), \"asn\", \"$1\", \"dst_asn\", \"(.*)\")) * 8",
               "format": "table",
               "instant": true,
               "range": false,
@@ -3868,7 +3868,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "(\n  sum by (asn) (label_replace(sum by (src_asn) (rate(xflow_asn_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",dst_asn=\"0\",src_asn!=\"0\"}[$rollup_interval])), \"asn\", \"$1\", \"src_asn\", \"(.*)\"))\n/\n  (sum by (asn) (label_replace(sum by (dst_asn) (rate(xflow_asn_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",src_asn=\"0\",dst_asn!=\"0\"}[$rollup_interval])), \"asn\", \"$1\", \"dst_asn\", \"(.*)\")) > 0)\n)",
+              "expr": "(\n  sum by (asn) (label_replace(sum by (src_asn) (rate(xflow_asn_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst_asn=\"0\",src_asn!=\"0\"}[$rollup_interval])), \"asn\", \"$1\", \"src_asn\", \"(.*)\"))\n/\n  (sum by (asn) (label_replace(sum by (dst_asn) (rate(xflow_asn_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src_asn=\"0\",dst_asn!=\"0\"}[$rollup_interval])), \"asn\", \"$1\", \"dst_asn\", \"(.*)\")) > 0)\n)",
               "format": "table",
               "instant": true,
               "range": false,
@@ -4075,7 +4075,7 @@
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "exporter",
+                  "options": "exporter_address",
                   "scope": "series"
                 },
                 "properties": [
@@ -4100,7 +4100,7 @@
             "sortBy": [
               {
                 "desc": false,
-                "displayName": "exporter"
+                "displayName": "exporter_address"
               }
             ]
           },
@@ -4112,7 +4112,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "xflow_sampling_rate{exporter=~\"$exporter\",exporter!=\"other\"}",
+              "expr": "xflow_sampling_rate{exporter_address=~\"$exporter\",exporter_address!=\"other\"}",
               "format": "table",
               "instant": true,
               "range": false,
@@ -4124,7 +4124,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (exporter, version, odid) (xflow_templates{exporter=~\"$exporter\",exporter!=\"other\"})",
+              "expr": "sum by (exporter_address, version, odid) (xflow_templates{exporter_address=~\"$exporter\",exporter_address!=\"other\"})",
               "format": "table",
               "instant": true,
               "range": false,
@@ -4136,7 +4136,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (exporter, version, odid) (increase(xflow_sequence_missed_total{exporter=~\"$exporter\",exporter!=\"other\"}[$rollup_interval]))",
+              "expr": "sum by (exporter_address, version, odid) (increase(xflow_sequence_missed_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[$rollup_interval]))",
               "format": "table",
               "instant": true,
               "range": false,
@@ -4162,7 +4162,7 @@
                   "Export lost": 5,
                   "Sampling rate": 3,
                   "Templates": 4,
-                  "exporter": 0,
+                  "exporter_address": 0,
                   "odid": 2,
                   "version": 1
                 },
@@ -4347,8 +4347,8 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "(time() - xflow_last_flow_timestamp_seconds{exporter=~\"$exporter\",exporter!=\"other\"}) < bool 900",
-              "legendFormat": "{{exporter}}",
+              "expr": "(time() - xflow_last_flow_timestamp_seconds{exporter_address=~\"$exporter\",exporter_address!=\"other\"}) < bool 900",
+              "legendFormat": "{{exporter_address}}",
               "range": true,
               "refId": "A"
             }
@@ -4426,7 +4426,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (cause) (\n   label_replace(sum by (reason) (increase(xflow_receiver_dropped_packets_total[1h])), \"cause\", \"receiver drop / $1\", \"reason\", \"(.+)\")\nor label_replace(sum by (reason) (increase(xflow_decode_errors_total{exporter=~\"$exporter\",exporter!=\"other\"}[1h])), \"cause\", \"decode reject / $1\", \"reason\", \"(.+)\")\nor label_replace(sum(increase(xflow_sequence_missed_total{exporter=~\"$exporter\",exporter!=\"other\"}[1h])), \"cause\", \"export packets lost in transit\", \"\", \"\")\nor label_replace(sum(increase(xflow_receiver_read_errors_total[1h])), \"cause\", \"socket read error\", \"\", \"\")\nor label_replace(sum(increase(xflow_exporters_refused_total[1h])), \"cause\", \"device statistics dropped at the exporter budget\", \"\", \"\")\nor label_replace(sum(increase(xflow_vendor_strings_refused_total[1h])), \"cause\", \"vendor string refused\", \"\", \"\")\nor label_replace(sum(increase(xflow_applications_refused_total[1h])), \"cause\", \"application refused\", \"\", \"\")\nor label_replace(sum(increase(xflow_domains_refused_total[1h])), \"cause\", \"observation domain refused\", \"\", \"\")\n)",
+              "expr": "sum by (cause) (\n   label_replace(sum by (reason) (increase(xflow_receiver_dropped_packets_total[1h])), \"cause\", \"receiver drop / $1\", \"reason\", \"(.+)\")\nor label_replace(sum by (reason) (increase(xflow_decode_errors_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[1h])), \"cause\", \"decode reject / $1\", \"reason\", \"(.+)\")\nor label_replace(sum(increase(xflow_sequence_missed_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}[1h])), \"cause\", \"export packets lost in transit\", \"\", \"\")\nor label_replace(sum(increase(xflow_receiver_read_errors_total[1h])), \"cause\", \"socket read error\", \"\", \"\")\nor label_replace(sum(increase(xflow_exporters_refused_total[1h])), \"cause\", \"device statistics dropped at the exporter budget\", \"\", \"\")\nor label_replace(sum(increase(xflow_vendor_strings_refused_total[1h])), \"cause\", \"vendor string refused\", \"\", \"\")\nor label_replace(sum(increase(xflow_applications_refused_total[1h])), \"cause\", \"application refused\", \"\", \"\")\nor label_replace(sum(increase(xflow_domains_refused_total[1h])), \"cause\", \"observation domain refused\", \"\", \"\")\n)",
               "instant": true,
               "legendFormat": "{{cause}}",
               "range": false,
@@ -4833,9 +4833,9 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (exporter, version) (increase(xflow_decode_errors_total{exporter=~\"$exporter\",exporter!=\"other\",reason=\"missing_template\"}[30m]))",
+              "expr": "sum by (exporter_address, version) (increase(xflow_decode_errors_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",reason=\"missing_template\"}[30m]))",
               "instant": true,
-              "legendFormat": "{{exporter}} {{version}}",
+              "legendFormat": "{{exporter_address}} {{version}}",
               "range": false,
               "refId": "A"
             }
@@ -4918,14 +4918,14 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(xflow_flows_total, exporter)",
+        "definition": "label_values(xflow_flows_total, exporter_address)",
         "includeAll": true,
         "label": "Exporter",
         "multi": true,
         "name": "exporter",
         "options": [],
         "query": {
-          "query": "label_values(xflow_flows_total, exporter)",
+          "query": "label_values(xflow_flows_total, exporter_address)",
           "refId": "exporter"
         },
         "refresh": 2,
@@ -4942,7 +4942,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "group by (address) (label_replace(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}, \"address\", \"$1\", \"src\", \"(.+)\") or label_replace(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}, \"address\", \"$1\", \"dst\", \"(.+)\") or label_replace(xflow_threat_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",address!=\"other\"}, \"address\", \"$1\", \"address\", \"(.+)\"))",
+        "definition": "group by (address) (label_replace(xflow_host_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}, \"address\", \"$1\", \"src\", \"(.+)\") or label_replace(xflow_host_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}, \"address\", \"$1\", \"dst\", \"(.+)\") or label_replace(xflow_threat_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",address!=\"other\"}, \"address\", \"$1\", \"address\", \"(.+)\"))",
         "description": "Narrows every address-keyed panel to one host. The list holds every address the host-pair and threat tables carry on either side, so an address a panel can show is an address this can select. The address links in those tables set it; All clears it.",
         "includeAll": true,
         "label": "Focus address",
@@ -4950,7 +4950,7 @@
         "name": "focus",
         "options": [],
         "query": {
-          "expr": "group by (address) (label_replace(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}, \"address\", \"$1\", \"src\", \"(.+)\") or label_replace(xflow_host_pair_bytes_total{exporter=~\"$exporter\",exporter!=\"other\"}, \"address\", \"$1\", \"dst\", \"(.+)\") or label_replace(xflow_threat_bytes_total{exporter=~\"$exporter\",exporter!=\"other\",address!=\"other\"}, \"address\", \"$1\", \"address\", \"(.+)\"))",
+          "expr": "group by (address) (label_replace(xflow_host_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}, \"address\", \"$1\", \"src\", \"(.+)\") or label_replace(xflow_host_pair_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\"}, \"address\", \"$1\", \"dst\", \"(.+)\") or label_replace(xflow_threat_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",address!=\"other\"}, \"address\", \"$1\", \"address\", \"(.+)\"))",
           "qryType": 3,
           "refId": "focus"
         },

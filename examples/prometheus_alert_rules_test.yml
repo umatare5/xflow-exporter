@@ -27,7 +27,7 @@ tests:
   # 30m case rests on keep_firing_for rather than on the expression.
   - interval: 1m
     input_series:
-      - series: 'xflow_last_flow_timestamp_seconds{job="xflow",instance="localhost:10053",exporter="192.0.2.1"}'
+      - series: 'xflow_last_flow_timestamp_seconds{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1"}'
         values: "0+0x20 1260+60x20"
     alert_rule_test:
       - eval_time: 14m
@@ -37,12 +37,12 @@ tests:
       - expr: ALERTS{alertname="XflowExporterSilent", alertstate="firing"}
         eval_time: 16m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowExporterSilent", alertstate="firing", exporter="192.0.2.1", instance="localhost:10053", job="xflow", severity="warning"}'
+          - labels: 'ALERTS{alertname="XflowExporterSilent", alertstate="firing", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow", severity="warning"}'
             value: 1
       - expr: ALERTS{alertname="XflowExporterSilent", alertstate="firing"}
         eval_time: 30m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowExporterSilent", alertstate="firing", exporter="192.0.2.1", instance="localhost:10053", job="xflow", severity="warning"}'
+          - labels: 'ALERTS{alertname="XflowExporterSilent", alertstate="firing", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow", severity="warning"}'
             value: 1
 
   # A counter that dropped in the past and has since stopped stays flat, and
@@ -67,7 +67,7 @@ tests:
 
   - interval: 1m
     input_series:
-      - series: 'xflow_decode_errors_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",version="netflow_v9",reason="malformed"}'
+      - series: 'xflow_decode_errors_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9",reason="malformed"}'
         values: "0+0x10 0+3x20"
     alert_rule_test:
       - eval_time: 10m
@@ -80,14 +80,14 @@ tests:
       - expr: ALERTS{alertname="XflowDecodeErrors", alertstate="firing"}
         eval_time: 20m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowDecodeErrors", alertstate="firing", exporter="192.0.2.1", instance="localhost:10053", job="xflow", reason="malformed", severity="warning", version="netflow_v9"}'
+          - labels: 'ALERTS{alertname="XflowDecodeErrors", alertstate="firing", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow", reason="malformed", severity="warning", version="netflow_v9"}'
             value: 1
 
   # missing_template is excluded from the general decode alert, so the 45m
   # case holds while this counter is climbing, not merely while it is flat.
   - interval: 1m
     input_series:
-      - series: 'xflow_decode_errors_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",version="netflow_v9",reason="missing_template"}'
+      - series: 'xflow_decode_errors_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9",reason="missing_template"}'
         values: "0+0x35 0+5x35"
     alert_rule_test:
       - eval_time: 45m
@@ -103,12 +103,12 @@ tests:
       - expr: ALERTS{alertname="XflowTemplatesMissing", alertstate="firing"}
         eval_time: 70m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowTemplatesMissing", alertstate="firing", exporter="192.0.2.1", instance="localhost:10053", job="xflow", reason="missing_template", severity="warning", version="netflow_v9"}'
+          - labels: 'ALERTS{alertname="XflowTemplatesMissing", alertstate="firing", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow", reason="missing_template", severity="warning", version="netflow_v9"}'
             value: 1
 
   - interval: 1m
     input_series:
-      - series: 'xflow_sequence_missed_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",version="netflow_v9",odid="256"}'
+      - series: 'xflow_sequence_missed_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9",odid="256"}'
         values: "0+0x10 0+2x20"
     alert_rule_test:
       - eval_time: 10m
@@ -121,7 +121,7 @@ tests:
       - expr: ALERTS{alertname="XflowSequenceLoss", alertstate="firing"}
         eval_time: 20m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowSequenceLoss", alertstate="firing", exporter="192.0.2.1", instance="localhost:10053", job="xflow", odid="256", severity="warning", version="netflow_v9"}'
+          - labels: 'ALERTS{alertname="XflowSequenceLoss", alertstate="firing", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow", odid="256", severity="warning", version="netflow_v9"}'
             value: 1
 
   - interval: 1m

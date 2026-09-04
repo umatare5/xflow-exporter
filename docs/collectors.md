@@ -40,11 +40,11 @@ Every module is disabled by default and enabled per `--collector.<module>` flag,
 
 ## Labels
 
-Every family carries `exporter`, and the labels beside it are its aggregation key, so two records sharing that set share one entry.
+Every family carries `exporter_address`, and the labels beside it are its aggregation key, so two records sharing that set share one entry.
 
 | Label                       | Description                                                     |
 | :-------------------------- | :-------------------------------------------------------------- |
-| `exporter`                  | The device's UDP source address, IPv4-mapped addresses unmapped |
+| `exporter_address`          | The device's UDP source address, IPv4-mapped addresses unmapped |
 | `version`                   | The protocol a record arrived in, on `exporters` alone          |
 | `src`/`dst`                 | The flow's addresses, the destination alone on `destinations`   |
 | `proto`                     | The conventional protocol name, the number where unnamed        |

@@ -54,12 +54,12 @@ func TestFlowCollector_PublishesExportersAndHosts(t *testing.T) {
 	expected := `
 # HELP xflow_exporter_bytes_total Sampling-corrected bytes per exporter and version, other carries the entry-bound fold
 # TYPE xflow_exporter_bytes_total counter
-xflow_exporter_bytes_total{exporter="192.0.2.1",version="netflow_v9"} 1500
-xflow_exporter_bytes_total{exporter="other",version="other"} 0
+xflow_exporter_bytes_total{exporter_address="192.0.2.1",version="netflow_v9"} 1500
+xflow_exporter_bytes_total{exporter_address="other",version="other"} 0
 # HELP xflow_host_pair_flows_total Flow records as exported per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_flows_total counter
-xflow_host_pair_flows_total{dst="10.0.0.2",exporter="192.0.2.1",src="10.0.0.1"} 2
-xflow_host_pair_flows_total{dst="other",exporter="other",src="other"} 0
+xflow_host_pair_flows_total{dst="10.0.0.2",exporter_address="192.0.2.1",src="10.0.0.1"} 2
+xflow_host_pair_flows_total{dst="other",exporter_address="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_exporter_bytes_total", "xflow_host_pair_flows_total"); err != nil {
@@ -90,9 +90,9 @@ func TestFlowCollector_TopKWithholdsTheLiveTail(t *testing.T) {
 	expected := `
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_bytes_total counter
-xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.1"} 5000
-xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.2"} 3000
-xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 0
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",src="10.0.0.1"} 5000
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",src="10.0.0.2"} 3000
+xflow_host_pair_bytes_total{dst="other",exporter_address="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_host_pair_bytes_total"); err != nil {
@@ -120,8 +120,8 @@ func TestFlowCollector_MinBytesWithholdsMice(t *testing.T) {
 	expected := `
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_bytes_total counter
-xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.1"} 5000
-xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 0
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",src="10.0.0.1"} 5000
+xflow_host_pair_bytes_total{dst="other",exporter_address="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_host_pair_bytes_total"); err != nil {
@@ -149,8 +149,8 @@ func TestFlowCollector_MinBytesAdmitsTheThresholdItself(t *testing.T) {
 	expected := `
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_bytes_total counter
-xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.1"} 1000
-xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 0
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",src="10.0.0.1"} 1000
+xflow_host_pair_bytes_total{dst="other",exporter_address="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_host_pair_bytes_total"); err != nil {
@@ -175,16 +175,16 @@ func TestFlowCollector_ServiceAndASNAndApplicationLabels(t *testing.T) {
 	expected := `
 # HELP xflow_application_bytes_total Sampling-corrected bytes per application, other carries the entry-bound fold
 # TYPE xflow_application_bytes_total counter
-xflow_application_bytes_total{application="https",exporter="192.0.2.1"} 700
-xflow_application_bytes_total{application="other",exporter="other"} 0
+xflow_application_bytes_total{application="https",exporter_address="192.0.2.1"} 700
+xflow_application_bytes_total{application="other",exporter_address="other"} 0
 # HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
 # TYPE xflow_asn_pair_bytes_total counter
-xflow_asn_pair_bytes_total{dst_asn="64501",exporter="192.0.2.1",src_asn="64500"} 700
-xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+xflow_asn_pair_bytes_total{dst_asn="64501",exporter_address="192.0.2.1",src_asn="64500"} 700
+xflow_asn_pair_bytes_total{dst_asn="other",exporter_address="other",src_asn="other"} 0
 # HELP xflow_service_bytes_total Sampling-corrected bytes per service five-tuple, other carries the entry-bound fold
 # TYPE xflow_service_bytes_total counter
-xflow_service_bytes_total{dst="10.0.0.2",exporter="192.0.2.1",port="443",proto="tcp",src="10.0.0.1"} 700
-xflow_service_bytes_total{dst="other",exporter="other",port="other",proto="other",src="other"} 0
+xflow_service_bytes_total{dst="10.0.0.2",exporter_address="192.0.2.1",port="443",proto="tcp",src="10.0.0.1"} 700
+xflow_service_bytes_total{dst="other",exporter_address="other",port="other",proto="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_service_bytes_total", "xflow_asn_pair_bytes_total",
@@ -308,9 +308,9 @@ func TestFlowCollector_CountryPairs(t *testing.T) {
 	expected := `
 # HELP xflow_country_pair_bytes_total Sampling-corrected bytes per country pair, other carries the entry-bound fold
 # TYPE xflow_country_pair_bytes_total counter
-xflow_country_pair_bytes_total{dst_country="US",exporter="192.0.2.1",src_country="JP"} 700
-xflow_country_pair_bytes_total{dst_country="US",exporter="192.0.2.1",src_country="unknown"} 300
-xflow_country_pair_bytes_total{dst_country="other",exporter="other",src_country="other"} 0
+xflow_country_pair_bytes_total{dst_country="US",exporter_address="192.0.2.1",src_country="JP"} 700
+xflow_country_pair_bytes_total{dst_country="US",exporter_address="192.0.2.1",src_country="unknown"} 300
+xflow_country_pair_bytes_total{dst_country="other",exporter_address="other",src_country="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_country_pair_bytes_total"); err != nil {
@@ -338,8 +338,8 @@ func TestFlowCollector_DestinationLabels(t *testing.T) {
 	expected := `
 # HELP xflow_destination_bytes_total Sampling-corrected bytes per destination service, other carries the entry-bound fold
 # TYPE xflow_destination_bytes_total counter
-xflow_destination_bytes_total{dst="10.0.0.2",exporter="192.0.2.1",port="443",proto="tcp"} 1000
-xflow_destination_bytes_total{dst="other",exporter="other",port="other",proto="other"} 0
+xflow_destination_bytes_total{dst="10.0.0.2",exporter_address="192.0.2.1",port="443",proto="tcp"} 1000
+xflow_destination_bytes_total{dst="other",exporter_address="other",port="other",proto="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_destination_bytes_total"); err != nil {
@@ -421,12 +421,12 @@ func TestFlowCollector_TCPFlagsAndDSCPLabels(t *testing.T) {
 	expected := `
 # HELP xflow_dscp_bytes_total Sampling-corrected bytes per DSCP class, other carries the entry-bound fold
 # TYPE xflow_dscp_bytes_total counter
-xflow_dscp_bytes_total{dscp="ef",exporter="192.0.2.1"} 700
-xflow_dscp_bytes_total{dscp="other",exporter="other"} 0
+xflow_dscp_bytes_total{dscp="ef",exporter_address="192.0.2.1"} 700
+xflow_dscp_bytes_total{dscp="other",exporter_address="other"} 0
 # HELP xflow_tcp_flags_bytes_total Sampling-corrected bytes per TCP control-bit profile, other carries the entry-bound fold
 # TYPE xflow_tcp_flags_bytes_total counter
-xflow_tcp_flags_bytes_total{exporter="192.0.2.1",flags="syn,ack"} 700
-xflow_tcp_flags_bytes_total{exporter="other",flags="other"} 0
+xflow_tcp_flags_bytes_total{exporter_address="192.0.2.1",flags="syn,ack"} 700
+xflow_tcp_flags_bytes_total{exporter_address="other",flags="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_tcp_flags_bytes_total", "xflow_dscp_bytes_total"); err != nil {
@@ -568,8 +568,8 @@ xflow_asn_info{asn="64514",organization="AS 64514"} 1
 xflow_asn_info{asn="64515",organization="AS 64515"} 1
 # HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
 # TYPE xflow_asn_pair_bytes_total counter
-xflow_asn_pair_bytes_total{dst_asn="64515",exporter="192.0.2.1",src_asn="64514"} 107
-xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+xflow_asn_pair_bytes_total{dst_asn="64515",exporter_address="192.0.2.1",src_asn="64514"} 107
+xflow_asn_pair_bytes_total{dst_asn="other",exporter_address="other",src_asn="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_asn_info", "xflow_asn_pair_bytes_total"); err != nil {
@@ -615,8 +615,8 @@ xflow_asn_info{asn="64500",organization="AS 64500"} 1
 xflow_asn_info{asn="64501",organization="AS 64501"} 1
 # HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
 # TYPE xflow_asn_pair_bytes_total counter
-xflow_asn_pair_bytes_total{dst_asn="64501",exporter="192.0.2.1",src_asn="64500"} 5000
-xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+xflow_asn_pair_bytes_total{dst_asn="64501",exporter_address="192.0.2.1",src_asn="64500"} 5000
+xflow_asn_pair_bytes_total{dst_asn="other",exporter_address="other",src_asn="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_asn_info", "xflow_asn_pair_bytes_total"); err != nil {
@@ -657,8 +657,8 @@ xflow_asn_info{asn="64500",organization="AS 64500"} 1
 xflow_asn_info{asn="64501",organization="AS 64501"} 1
 # HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
 # TYPE xflow_asn_pair_bytes_total counter
-xflow_asn_pair_bytes_total{dst_asn="64501",exporter="192.0.2.1",src_asn="64500"} 5000
-xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+xflow_asn_pair_bytes_total{dst_asn="64501",exporter_address="192.0.2.1",src_asn="64500"} 5000
+xflow_asn_pair_bytes_total{dst_asn="other",exporter_address="other",src_asn="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_asn_info", "xflow_asn_pair_bytes_total"); err != nil {
@@ -693,8 +693,8 @@ func TestFlowCollector_ASNNameNoLabelCanHoldCostsItsOwnSeries(t *testing.T) {
 xflow_asn_info{asn="64501",organization="Example Peering"} 1
 # HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
 # TYPE xflow_asn_pair_bytes_total counter
-xflow_asn_pair_bytes_total{dst_asn="64501",exporter="192.0.2.1",src_asn="64500"} 400
-xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+xflow_asn_pair_bytes_total{dst_asn="64501",exporter_address="192.0.2.1",src_asn="64500"} 400
+xflow_asn_pair_bytes_total{dst_asn="other",exporter_address="other",src_asn="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_asn_info", "xflow_asn_pair_bytes_total"); err != nil {

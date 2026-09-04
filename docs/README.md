@@ -16,7 +16,7 @@ Reference pages for xflow-exporter. The [README](../README.md) covers getting fl
 - **Scrapes never wait** — a scrape reads the tables as they stand, whatever is arriving.
 - **No target to probe** — nothing answers an `up`-style reachability check toward a sender.
 - **Liveness** — `xflow_last_flow_timestamp_seconds` is what silence is read from.
-- **Naming** — RFC 7011 calls the device the exporter, and so does the `exporter` label.
+- **Naming** — RFC 7011 calls the device the exporter, and the `exporter_address` label carries the address it exported from.
 - **Tuning** — `--receiver.*`, `--parser.*` and `--aggregation.*` bound the receive path.
 - **Batching** — Linux read loops use `recvmmsg`, and elsewhere it is one per call.
 
@@ -164,7 +164,7 @@ A NetFlow-Lite record carries one sampled packet section instead of parsed flow 
 
 - **A ranking, not a total** — the tail below the Top-K cut reaches no recorded series.
 - **The one exception** — `xflow_exporter_*` takes no cut, so the ratios divide by it.
-- **`exporter` is kept** — two observation points in one path export a flow twice.
+- **`exporter_address` is kept** — two observation points in one path export a flow twice.
 - **Ordering** — a derived rule reads only rules recorded earlier in its own group.
 - **Scrape path only** — `--remote-write.url` ships the registry no rule has seen.
 

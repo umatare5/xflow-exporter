@@ -9,7 +9,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "xflow-exporter has heard nothing from {{ $labels.exporter }}"
+          summary: "xflow-exporter has heard nothing from {{ $labels.exporter_address }}"
           description: >-
             No datagram from this device has decoded for 15 minutes. Every
             counter it feeds is frozen, which rate() reports as zero, so this
@@ -35,7 +35,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "xflow-exporter is rejecting datagrams from {{ $labels.exporter }}"
+          summary: "xflow-exporter is rejecting datagrams from {{ $labels.exporter_address }}"
           description: >-
             Datagrams failed to decode for a reason other than a template
             that has not arrived yet. A rising counter here means malformed
@@ -47,7 +47,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "xflow-exporter still lacks templates from {{ $labels.exporter }}"
+          summary: "xflow-exporter still lacks templates from {{ $labels.exporter_address }}"
           description: >-
             Data flowsets keep arriving without their template half an hour
             after the counter started rising. Devices resend templates every
@@ -59,7 +59,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "xflow-exporter is missing export packets from {{ $labels.exporter }}"
+          summary: "xflow-exporter is missing export packets from {{ $labels.exporter_address }}"
           description: >-
             The export sequence numbers say packets were lost between the
             device and this exporter. The flows they carried are missing

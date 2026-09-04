@@ -91,7 +91,7 @@ func testRegistry(t *testing.T) *prometheus.Registry {
 
 	counter := prometheus.NewCounterVec(
 		prometheus.CounterOpts{Name: "xflow_probe_total", Help: "probe"},
-		[]string{"exporter"},
+		[]string{"exporter_address"},
 	)
 	counter.WithLabelValues("192.0.2.1").Add(7)
 	reg.MustRegister(counter)
