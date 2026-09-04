@@ -225,6 +225,8 @@ Method 8, full flow, is the shape the Catalyst family shares: addresses first, n
 
 ## NetFlow v9 and IPFIX
 
+NetFlow v9 and IPFIX are distinct protocols that share one template mechanism, which is why a single section covers both. IPFIX carries `0x000A` in the version field NetFlow numbered up to 9, so it is also called NetFlow v10 — a name the IETF never used. [IPFIX against NetFlow v9](#ipfix-against-netflow-v9) tabulates where the two part company.
+
 Templates are cached per exporter address and Observation Domain ID together, as RFC 7011 requires, and per protocol besides. The pair RFC 7011 names is not enough here: a v9 Source ID, an IPFIX Observation Domain ID and an sFlow sub-agent id are numbered independently over one range, so two collide on any repeated value. The 256 floor RFC 7011 sets is on template ids, not on these, so with the protocol in the key two domains reusing one template ID never corrupt each other.
 
 - A Catalyst 9800-CL exporting v9 and IPFIX at once numbers both protocols' options templates 256 and 257 under domain 1, so one address announces each id twice with different field counts.
