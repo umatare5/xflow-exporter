@@ -7,7 +7,6 @@ Every listener accepts every protocol below, identified per datagram. Transport 
 | [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Cisco C891FJ (planned)                    |
 | [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Cisco C891FJ (planned)                    |
 | [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Cisco WS-C2960CX-8PC-L, Cisco C9800-CL-K9 |
-| [NetFlow Lite](#netflow-lite) (packet sections)         | Supported | Awaiting a device                         |
 | [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Cisco C9800-CL-K9                         |
 | [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G (planned)                      |
 
@@ -456,13 +455,9 @@ The enterprise bit is what makes an IPFIX field specifier variable in size.
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
-## NetFlow Lite
+## Packet sections
 
-A sampled packet section rides one v9 or IPFIX record in place of parsed flow fields, and decodes through the same header walk the sFlow decoder uses. No Catalyst bearing the NetFlow Lite name exports one: the 2960-X, 2960-CX and 3560-CX guides expose parsed `match` and `collect` fields only, and restrict their exporter to v9. This heading names the record shape the white paper describes, not those platforms.
-
-- Elements: the deprecated v9 field 104 (`layer2packetSectionData`), and IPFIX `dataLinkFrameSection` (315), `ipHeaderPacketSection` (313), `dataLinkFrameSize` (312).
-- The section is walked only where the record carries neither address, so the device's own parse wins; the walk then supplies the addresses, protocol, TOS, ports and flags. One record reads as one sampled packet.
-- The 309/310 `samplingSize`/`samplingPopulation` options pair feeds the sampling correction.
+A record carrying a sampled packet section in place of parsed flow fields decodes through the same header walk the sFlow decoder uses, one record reading as one sampled packet. The section is walked only where the record carries neither address, so a device's own parse wins whole — the walk then supplies the addresses, protocol, TOS, ports and flags. The 309/310 `samplingSize`/`samplingPopulation` options pair feeds the sampling correction.
 
 | Element                   | ID  | Carries                                     |
 | :------------------------ | :-- | :------------------------------------------ |
@@ -471,12 +466,10 @@ A sampled packet section rides one v9 or IPFIX record in place of parsed flow fi
 | `ipHeaderPacketSection`   | 313 | A section that starts at the IP header      |
 | `dataLinkFrameSize`       | 312 | The original frame length, before slicing   |
 
-A fixed-width v9 section is zero-padded, so a frame cut before its transport header reads zero ports — and a flags profile of `none` from the padded flags byte — the one ambiguity a padded section cannot escape.
+The section is taken at whatever width the template declares for the field. A fixed-width v9 section is zero-padded, so a frame cut before its transport header reads zero ports and a flags profile of `none` — the one ambiguity a padded section cannot escape. No device here exports a section, so this path is covered by fixtures alone.
 
-The white paper's own table gives no length for 104, nor for the offset and size elements 102 and 103 beside it, so the section is taken at whatever width the template declares for the field.
-
-> [!IMPORTANT]
-> No device available here exports a section, so this path is covered by fixtures alone — the table at the top of this page carries what each decoder has met.
+> [!TIP]
+> NetFlow Lite carries no section. Cisco's overview of the feature covers the Catalyst 2960-X, 2960-XR, 2960-CX and 3560-CX, and states it classifies packets into flows on the switch and samples ingress only. A 2960-CX measured here accepts `collect interface output`, then reports `0` for every unicast flow.
 
 ## sFlow v5
 

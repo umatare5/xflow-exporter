@@ -12,7 +12,7 @@ A minor release may rename or remove a metric. Every collector module flag is of
 - [#24](https://github.com/umatare5/xflow-exporter/pull/24) — Update dependency golangci/golangci-lint to v2.13.2
 - [#25](https://github.com/umatare5/xflow-exporter/pull/25) — Rename exporter to exporter_address, add the interface pair and the naming series
 - [#26](https://github.com/umatare5/xflow-exporter/pull/26) — Update umatare5/common action to v0.18.0
-- [#27](https://github.com/umatare5/xflow-exporter/pull/27) — Record the verified devices, and separate NetFlow v9, IPFIX and NetFlow Lite by name
+- [#27](https://github.com/umatare5/xflow-exporter/pull/27) — Record the verified devices, separate NetFlow v9 from IPFIX, and document packet sections by their own name
 
 ## [v0.8.0]
 

@@ -68,7 +68,7 @@ Every family carries `exporter_address`, and the labels beside it are its aggreg
 
 **`version`**
 
-NetFlow Lite is NetFlow v9 on the wire and reads `netflow_v9`, the packet section it carries being a record shape rather than a version of its own.
+A packet section is a record shape rather than a version of its own, so a record carrying one reads `netflow_v9` or `ipfix` like any other.
 
 **`flags`**
 

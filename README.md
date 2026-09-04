@@ -63,7 +63,7 @@ See [Prometheus Configuration](#prometheus-configuration) for the job and the al
 
 ## Protocol Support
 
-NetFlow v5/v8/v9, NetFlow Lite, IPFIX and sFlow v5, over plaintext UDP — see [Protocols](docs/protocols.md).
+NetFlow v5/v8/v9, IPFIX and sFlow v5, over plaintext UDP — see [Protocols](docs/protocols.md).
 
 ## Syntax
 
