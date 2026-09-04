@@ -8,6 +8,7 @@
 package collector
 
 import (
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/umatare5/xflow-exporter/internal/aggregator"
 	"github.com/umatare5/xflow-exporter/internal/config"
+	"github.com/umatare5/xflow-exporter/internal/enrich"
 )
 
 // otherLabel is the label value of the fold bucket.
@@ -106,20 +108,29 @@ type FlowCollector struct {
 	countries    familyDescs
 	threats      familyDescs
 
+	// names reads the mapping file's snapshot, nil where no mapping file is
+	// configured.
+	names             func() *enrich.NameSet
+	deviceInfoDesc    *prometheus.Desc
+	interfaceInfoDesc *prometheus.Desc
+
 	entriesDesc   *prometheus.Desc
 	evictionsDesc *prometheus.Desc
 	overflowDesc  *prometheus.Desc
 }
 
 // NewFlowCollector creates a collector over the aggregator.
-// asnNames answers what a database calls an AS. It is nil where no ASN
-// database is enabled, and the naming series is then absent rather than empty.
+// asnNames answers what a database calls an AS and names reads the mapping
+// file's snapshot. Either is nil where its source is not enabled, and the
+// naming series it feeds is then absent rather than empty.
 func NewFlowCollector(
-	src FlowSource, modules config.Collectors, agg config.Aggregation, asnNames func(uint32) (string, bool),
+	src FlowSource, modules config.Collectors, agg config.Aggregation,
+	asnNames func(uint32) (string, bool), names func() *enrich.NameSet,
 ) *FlowCollector {
 	c := &FlowCollector{
 		src:      src,
 		asnNames: asnNames,
+		names:    names,
 		modules:  modules,
 		topK:     agg.TopK,
 		minBytes: uint64(agg.MinBytes), //nolint:gosec // Validate rejects negatives.
@@ -146,11 +157,11 @@ func NewFlowCollector(
 	}
 	if modules.Hosts {
 		c.hosts = newFamilyDescs("xflow_host_pair", "source-destination pair",
-			[]string{labelExporter, labelSrc, labelDst})
+			[]string{labelExporter, labelSrc, labelDst, labelInputIf, labelOutputIf})
 	}
 	if modules.Services {
 		c.services = newFamilyDescs("xflow_service", "service five-tuple",
-			[]string{labelExporter, labelSrc, labelDst, labelProto, labelPort})
+			[]string{labelExporter, labelSrc, labelDst, labelProto, labelPort, labelInputIf, labelOutputIf})
 	}
 	if modules.Destinations {
 		c.destinations = newFamilyDescs("xflow_destination", "destination service",
@@ -183,7 +194,19 @@ func NewFlowCollector(
 	}
 	if modules.Threats {
 		c.threats = newFamilyDescs("xflow_threat", "flagged address",
-			[]string{labelExporter, labelAddress, labelDirection})
+			[]string{labelExporter, labelAddress, labelDirection, labelInputIf, labelOutputIf})
+	}
+	if names != nil {
+		c.deviceInfoDesc = prometheus.NewDesc(
+			"xflow_device_info",
+			"Always 1, carrying what the mapping file calls each device it names",
+			[]string{labelExporter, labelExporterName}, nil,
+		)
+		c.interfaceInfoDesc = prometheus.NewDesc(
+			"xflow_interface_info",
+			"Always 1, carrying what the mapping file calls each interface the tables publish",
+			[]string{labelExporter, labelIfIndex, labelIfName}, nil,
+		)
 	}
 
 	return c
@@ -224,6 +247,10 @@ func (c *FlowCollector) Describe(ch chan<- *prometheus.Desc) {
 	if c.modules.Threats {
 		c.threats.describe(ch)
 	}
+	if c.deviceInfoDesc != nil {
+		ch <- c.deviceInfoDesc
+		ch <- c.interfaceInfoDesc
+	}
 	ch <- c.entriesDesc
 	ch <- c.evictionsDesc
 	ch <- c.overflowDesc
@@ -233,14 +260,30 @@ func (c *FlowCollector) Describe(ch chan<- *prometheus.Desc) {
 func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
 	c.collectHealth(ch)
 
+	// One read of the snapshot serves the whole scrape, so a reload landing
+	// mid-scrape cannot name one table's ports from one set and another's
+	// from the next.
+	var names *enrich.NameSet
+	if c.names != nil {
+		names = c.names()
+	}
+	var crossed map[interfaceRef]struct{}
+	if names != nil {
+		crossed = make(map[interfaceRef]struct{})
+	}
+
 	if c.modules.Exporters {
 		c.collectExporters(ch)
 	}
 	if c.modules.Hosts {
-		collectFamily(c, ch, &c.hosts, c.src.Hosts, hostLabels)
+		for _, e := range collectFamily(c, ch, &c.hosts, c.src.Hosts, hostLabels) {
+			noteInterfaces(crossed, e.Key.Exporter, e.Key.InputIf, e.Key.OutputIf)
+		}
 	}
 	if c.modules.Services {
-		collectFamily(c, ch, &c.services, c.src.Services, serviceLabels)
+		for _, e := range collectFamily(c, ch, &c.services, c.src.Services, serviceLabels) {
+			noteInterfaces(crossed, e.Key.Exporter, e.Key.InputIf, e.Key.OutputIf)
+		}
 	}
 	if c.modules.Destinations {
 		collectFamily(c, ch, &c.destinations, c.src.Destinations, destinationLabels)
@@ -262,7 +305,74 @@ func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
 		collectFamily(c, ch, &c.countries, c.src.Countries, countryLabels)
 	}
 	if c.modules.Threats {
-		collectFamily(c, ch, &c.threats, c.src.Threats, threatLabels)
+		for _, e := range collectFamily(c, ch, &c.threats, c.src.Threats, threatLabels) {
+			noteInterfaces(crossed, e.Key.Exporter, e.Key.InputIf, e.Key.OutputIf)
+		}
+	}
+
+	c.collectNames(ch, names, crossed)
+}
+
+// interfaceRef names one port of one device, which is what the three tables
+// carrying the interface pair deduplicate to.
+type interfaceRef struct {
+	exporter netip.Addr
+	ifIndex  uint32
+}
+
+// noteInterfaces records the ports one published entry crossed. A `0` is an
+// interface the export did not name, so it addresses nothing to look up.
+func noteInterfaces(into map[interfaceRef]struct{}, exporter netip.Addr, ifIndexes ...uint32) {
+	if into == nil {
+		return
+	}
+	for _, ifIndex := range ifIndexes {
+		if ifIndex == 0 {
+			continue
+		}
+		into[interfaceRef{exporter, ifIndex}] = struct{}{}
+	}
+}
+
+// collectNames publishes the two naming series, each carrying what the
+// mapping file calls something the counters key by number.
+//
+// The device rows take no cut: the file's own device count bounds them, which
+// is the fleet's cardinality rather than the traffic's. The interface rows
+// follow the cut the three tables took, so a port whose entries fell below it
+// loses its name with them, and a name the file does not carry produces no
+// row at all -- a join finding nothing is how absence reads here.
+func (c *FlowCollector) collectNames(
+	ch chan<- prometheus.Metric, names *enrich.NameSet, crossed map[interfaceRef]struct{},
+) {
+	if names == nil {
+		return
+	}
+
+	// A file string reaches the label unchecked past the parse, which
+	// rejects a blank or unprintable name but not every byte Prometheus
+	// refuses. Dropping the one row it cannot hold costs that row, where the
+	// panic MustNewConstMetric would raise costs every family behind it.
+	for exporter, hostname := range names.Devices() {
+		m, err := prometheus.NewConstMetric(c.deviceInfoDesc, prometheus.GaugeValue, 1,
+			exporter.String(), hostname)
+		if err != nil {
+			continue
+		}
+		ch <- m
+	}
+
+	for ref := range crossed {
+		ifName, ok := names.Interface(ref.exporter, ref.ifIndex)
+		if !ok {
+			continue
+		}
+		m, err := prometheus.NewConstMetric(c.interfaceInfoDesc, prometheus.GaugeValue, 1,
+			ref.exporter.String(), ifIndexLabel(ref.ifIndex), ifName)
+		if err != nil {
+			continue
+		}
+		ch <- m
 	}
 }
 
@@ -363,13 +473,17 @@ func (c *FlowCollector) collectHealth(ch chan<- prometheus.Metric) {
 // Label builders per family.
 
 func hostLabels(k aggregator.HostKey) []string {
-	return []string{k.Exporter.String(), k.Src.String(), k.Dst.String()}
+	return []string{
+		k.Exporter.String(), k.Src.String(), k.Dst.String(),
+		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf),
+	}
 }
 
 func serviceLabels(k aggregator.ServiceKey) []string {
 	return []string{
 		k.Exporter.String(), k.Src.String(), k.Dst.String(),
 		protocolName(k.Protocol), strconv.Itoa(int(k.Port)),
+		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf),
 	}
 }
 
@@ -459,7 +573,18 @@ func countryLabels(k aggregator.CountryKey) []string {
 
 // threatLabels renders one flagged address and the side it was seen on.
 func threatLabels(k aggregator.ThreatKey) []string {
-	return []string{k.Exporter.String(), k.Address.String(), k.Direction}
+	return []string{
+		k.Exporter.String(), k.Address.String(), k.Direction,
+		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf),
+	}
+}
+
+// ifIndexLabel spells one interface. RFC 2863 numbers an interface from 1, so
+// 0 cannot collide with a port and is what an interface the export does not
+// name folds to -- an empty label would be one Prometheus cannot tell from a
+// label never set, and one Remote Write 2.0 refuses to carry.
+func ifIndexLabel(ifIndex uint32) string {
+	return strconv.FormatUint(uint64(ifIndex), 10)
 }
 
 // countryLabel spells one side of a pair.

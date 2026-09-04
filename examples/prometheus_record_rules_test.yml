@@ -15,24 +15,24 @@ tests:
   # ones.
   - interval: 1m
     input_series:
-      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",version="netflow_v9"}'
+      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9"}'
         values: "0+60000x10"
-      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",version="ipfix"}'
+      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="ipfix"}'
         values: "0+30000x10"
-      - series: 'xflow_exporter_packets_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",version="netflow_v9"}'
+      - series: 'xflow_exporter_packets_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9"}'
         values: "0+60x10"
-      - series: 'xflow_exporter_packets_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",version="ipfix"}'
+      - series: 'xflow_exporter_packets_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="ipfix"}'
         values: "0+30x10"
     promql_expr_test:
       - expr: exporter:xflow_exporter_bytes:rate5m
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter:xflow_exporter_bytes:rate5m{exporter="192.0.2.1", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter:xflow_exporter_bytes:rate5m{exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
             value: 1500
       - expr: exporter:xflow_exporter_bytes_per_packet:ratio5m
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter:xflow_exporter_bytes_per_packet:ratio5m{exporter="192.0.2.1", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter:xflow_exporter_bytes_per_packet:ratio5m{exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
             value: 1000
 
   # A device whose packet counter never moves has no mean packet size. The
@@ -40,9 +40,9 @@ tests:
   # would leave behind.
   - interval: 1m
     input_series:
-      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",version="netflow_v9"}'
+      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9"}'
         values: "0+60000x10"
-      - series: 'xflow_exporter_packets_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",version="netflow_v9"}'
+      - series: 'xflow_exporter_packets_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9"}'
         values: "0+0x10"
     promql_expr_test:
       - expr: exporter:xflow_exporter_bytes_per_packet:ratio5m
@@ -54,44 +54,44 @@ tests:
   # country of that name under an exporter of that name.
   - interval: 1m
     input_series:
-      - series: 'xflow_country_pair_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",src_country="private",dst_country="US"}'
+      - series: 'xflow_country_pair_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",src_country="private",dst_country="US"}'
         values: "0+30000x10"
-      - series: 'xflow_country_pair_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",src_country="private",dst_country="CN"}'
+      - series: 'xflow_country_pair_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",src_country="private",dst_country="CN"}'
         values: "0+12000x10"
-      - series: 'xflow_country_pair_bytes_total{job="xflow",instance="localhost:10053",exporter="other",src_country="other",dst_country="other"}'
+      - series: 'xflow_country_pair_bytes_total{job="xflow",instance="localhost:10053",exporter_address="other",src_country="other",dst_country="other"}'
         values: "0+6000x10"
     promql_expr_test:
       - expr: exporter_src_country:xflow_country_pair_bytes:rate5m
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter_src_country:xflow_country_pair_bytes:rate5m{exporter="192.0.2.1", instance="localhost:10053", job="xflow", src_country="private"}'
+          - labels: 'exporter_src_country:xflow_country_pair_bytes:rate5m{exporter_address="192.0.2.1", instance="localhost:10053", job="xflow", src_country="private"}'
             value: 700
-          - labels: 'exporter_src_country:xflow_country_pair_bytes:rate5m{exporter="other", instance="localhost:10053", job="xflow", src_country="other"}'
+          - labels: 'exporter_src_country:xflow_country_pair_bytes:rate5m{exporter_address="other", instance="localhost:10053", job="xflow", src_country="other"}'
             value: 100
       - expr: exporter_dst_country:xflow_country_pair_bytes:rate5m{dst_country="CN"}
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter_dst_country:xflow_country_pair_bytes:rate5m{dst_country="CN", exporter="192.0.2.1", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter_dst_country:xflow_country_pair_bytes:rate5m{dst_country="CN", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
             value: 200
 
   # Two pairs reaching one AS sum on the destination side and stay apart on
   # the source side, which is the reduction the transit ranking rests on.
   - interval: 1m
     input_series:
-      - series: 'xflow_asn_pair_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",src_asn="0",dst_asn="13335"}'
+      - series: 'xflow_asn_pair_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",src_asn="0",dst_asn="13335"}'
         values: "0+60000x10"
-      - series: 'xflow_asn_pair_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",src_asn="64512",dst_asn="13335"}'
+      - series: 'xflow_asn_pair_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",src_asn="64512",dst_asn="13335"}'
         values: "0+30000x10"
     promql_expr_test:
       - expr: exporter_dst_asn:xflow_asn_pair_bytes:rate5m
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter_dst_asn:xflow_asn_pair_bytes:rate5m{dst_asn="13335", exporter="192.0.2.1", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter_dst_asn:xflow_asn_pair_bytes:rate5m{dst_asn="13335", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
             value: 1500
       - expr: exporter_src_asn:xflow_asn_pair_bytes:rate5m{src_asn="64512"}
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter_src_asn:xflow_asn_pair_bytes:rate5m{exporter="192.0.2.1", instance="localhost:10053", job="xflow", src_asn="64512"}'
+          - labels: 'exporter_src_asn:xflow_asn_pair_bytes:rate5m{exporter_address="192.0.2.1", instance="localhost:10053", job="xflow", src_asn="64512"}'
             value: 500
 
   # The shares are taken against the classified bytes, so they close on one.
@@ -99,30 +99,30 @@ tests:
   # which is a measured share rather than an absent one.
   - interval: 1m
     input_series:
-      - series: 'xflow_dscp_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",dscp="ef"}'
+      - series: 'xflow_dscp_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",dscp="ef"}'
         values: "0+15000x10"
-      - series: 'xflow_dscp_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",dscp="cs0"}'
+      - series: 'xflow_dscp_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",dscp="cs0"}'
         values: "0+45000x10"
-      - series: 'xflow_dscp_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",dscp="af41"}'
+      - series: 'xflow_dscp_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",dscp="af41"}'
         values: "0+0x10"
     promql_expr_test:
       - expr: exporter_dscp:xflow_dscp_bytes:ratio5m
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter_dscp:xflow_dscp_bytes:ratio5m{dscp="ef", exporter="192.0.2.1", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter_dscp:xflow_dscp_bytes:ratio5m{dscp="ef", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
             value: 0.25
-          - labels: 'exporter_dscp:xflow_dscp_bytes:ratio5m{dscp="cs0", exporter="192.0.2.1", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter_dscp:xflow_dscp_bytes:ratio5m{dscp="cs0", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
             value: 0.75
-          - labels: 'exporter_dscp:xflow_dscp_bytes:ratio5m{dscp="af41", exporter="192.0.2.1", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter_dscp:xflow_dscp_bytes:ratio5m{dscp="af41", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
             value: 0
 
   # A device whose whole classified table is flat leaves the denominator
   # empty, so no class publishes a share at all.
   - interval: 1m
     input_series:
-      - series: 'xflow_dscp_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",dscp="ef"}'
+      - series: 'xflow_dscp_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",dscp="ef"}'
         values: "0+0x10"
-      - series: 'xflow_dscp_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",dscp="cs0"}'
+      - series: 'xflow_dscp_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",dscp="cs0"}'
         values: "0+0x10"
     promql_expr_test:
       - expr: exporter_dscp:xflow_dscp_bytes:ratio5m
@@ -134,15 +134,15 @@ tests:
   # every bit it ever set.
   - interval: 1m
     input_series:
-      - series: 'xflow_tcp_flags_flows_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",flags="syn"}'
+      - series: 'xflow_tcp_flags_flows_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",flags="syn"}'
         values: "0+30x10"
-      - series: 'xflow_tcp_flags_flows_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",flags="fin,syn,psh,ack"}'
+      - series: 'xflow_tcp_flags_flows_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",flags="fin,syn,psh,ack"}'
         values: "0+90x10"
     promql_expr_test:
       - expr: exporter_flags:xflow_tcp_flags_flows:ratio5m{flags="syn"}
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter_flags:xflow_tcp_flags_flows:ratio5m{exporter="192.0.2.1", flags="syn", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter_flags:xflow_tcp_flags_flows:ratio5m{exporter_address="192.0.2.1", flags="syn", instance="localhost:10053", job="xflow"}'
             value: 0.25
 
   # Two hosts reached on one service sum into one port series, the protocol
@@ -150,48 +150,48 @@ tests:
   # destination entries against the device's uncut total.
   - interval: 1m
     input_series:
-      - series: 'xflow_destination_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",dst="198.51.100.10",proto="udp",port="123"}'
+      - series: 'xflow_destination_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",dst="198.51.100.10",proto="udp",port="123"}'
         values: "0+30000x10"
-      - series: 'xflow_destination_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",dst="198.51.100.11",proto="udp",port="123"}'
+      - series: 'xflow_destination_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",dst="198.51.100.11",proto="udp",port="123"}'
         values: "0+30000x10"
-      - series: 'xflow_destination_packets_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",dst="198.51.100.10",proto="udp",port="123"}'
+      - series: 'xflow_destination_packets_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",dst="198.51.100.10",proto="udp",port="123"}'
         values: "0+60x10"
-      - series: 'xflow_destination_packets_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",dst="198.51.100.11",proto="udp",port="53"}'
+      - series: 'xflow_destination_packets_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",dst="198.51.100.11",proto="udp",port="53"}'
         values: "0+30x10"
-      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",version="netflow_v9"}'
+      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9"}'
         values: "0+120000x10"
     promql_expr_test:
       - expr: exporter_proto_port:xflow_destination_bytes:rate5m
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter_proto_port:xflow_destination_bytes:rate5m{exporter="192.0.2.1", instance="localhost:10053", job="xflow", port="123", proto="udp"}'
+          - labels: 'exporter_proto_port:xflow_destination_bytes:rate5m{exporter_address="192.0.2.1", instance="localhost:10053", job="xflow", port="123", proto="udp"}'
             value: 1000
       - expr: exporter_proto:xflow_destination_packets:rate5m
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter_proto:xflow_destination_packets:rate5m{exporter="192.0.2.1", instance="localhost:10053", job="xflow", proto="udp"}'
+          - labels: 'exporter_proto:xflow_destination_packets:rate5m{exporter_address="192.0.2.1", instance="localhost:10053", job="xflow", proto="udp"}'
             value: 1.5
       - expr: exporter:xflow_destination_bytes:ratio5m
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter:xflow_destination_bytes:ratio5m{exporter="192.0.2.1", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter:xflow_destination_bytes:ratio5m{exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
             value: 0.5
 
-  # The address is what the reduction drops; the side of the flow it was seen
-  # on is what it keeps.
+  # The address and the interfaces crossed are what the reduction drops; the
+  # side of the flow the address was seen on is what it keeps.
   - interval: 1m
     input_series:
-      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",address="203.0.113.5",direction="dst"}'
+      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.5",direction="dst",input_ifindex="3",output_ifindex="4"}'
         values: "0+6000x10"
-      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",address="203.0.113.6",direction="dst"}'
+      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.6",direction="dst",input_ifindex="5",output_ifindex="4"}'
         values: "0+6000x10"
-      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter="192.0.2.1",address="203.0.113.7",direction="src"}'
+      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.7",direction="src",input_ifindex="4",output_ifindex="3"}'
         values: "0+3000x10"
     promql_expr_test:
       - expr: exporter_direction:xflow_threat_bytes:rate5m
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter_direction:xflow_threat_bytes:rate5m{direction="dst", exporter="192.0.2.1", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter_direction:xflow_threat_bytes:rate5m{direction="dst", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
             value: 200
-          - labels: 'exporter_direction:xflow_threat_bytes:rate5m{direction="src", exporter="192.0.2.1", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter_direction:xflow_threat_bytes:rate5m{direction="src", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
             value: 50

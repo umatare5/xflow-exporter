@@ -822,3 +822,43 @@ func BenchmarkDecodeNetFlowV9AppName(b *testing.B) {
 		}
 	}
 }
+
+// TestDecodeV9_InterfacesAtTheDefaultWidth pins the interface fields at the
+// two octets RFC 3954 gives them by default, which is what a device that
+// declares no width of its own sends. The happy-path fixture declares four,
+// so a reader hard-wired to that width would decode every test here and no
+// access switch in the field.
+func TestDecodeV9_InterfacesAtTheDefaultWidth(t *testing.T) {
+	t.Parallel()
+
+	const templateID = 310
+
+	template := flowSet(templateFlowSetID, templateSpec(templateID,
+		[2]uint16{fieldIPv4SrcAddr, 4},
+		[2]uint16{fieldIPv4DstAddr, 4},
+		[2]uint16{fieldProtocol, 1},
+		[2]uint16{fieldInputSNMP, 2},
+		[2]uint16{fieldOutputSNMP, 2},
+		[2]uint16{fieldInBytes, 4},
+		[2]uint16{fieldInPackets, 4},
+	))
+
+	record := []byte{10, 0, 0, 1, 198, 51, 100, 7, 6} // src addr, dst addr, proto
+	record = be16(record, 10_110)                     // input
+	record = be16(record, 10_102)                     // output
+	record = be32(record, 4000)                       // bytes
+	record = be32(record, 8)                          // packets
+
+	d := newTestDecoder()
+	records, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID,
+		template, flowSet(templateID, record)), nil)
+	if err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("Decode() returned %d records, want 1", len(records))
+	}
+	if got := records[0]; got.InputIf != 10_110 || got.OutputIf != 10_102 {
+		t.Errorf("interfaces = (%d, %d), want (10110, 10102)", got.InputIf, got.OutputIf)
+	}
+}

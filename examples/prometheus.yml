@@ -68,7 +68,7 @@ scrape_configs:
     # merely fails to name it. Every aggregation family carries one series whose
     # labels all read "other", holding what the entry bound rejected at ingest
     # -- the only record of traffic no other series of that family has ever
-    # published. A rule matching exporter="other" or src="other" deletes it and
+    # published. A rule matching exporter_address="other" or src="other" deletes it and
     # leaves every sum() short with nothing in the data to say so.
     #
     # sample_limit: 100000

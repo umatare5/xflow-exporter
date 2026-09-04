@@ -30,6 +30,7 @@ tmp_dir = "tmp"
     [ -f "$D/asn.mmdb" ]       && set -- "$@" --enrich.asn-database "$D/asn.mmdb"
     [ -f "$D/country.mmdb" ]   && set -- "$@" --enrich.country-database "$D/country.mmdb"
     [ -f "$D/threat-ips.txt" ] && set -- "$@" --enrich.threat-file "$D/threat-ips.txt"
+    [ -f "$D/mapping.yml" ]    && set -- "$@" --enrich.mapping-file "$D/mapping.yml"
 
     [ -f "$D/asn.mmdb" ] || [ -f "$D/country.mmdb" ] || [ -f "$D/threat-ips.txt" ] ||
       echo "no enrichment data in $D -- run: XFLOW_DATA_DIR=$D ./scripts/fetch-enrichment-data.sh all"

@@ -13,7 +13,7 @@ This is the whole set of series the exporter publishes about itself, and none ta
 | `receiver`    | `xflow_receiver_dropped_packets_total`     | Counter | Drops per `listener` and `reason`             |
 | `receiver`    | `xflow_receiver_queue_length`              | Gauge   | Datagrams queued ahead of the decoders        |
 | `receiver`    | `xflow_receiver_queue_capacity`            | Gauge   | Bound of that queue                           |
-| `decoder`     | `xflow_flows_total`                        | Counter | Records per `exporter` and `version`          |
+| `decoder`     | `xflow_flows_total`                        | Counter | Records per `exporter_address` and `version`  |
 | `decoder`     | `xflow_decode_errors_total`                | Counter | Rejections per device and `reason`            |
 | `decoder`     | `xflow_last_flow_timestamp_seconds`        | Gauge   | Unix time of the last decode                  |
 | `decoder`     | `xflow_templates`                          | Gauge   | Templates held per domain and `type`          |
@@ -34,7 +34,7 @@ This is the whole set of series the exporter publishes about itself, and none ta
 
 ## Labels
 
-`exporter` and `version` carry what [Collectors](collectors.md#labels) says they carry.
+`exporter_address` and `version` carry what [Collectors](collectors.md#labels) says they carry.
 
 **`listener`**
 
@@ -60,7 +60,10 @@ the table a size or an eviction count belongs to, named as its module is.
 
 **`enricher`/`result`**
 
-which source a lookup went through — `asn`, `country`, `services` or `threat` — and what it made of the record: `filled`, `unknown` where the source knew nothing, and `skipped` where the device had carried the dimension already.
+which source a lookup went through — `asn`, `country`, `mapping`, `services` or `threat` — and what it made of the record. `filled` supplied a dimension, `unknown` says the source knew nothing, and `skipped` says the device or an earlier source in the chain had carried it already.
+
+- `mapping` and `services` both name an application from a port and `mapping` runs first, so a record either of them names sends the other one `skipped`.
+- A mapping file carrying `devices:` alone names no port, so `mapping` reads `unknown` on every record: the file's device and interface names ride the naming series rather than passing through a lookup.
 
 ## Specifications
 
@@ -111,7 +114,7 @@ its `reason` names what the decoder refused rather than where it stopped.
 
 **`xflow_templates`, `xflow_sequence_missed_total` and `xflow_sampling_rate`**
 
-all three carry `exporter`, `version` and `odid` together, and a domain is that triple rather than the identifier alone: the three protocols number their domains independently, so one number from one device names as many domains as it speaks protocols.
+all three carry `exporter_address`, `version` and `odid` together, and a domain is that triple rather than the identifier alone: the three protocols number their domains independently, so one number from one device names as many domains as it speaks protocols.
 
 - `xflow_sampling_rate` reads a v9 or IPFIX options declaration alone, so a v5 or sFlow device corrects its counts with no rate series to audit them by — [Sampling correction](README.md#sampling-correction) carries the precedence.
 

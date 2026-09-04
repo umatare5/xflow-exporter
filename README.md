@@ -26,7 +26,7 @@
 This exporter receives flow records from on-premises devices and serves them as Prometheus metrics.
 
 - 🔬 **Auditable Sampling**: Counts scaled by the rate in force, and that rate published where declared
-- 🏷️ **Enriched Labels**: Applications, AS numbers, countries and flagged addresses, from local files
+- 🏷️ **Enriched Labels**: Applications, ASNs, countries, threats and device names, from local files
 - 📊 **Native Histograms**: Flow size and duration quantiles within five percent, Prometheus 3.8+
 - 🧮 **In-Memory Aggregation**: Bounded-cardinality tables with Top-K and idle eviction
 
@@ -71,19 +71,19 @@ NetFlow v5/v8/v9, NetFlow-Lite, IPFIX and sFlow v5, over plaintext UDP — see [
 
 Each data collector is enabled per module:
 
-| Module                      | Publishes                                          |
-| :-------------------------- | :------------------------------------------------- |
-| `--collector.exporters`     | Per-device traffic by `exporter` and `version`     |
-| `--collector.hosts`         | Traffic per source-destination address pair        |
-| `--collector.services`      | Traffic per address pair, protocol and port        |
-| `--collector.destinations`  | Traffic per destination address, protocol and port |
-| `--collector.tcp-flags`     | Traffic per TCP control-bit profile                |
-| `--collector.dscp`          | Traffic per DSCP class from the exported TOS byte  |
-| `--collector.asns`          | Traffic per AS pair from device-exported numbers   |
-| `--collector.applications`  | Traffic per AVC / App-ID / applicationId name      |
-| `--collector.countries`     | Traffic per country pair from a country database   |
-| `--collector.threats`       | Traffic per flagged address, needs a list file     |
-| `--collector.distributions` | Flow size and duration native histograms           |
+| Module                      | Publishes                                              |
+| :-------------------------- | :----------------------------------------------------- |
+| `--collector.exporters`     | Per-device traffic by `exporter_address` and `version` |
+| `--collector.hosts`         | Traffic per source-destination address pair            |
+| `--collector.services`      | Traffic per address pair, protocol and port            |
+| `--collector.destinations`  | Traffic per destination address, protocol and port     |
+| `--collector.tcp-flags`     | Traffic per TCP control-bit profile                    |
+| `--collector.dscp`          | Traffic per DSCP class from the exported TOS byte      |
+| `--collector.asns`          | Traffic per AS pair from device-exported numbers       |
+| `--collector.applications`  | Traffic per AVC / App-ID / applicationId name          |
+| `--collector.countries`     | Traffic per country pair from a country database       |
+| `--collector.threats`       | Traffic per flagged address, needs a list file         |
+| `--collector.distributions` | Flow size and duration native histograms               |
 
 `--receiver.*`, `--parser.*` and `--aggregation.*` tune the receive path — see [Push and pull](docs/README.md#push-and-pull).
 

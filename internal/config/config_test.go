@@ -38,6 +38,7 @@ func parseFlags() []cli.Flag {
 		&cli.StringFlag{Name: "enrich.asn-database"},
 		&cli.StringFlag{Name: "enrich.country-database"},
 		&cli.StringSliceFlag{Name: "enrich.threat-file"},
+		&cli.StringFlag{Name: "enrich.mapping-file"},
 		&cli.StringFlag{Name: "remote-write.url"},
 		&cli.DurationFlag{Name: "remote-write.interval", Value: DefaultRemoteWriteInterval},
 		&cli.DurationFlag{Name: "remote-write.timeout", Value: DefaultRemoteWriteTimeout},
@@ -155,6 +156,7 @@ func TestParse_Overrides(t *testing.T) {
 		"--log.format", "text",
 		"--collector.internal.go-runtime",
 		"--collector.internal.process",
+		"--enrich.mapping-file", "/etc/xflow/mapping.yml",
 		"--dry-run",
 	)
 	if err != nil {
@@ -188,6 +190,9 @@ func TestParse_Overrides(t *testing.T) {
 	}
 	if !cfg.InternalCollector.EnableProcessCollector {
 		t.Error("EnableProcessCollector = false, want true")
+	}
+	if cfg.Enrichment.MappingFile != "/etc/xflow/mapping.yml" {
+		t.Errorf("MappingFile = %q, want the configured path", cfg.Enrichment.MappingFile)
 	}
 	if !cfg.DryRun {
 		t.Error("DryRun = false, want true")

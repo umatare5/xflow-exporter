@@ -2,6 +2,8 @@
 
 Every module is disabled by default and enabled per `--collector.<module>` flag, underscores in the name spelled as hyphens: `tcp_flags` takes `--collector.tcp-flags`. With none enabled the exporter still receives, decodes and counts flows in the [health series](health.md), and publishes no traffic series.
 
+Both naming series need `--enrich.mapping-file` besides, and neither appears with no module enabled: they are registered with the traffic families rather than on their own.
+
 ## Metrics
 
 | Module         | Metric                             | Type    | Description                     |
@@ -37,25 +39,32 @@ Every module is disabled by default and enabled per `--collector.<module>` flag,
 | `threats`      | `xflow_threat_bytes_total`         | Counter | Sampling-corrected bytes        |
 | `threats`      | `xflow_threat_packets_total`       | Counter | Sampling-corrected packets      |
 | `threats`      | `xflow_threat_flows_total`         | Counter | Flow records as exported        |
+| any            | `xflow_device_info`                | Gauge   | Always 1, naming a device       |
+| `hosts`        | `xflow_interface_info`             | Gauge   | Always 1, naming an interface   |
+| `services`     | `xflow_interface_info`             | Gauge   | Always 1, naming an interface   |
+| `threats`      | `xflow_interface_info`             | Gauge   | Always 1, naming an interface   |
 
 ## Labels
 
-Every family carries `exporter`, and the labels beside it are its aggregation key, so two records sharing that set share one entry.
+Every family carries `exporter_address`, and the labels beside it are its aggregation key, so two records sharing that set share one entry.
 
-| Label                       | Description                                                     |
-| :-------------------------- | :-------------------------------------------------------------- |
-| `exporter`                  | The device's UDP source address, IPv4-mapped addresses unmapped |
-| `version`                   | The protocol a record arrived in, on `exporters` alone          |
-| `src`/`dst`                 | The flow's addresses, the destination alone on `destinations`   |
-| `proto`                     | The conventional protocol name, the number where unnamed        |
-| `port`                      | The destination port, the service side of the conversation      |
-| `flags`                     | The TCP control bits ORed together, named from the low bit up   |
-| `dscp`                      | The top six bits of the TOS byte as the class they name         |
-| `src_asn`/`dst_asn`         | The AS numbers as exported, `0` where none was known            |
-| `asn`/`organization`        | One AS number and its database name, on `xflow_asn_info`        |
-| `application`               | The AVC name, the inline vendor string, or `engine:selector`    |
-| `src_country`/`dst_country` | ISO codes, `private` on a LAN, `unknown` where unplaced         |
-| `address`/`direction`       | A flagged address and the side of the flow it was seen on       |
+| Label                            | Description                                                      |
+| :------------------------------- | :--------------------------------------------------------------- |
+| `exporter_address`               | The device's UDP source address, IPv4-mapped addresses unmapped  |
+| `version`                        | The protocol a record arrived in, on `exporters` alone           |
+| `src`/`dst`                      | The flow's addresses, the destination alone on `destinations`    |
+| `proto`                          | The conventional protocol name, the number where unnamed         |
+| `port`                           | The destination port, the service side of the conversation       |
+| `input_ifindex`/`output_ifindex` | The interfaces the flow crossed, `0` where the export named none |
+| `flags`                          | The TCP control bits ORed together, named from the low bit up    |
+| `dscp`                           | The top six bits of the TOS byte as the class they name          |
+| `src_asn`/`dst_asn`              | The AS numbers as exported, `0` where none was known             |
+| `asn`/`organization`             | One AS number and its database name, on `xflow_asn_info`         |
+| `application`                    | The AVC name, the inline vendor string, or `engine:selector`     |
+| `src_country`/`dst_country`      | ISO codes, `private` on a LAN, `unknown` where unplaced          |
+| `address`/`direction`            | A flagged address and the side of the flow it was seen on        |
+| `exporter_name`                  | What the mapping file calls that device, on `xflow_device_info`  |
+| `ifindex`/`ifname`               | One ifIndex and its mapping-file name, on `xflow_interface_info` |
 
 **`version`**
 
@@ -68,6 +77,21 @@ Rendered as `syn`, `syn,ack` or `fin,psh,ack`, and a segment setting no bit is a
 **`dscp`**
 
 A record built on `match ipv4 dscp` exports the code point alone as IE 195 instead of the byte, which reads the same here; the byte wins where a template carries both, carrying the ECN bits with it.
+
+**`input_ifindex`/`output_ifindex`**
+
+The interfaces the flow crossed, on `hosts`, `services` and `threats`. RFC 2863 numbers an interface from 1, so `0` is an interface the export did not name and cannot collide with a real port.
+
+| Cause of a `0`                              | What the device meant                     |
+| :------------------------------------------ | :---------------------------------------- |
+| The template omits IE 10 or IE 14           | It reports no interface at all            |
+| The device exported `0`                     | It reports the interface as unknown       |
+| sFlow format 0, value `0x3FFFFFFF`          | The agent itself is the source or sink    |
+| sFlow format 1 or 2                         | A discard code or a destination count     |
+| IE 10 or IE 14 exported three octets wide   | Nothing — the field width has no reader   |
+| IE 10 or IE 14 exported wider than `uint32` | Nothing — the narrowing reader refuses it |
+
+The six are indistinguishable once published. NetFlow v8's one-sided aggregations carry a single address, so they reach neither `hosts` nor `services` and their `0` appears on `threats` alone.
 
 **`src_asn`/`dst_asn`**
 
@@ -92,10 +116,21 @@ Each entry carries what the series' HELP text and the shared [Absence](README.md
 every label reads `other`, and the series carries what the aggregation's entry bound rejected at ingest and nothing else, so a family stays whole across the point where `--aggregation.max-entries` stopped it opening a new entry.
 
 - The tail below the Top-K and min-bytes cuts is withheld rather than summed into it — [Counter semantics](README.md#counter-semantics) carries why folding that tail, or an evicted entry's totals, would break `rate()`.
+- `input_ifindex` and `output_ifindex` read `other` on it too, so the fold row of those three families joins to no interface and its bytes stay unattributed to a port.
 
 **the three `xflow_exporter_*` counters**
 
 the per-device family takes no scrape-time cut, neither Top-K nor min-bytes, because its cardinality is the fleet's rather than the traffic's — a device that exported one small flow keeps its own series where the same volume in another family could fall outside the Top-K or below `--aggregation.min-bytes` and publish nothing.
+
+**the interface pair on `hosts`, `services` and `threats`**
+
+it keys those three tables, so one address pair reached over two paths reads as two entries rather than one sum no path can be read out of. A record naming neither interface still opens an entry under `0`/`0`, because dropping it would lose the traffic and not just its path.
+
+- The other seven families do not carry it. Each already folds many conversations into one row, and multiplying that row by every path its members crossed turns a per-device ratio into a per-path one with nothing in the labels saying so.
+- Entries multiply by `1 + share × (k−1)`, `k` being the interface pairs one conversation spreads over and `share` the fraction that spread at all. The bound is the input interface count times the output one; `xflow_aggregation_entries` and `xflow_aggregation_overflow_records_total` are what it costs in practice.
+- Splitting one conversation across paths makes each entry sparser, and an entry that idles past `--aggregation.entry-ttl` is evicted and reopened. `rate()` extrapolates only half an interval back to a reappearing series' first sample, so the folded-back sum reads low.
+- NetFlow v5 and v8 size the interface fields at two octets, so an ifIndex above 65535 has no spelling there and what a device sends in its place is the device's own choice.
+- The device has to number its interfaces persistently across reloads. Where it does not, a reboot or a card swap renumbers the ports and nothing in the export says the numbering moved.
 
 **the three `xflow_destination_*` counters**
 
@@ -124,6 +159,15 @@ it names each AS the published pairs carry, and the name rides its own series ra
 
 - It follows the same cut those pairs take, the table behind that cut running to `--aggregation.max-entries` while a database names every AS there is.
 - An AS no lookup resolved carries no name, which a join shows by finding nothing to join to, and the series is absent altogether without `--enrich.asn-database`.
+
+**`xflow_device_info` and `xflow_interface_info`**
+
+they name what the counters key by address and by number, each name riding its own series for the reason `xflow_asn_info` does: an operator respelling a hostname would otherwise open a new entry for every counter under that device.
+
+- The device rows take no cut, their bound being the mapping file's own device count, and they carry only the devices the file gives a `hostname`.
+- The interface rows follow the cut `hosts`, `services` and `threats` took, so a port whose entries fell below it loses its name with them and reappears when they do.
+- A device or a port the file does not name produces no row rather than an empty one, so a join finds nothing to join to and the counter keeps its number.
+- The fold row of those three families reads `other` on both interface labels, which matches no name, so its bytes stay unattributed to a port.
 
 **the three `xflow_country_pair_*` counters**
 

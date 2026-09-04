@@ -156,6 +156,7 @@ type Enrichment struct {
 	ASNDatabase     string   `json:"asn_database"`
 	CountryDatabase string   `json:"country_database"`
 	ThreatFiles     []string `json:"threat_files"`
+	MappingFile     string   `json:"mapping_file"`
 }
 
 // RemoteWrite holds the Remote Write 2.0 client configuration. It is off
@@ -219,6 +220,7 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			ASNDatabase:     cmd.String("enrich.asn-database"),
 			CountryDatabase: cmd.String("enrich.country-database"),
 			ThreatFiles:     cmd.StringSlice("enrich.threat-file"),
+			MappingFile:     cmd.String("enrich.mapping-file"),
 		},
 		Collectors: Collectors{
 			Exporters:     cmd.Bool("collector.exporters"),

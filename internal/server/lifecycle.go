@@ -101,7 +101,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	// database that cannot be opened fails startup: an exporter that quietly
 	// enriched nothing would be indistinguishable from one whose database
 	// knew nothing.
-	chain, threat, asn, err := buildEnrichmentChain(cfg.Enrichment)
+	chain, threat, asn, mapping, err := buildEnrichmentChain(cfg.Enrichment)
 	if err != nil {
 		return err
 	}
@@ -117,9 +117,15 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	if asn != nil {
 		asnNames = asn.Organization
 	}
+	// A method value taken from a nil receiver is itself non-nil, so the
+	// nil source has to be tested here rather than inside the collector.
+	var names func() *enrich.NameSet
+	if mapping != nil {
+		names = mapping.Names
+	}
 	if modules.Any() {
 		agg = aggregator.New(cfg.Aggregation, modules)
-		collectorMgr.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation, asnNames)
+		collectorMgr.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation, asnNames, names)
 	}
 
 	// The receiver stops when this context ends, which Run ties to the
@@ -197,18 +203,31 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 // buildEnrichmentChain assembles the enabled enrichment sources in the order
 // they are applied. Order matters where two sources fill one dimension: the
 // first to know wins, and every source leaves a device reading alone.
-func buildEnrichmentChain(cfg config.Enrichment) (*enrich.Chain, *enrich.Threat, *enrich.ASN, error) {
+func buildEnrichmentChain(
+	cfg config.Enrichment,
+) (*enrich.Chain, *enrich.Threat, *enrich.ASN, *enrich.Mapping, error) {
 	var enrichers []enrich.Enricher
 	var threat *enrich.Threat
 	var asn *enrich.ASN
+	var mapping *enrich.Mapping
 
+	// Ahead of the built-in table, so the operator's own file wins the ports
+	// both name. Both leave a record the device already named alone.
+	if cfg.MappingFile != "" {
+		loaded, err := enrich.NewMapping(cfg.MappingFile)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		mapping = loaded
+		enrichers = append(enrichers, mapping)
+	}
 	if cfg.Services {
 		enrichers = append(enrichers, enrich.NewServices())
 	}
 	if cfg.ASNDatabase != "" {
 		opened, err := enrich.NewASN(cfg.ASNDatabase)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		asn = opened
 		enrichers = append(enrichers, asn)
@@ -216,20 +235,20 @@ func buildEnrichmentChain(cfg config.Enrichment) (*enrich.Chain, *enrich.Threat,
 	if cfg.CountryDatabase != "" {
 		country, err := enrich.NewCountry(cfg.CountryDatabase)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		enrichers = append(enrichers, country)
 	}
 	if len(cfg.ThreatFiles) > 0 {
 		loaded, err := enrich.NewThreat(cfg.ThreatFiles)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		threat = loaded
 		enrichers = append(enrichers, threat)
 	}
 
-	return enrich.NewChain(enrichers...), threat, asn, nil
+	return enrich.NewChain(enrichers...), threat, asn, mapping, nil
 }
 
 // sweepDomains drops idle observation domains until ctx ends. The interval is

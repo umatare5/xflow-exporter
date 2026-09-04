@@ -93,10 +93,10 @@ func TestDecoderCollector_ReportsOutcomes(t *testing.T) {
 	expected := `
 # HELP xflow_decode_errors_total Datagrams rejected per exporter, version and reason since process start
 # TYPE xflow_decode_errors_total counter
-xflow_decode_errors_total{exporter="192.0.2.10",reason="unsupported_version",version="unknown"} 1
+xflow_decode_errors_total{exporter_address="192.0.2.10",reason="unsupported_version",version="unknown"} 1
 # HELP xflow_flows_total Flow records decoded per exporter and version since process start
 # TYPE xflow_flows_total counter
-xflow_flows_total{exporter="192.0.2.10",version="netflow_v5"} 1
+xflow_flows_total{exporter_address="192.0.2.10",version="netflow_v5"} 1
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_flows_total", "xflow_decode_errors_total"); err != nil {
@@ -141,11 +141,11 @@ func TestDecoderCollector_ReportsDomainState(t *testing.T) {
 	expected := `
 # HELP xflow_sequence_missed_total Export packets the sequence numbers say were lost, per protocol and observation domain
 # TYPE xflow_sequence_missed_total counter
-xflow_sequence_missed_total{exporter="192.0.2.20",odid="256",version="netflow_v9"} 0
+xflow_sequence_missed_total{exporter_address="192.0.2.20",odid="256",version="netflow_v9"} 0
 # HELP xflow_templates Unexpired templates held per exporter, protocol, observation domain and kind
 # TYPE xflow_templates gauge
-xflow_templates{exporter="192.0.2.20",odid="256",type="options_template",version="netflow_v9"} 0
-xflow_templates{exporter="192.0.2.20",odid="256",type="template",version="netflow_v9"} 1
+xflow_templates{exporter_address="192.0.2.20",odid="256",type="options_template",version="netflow_v9"} 0
+xflow_templates{exporter_address="192.0.2.20",odid="256",type="template",version="netflow_v9"} 1
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_templates", "xflow_sequence_missed_total"); err != nil {

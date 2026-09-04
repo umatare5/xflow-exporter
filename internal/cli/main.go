@@ -286,6 +286,14 @@ func registerEnrichmentFlags() []cli.Flag {
 				TrimSpace: true,
 			},
 		},
+		&cli.StringFlag{
+			Name:     "enrich.mapping-file",
+			Usage:    "Path to a YAML file naming devices, their interfaces and extra transport ports",
+			Category: "# Enrichment Options",
+			Config: cli.StringConfig{
+				TrimSpace: true,
+			},
+		},
 	}
 }
 

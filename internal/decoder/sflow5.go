@@ -31,7 +31,25 @@ const (
 
 	// Header protocols of the raw packet header record.
 	sflowHeaderEthernet = 1
+
+	// An interface is a format and a value. Only format 0 carries an
+	// ifIndex; 1 is a discard reason and 2 a destination count. The
+	// compact encoding packs the format into the top two bits, while the
+	// expanded encoding spells the two out as separate words.
+	sflowIfFormatShift = 30
+	sflowIfValueMask   = 0x3FFF_FFFF
 )
+
+// sflowIfIndex reads an interface word pair as an ifIndex. Value
+// sflowIfValueMask under format 0 marks the agent itself as the source or
+// sink, and a non-zero format names something that is not an interface at
+// all; both fold to 0, which spells "no interface".
+func sflowIfIndex(format, value uint32) uint32 {
+	if format != 0 || value == sflowIfValueMask {
+		return 0
+	}
+	return value
+}
 
 // decodeSFlowV5 parses one sFlow v5 datagram. A sample this exporter cannot
 // read is skipped over its declared length; only a structure whose lengths
@@ -128,13 +146,17 @@ func (d *Decoder) decodeSFlowFlowSample(
 
 	var inputIf, outputIf uint32
 	if expanded {
-		r.skip(4) // input format
-		inputIf, _ = r.uint32()
-		r.skip(4) // output format
-		outputIf, _ = r.uint32()
+		inFormat, _ := r.uint32()
+		inValue, _ := r.uint32()
+		outFormat, _ := r.uint32()
+		outValue, _ := r.uint32()
+		inputIf = sflowIfIndex(inFormat, inValue)
+		outputIf = sflowIfIndex(outFormat, outValue)
 	} else {
-		inputIf, _ = r.uint32()
-		outputIf, _ = r.uint32()
+		in, _ := r.uint32()
+		out, _ := r.uint32()
+		inputIf = sflowIfIndex(in>>sflowIfFormatShift, in&sflowIfValueMask)
+		outputIf = sflowIfIndex(out>>sflowIfFormatShift, out&sflowIfValueMask)
 	}
 
 	numRecords, ok := r.uint32()

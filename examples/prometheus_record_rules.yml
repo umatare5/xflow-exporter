@@ -1,7 +1,7 @@
 ---
 # Recording rules for xflow-exporter. The level names the flow dimension a
 # rule keeps; aggregations use without(), so job and instance ride through,
-# and exporter stays on every rule: two observation points in one path
+# and exporter_address stays on every rule: two observation points in one path
 # export the same flow twice. Read each recorded rate as a Top-K ranking,
 # not a total -- the tail below --aggregation.top-k publishes nothing and
 # is not folded into other. The 5m windows assume the 60s scrape_interval
@@ -104,7 +104,7 @@ groups:
   - name: xflow-exporter.threats
     rules:
       - record: exporter_direction:xflow_threat_bytes:rate5m
-        expr: sum without (address) (rate(xflow_threat_bytes_total[5m]))
+        expr: sum without (address, input_ifindex, output_ifindex) (rate(xflow_threat_bytes_total[5m]))
 
       - record: exporter_direction:xflow_threat_flows:rate5m
-        expr: sum without (address) (rate(xflow_threat_flows_total[5m]))
+        expr: sum without (address, input_ifindex, output_ifindex) (rate(xflow_threat_flows_total[5m]))

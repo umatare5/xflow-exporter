@@ -10,7 +10,7 @@ func TestRegisterFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerFlags()
-	if got, want := len(flags), 42; got != want {
+	if got, want := len(flags), 43; got != want {
 		t.Errorf("registerFlags() returned %d flags, want %d", got, want)
 	}
 }
@@ -106,7 +106,7 @@ func TestRegisterEnrichmentFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerEnrichmentFlags()
-	if got, want := len(flags), 4; got != want {
+	if got, want := len(flags), 5; got != want {
 		t.Fatalf("registerEnrichmentFlags() returned %d flags, want %d", got, want)
 	}
 	if _, ok := flags[0].(*cli.BoolFlag); !ok {

@@ -16,7 +16,7 @@ Reference pages for xflow-exporter. The [README](../README.md) covers getting fl
 - **Scrapes never wait** — a scrape reads the tables as they stand, whatever is arriving.
 - **No target to probe** — nothing answers an `up`-style reachability check toward a sender.
 - **Liveness** — `xflow_last_flow_timestamp_seconds` is what silence is read from.
-- **Naming** — RFC 7011 calls the device the exporter, and so does the `exporter` label.
+- **Naming** — RFC 7011 calls the device the exporter, and `exporter_address` is where it lands.
 - **Tuning** — `--receiver.*`, `--parser.*` and `--aggregation.*` bound the receive path.
 - **Batching** — Linux read loops use `recvmmsg`, and elsewhere it is one per call.
 
@@ -64,7 +64,7 @@ Table families accumulate from entry creation, and an entry evicted then re-crea
 
 ### Enrichment
 
-An `--enrich.*` source fills a dimension the device did not carry. Every source is off by default.
+An `--enrich.*` source supplies what the device did not: a dimension of the record itself, or a name for one the record carries as a number. Every source is off by default.
 
 | Flag                        | Fills                                    |
 | :-------------------------- | :--------------------------------------- |
@@ -72,11 +72,12 @@ An `--enrich.*` source fills a dimension the device did not carry. Every source 
 | `--enrich.asn-database`     | The AS numbers, from a MaxMind-format DB |
 | `--enrich.country-database` | The ISO country codes, from the same     |
 | `--enrich.threat-file`      | A flag on addresses a list file names    |
+| `--enrich.mapping-file`     | Device, interface and port names         |
 
 Lookups are local: nothing is fetched and no credential is held. Neither database ships here, so point the flag at a GeoLite2 or DB-IP file or fetch one with [`scripts/fetch-enrichment-data.sh`](../scripts/fetch-enrichment-data.sh). A path that cannot be opened fails startup.
 
 - **Never overwrites** — an exported reading wins, so enrichment fills absence alone.
-- **Feeds the existing families** — a filled dimension keys the module that publishes it.
+- **Feeds the existing families** — a dimension keys its module, a name rides its own series.
 - **Cardinality** — filling a dimension creates series that were absent, hence the opt-in.
 - **Observability** — `xflow_enrichment_lookups_total` splits by `enricher` and `result`.
 
@@ -101,6 +102,50 @@ Lookups are local: nothing is fetched and no credential is held. Neither databas
 > [!TIP]
 > Fetching the files is the operator's job, and [`scripts/fetch-enrichment-data.sh`](../scripts/fetch-enrichment-data.sh) is one way to do it: it downloads, merges and deduplicates the published lists, and its `databases` subcommand takes the ASN and country databases from DB-IP unless `MAXMIND_LICENSE_KEY` is set. Both write where `THREAT_FILE`, `ASN_DATABASE` and `COUNTRY_DATABASE` point. It checks that each body names an address rather than trusting the status, refuses a merge below `MIN_ADDRESSES` (1000) and a multi-part list no part of which reached `SPLIT_PART_LINES` (131072), and exits non-zero naming its reason, so a bad fetch leaves the previous file in place. Run it from cron and reload afterwards.
 
+### Mapping file
+
+`--enrich.mapping-file` names devices and their interfaces, which no flow protocol exports, and may name transport ports the built-in table does not cover.
+
+```yaml
+devices:
+  192.0.2.1: # the flow's source address
+    hostname: sw1.example.net # optional; without it the device gets no name
+    interfaces: # ifIndex to ifName
+      10102: Gi0/2
+services: # port/proto, ahead of the built-in table
+  5246/udp: capwap-control
+```
+
+- **Two info series** — `xflow_device_info` and `xflow_interface_info` carry the names.
+- **Strict** — an unusable key or name, or one address spelled twice, fails the whole load.
+- **Exactly one document** — an empty file and a trailing `---` are both refused.
+- **`devices: {}` loads** — emptying the file on purpose is how a reload takes names away.
+- **YAML acts first** — a `~` key is dropped before any check, `%YAML 1.2` is refused.
+- **`services:` outranks the built-in table** — on any port both of them name.
+- **One table at a time** — a source port here beats a destination port in the built-in one.
+
+> [!TIP]
+> [`scripts/fetch-device-names.sh`](../scripts/fetch-device-names.sh) walks the devices over SNMP and writes the file. Nothing here speaks SNMP; the exporter reads what that left behind, so run it from cron and reload afterwards. It refuses a device answering no usable name rather than writing it out unnamed, and installs by rename, so a failed walk leaves the previous names in force. [`SECURITY.md`](../SECURITY.md) covers where the community string ends up.
+
+This joins a name onto the per-interface traffic of one device, keeping the rows no name reaches:
+
+```promql
+sum by (exporter_address, ifname) (
+  sum without (src, dst, output_ifindex) (rate(xflow_host_pair_bytes_total[5m]))
+  * on (job, instance, exporter_address, input_ifindex) group_left (ifname)
+    label_replace(xflow_interface_info, "input_ifindex", "$1", "ifindex", "(.+)")
+)
+or
+sum by (exporter_address, input_ifindex) (
+  sum without (src, dst, output_ifindex) (rate(xflow_host_pair_bytes_total[5m]))
+  unless on (job, instance, exporter_address, input_ifindex)
+    label_replace(xflow_interface_info, "input_ifindex", "$1", "ifindex", "(.+)")
+)
+```
+
+> [!IMPORTANT]
+> `job` and `instance` belong in `on()`: two Prometheus targets scraping one device make the match many-to-many, which fails the whole evaluation. Neither branch may filter `exporter_address!="other"`. A negative matcher also matches a series lacking the label, so the fold row would fall out of both and the total would drop by what the entry bound folded.
+
 ### Reloading
 
 `--web.enable-lifecycle` exposes `/-/reload`, which re-reads every enrichment source. A `SIGHUP` does the same without the flag.
@@ -108,9 +153,11 @@ Lookups are local: nothing is fetched and no credential is held. Neither databas
 - **POST or PUT only**, and unexposed by default, a reload being a write rather than a read.
 - **A failed reload keeps the previous data** — the set already loaded stays in force.
 - **Atomic** — a new set is built whole before it replaces the old one, so no lookup pauses.
+- **Only the sources startup opened** — a reload re-reads their files, never the flags.
+- **`--dry-run` opens no source** — a mapping file it accepts can still fail startup.
 
 > [!NOTE]
-> A list gone missing would otherwise unflag every address at once, which reads as a network that had just gone clean; `xflow_threat_reload_failures_total` counts those loads. Each mmdb reader is replaced rather than reopened, so a lookup never sees a half-loaded set and the decode path never pauses. [`SECURITY.md`](../SECURITY.md) covers the exposure.
+> A list gone missing would otherwise unflag every address at once, which reads as a network that had just gone clean; `xflow_threat_reload_failures_total` counts those loads. The mapping file has no such counter, mirroring the databases: a failed load answers `/-/reload` with 500 and logs its reason. Each mmdb reader is replaced rather than reopened, so a lookup never sees a half-loaded set and the decode path never pauses. [`SECURITY.md`](../SECURITY.md) covers the exposure.
 
 ### Bounded state
 
@@ -164,7 +211,7 @@ A NetFlow-Lite record carries one sampled packet section instead of parsed flow 
 
 - **A ranking, not a total** — the tail below the Top-K cut reaches no recorded series.
 - **The one exception** — `xflow_exporter_*` takes no cut, so the ratios divide by it.
-- **`exporter` is kept** — two observation points in one path export a flow twice.
+- **`exporter_address` is kept** — two observation points in one path export a flow twice.
 - **Ordering** — a derived rule reads only rules recorded earlier in its own group.
 - **Scrape path only** — `--remote-write.url` ships the registry no rule has seen.
 

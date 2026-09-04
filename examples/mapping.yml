@@ -1,0 +1,30 @@
+# Example mapping file for xflow-exporter's --enrich.mapping-file.
+#
+# scripts/fetch-device-names.sh writes the devices half from SNMP and
+# overwrites this file wholesale, so keep a hand-maintained services block
+# somewhere the script does not write to.
+devices:
+  # The address the device exports from, which is the exporter_address label.
+  # An ifIndex the device renumbers is a port this file then misnames, and
+  # nothing in the export says the numbering moved: turn on ifIndex
+  # persistence (Cisco: snmp-server ifindex persist) before relying on it.
+  192.0.2.1:
+    # Optional. Without it the device carries no xflow_device_info row.
+    hostname: sw1.example.net
+    # ifIndex to ifName, joined onto input_ifindex and output_ifindex through
+    # xflow_interface_info.
+    interfaces:
+      1: Vl1
+      10102: Gi0/2
+      10110: Gi0/10
+
+  # A device may name its ports without naming itself.
+  192.0.2.2:
+    interfaces:
+      1: Vl1
+
+# port/proto to an application name, consulted ahead of the built-in table and
+# only where the device named no application itself.
+services:
+  5246/udp: capwap-control
+  5247/udp: capwap-data

@@ -3,6 +3,8 @@ package collector
 import (
 	"fmt"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/umatare5/xflow-exporter/internal/aggregator"
 	"github.com/umatare5/xflow-exporter/internal/config"
+	"github.com/umatare5/xflow-exporter/internal/enrich"
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
@@ -36,6 +39,8 @@ func flowRecord(src, dst string, bytes uint64) flow.Record {
 		Bytes:    bytes,
 		Packets:  1,
 		Flows:    1,
+		InputIf:  3,
+		OutputIf: 4,
 	}
 }
 
@@ -49,17 +54,17 @@ func TestFlowCollector_PublishesExportersAndHosts(t *testing.T) {
 		flowRecord("10.0.0.1", "10.0.0.2", 500),
 	})
 
-	c := NewFlowCollector(agg, modules, aggConfig(), nil)
+	c := NewFlowCollector(agg, modules, aggConfig(), nil, nil)
 
 	expected := `
 # HELP xflow_exporter_bytes_total Sampling-corrected bytes per exporter and version, other carries the entry-bound fold
 # TYPE xflow_exporter_bytes_total counter
-xflow_exporter_bytes_total{exporter="192.0.2.1",version="netflow_v9"} 1500
-xflow_exporter_bytes_total{exporter="other",version="other"} 0
+xflow_exporter_bytes_total{exporter_address="192.0.2.1",version="netflow_v9"} 1500
+xflow_exporter_bytes_total{exporter_address="other",version="other"} 0
 # HELP xflow_host_pair_flows_total Flow records as exported per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_flows_total counter
-xflow_host_pair_flows_total{dst="10.0.0.2",exporter="192.0.2.1",src="10.0.0.1"} 2
-xflow_host_pair_flows_total{dst="other",exporter="other",src="other"} 0
+xflow_host_pair_flows_total{dst="10.0.0.2",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",src="10.0.0.1"} 2
+xflow_host_pair_flows_total{dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_exporter_bytes_total", "xflow_host_pair_flows_total"); err != nil {
@@ -85,14 +90,14 @@ func TestFlowCollector_TopKWithholdsTheLiveTail(t *testing.T) {
 		flowRecord("10.0.0.4", "10.0.0.9", 50),
 	})
 
-	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil)
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil, nil)
 
 	expected := `
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_bytes_total counter
-xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.1"} 5000
-xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.2"} 3000
-xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 0
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",src="10.0.0.1"} 5000
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",src="10.0.0.2"} 3000
+xflow_host_pair_bytes_total{dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_host_pair_bytes_total"); err != nil {
@@ -115,13 +120,13 @@ func TestFlowCollector_MinBytesWithholdsMice(t *testing.T) {
 		flowRecord("10.0.0.2", "10.0.0.9", 999),
 	})
 
-	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil)
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil, nil)
 
 	expected := `
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_bytes_total counter
-xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.1"} 5000
-xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 0
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",src="10.0.0.1"} 5000
+xflow_host_pair_bytes_total{dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_host_pair_bytes_total"); err != nil {
@@ -144,13 +149,13 @@ func TestFlowCollector_MinBytesAdmitsTheThresholdItself(t *testing.T) {
 		flowRecord("10.0.0.2", "10.0.0.9", 999),
 	})
 
-	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil)
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil, nil)
 
 	expected := `
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_bytes_total counter
-xflow_host_pair_bytes_total{dst="10.0.0.9",exporter="192.0.2.1",src="10.0.0.1"} 1000
-xflow_host_pair_bytes_total{dst="other",exporter="other",src="other"} 0
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",src="10.0.0.1"} 1000
+xflow_host_pair_bytes_total{dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_host_pair_bytes_total"); err != nil {
@@ -170,21 +175,21 @@ func TestFlowCollector_ServiceAndASNAndApplicationLabels(t *testing.T) {
 	r.AppName = "https"
 	agg.Ingest([]flow.Record{r})
 
-	c := NewFlowCollector(agg, modules, aggConfig(), nil)
+	c := NewFlowCollector(agg, modules, aggConfig(), nil, nil)
 
 	expected := `
 # HELP xflow_application_bytes_total Sampling-corrected bytes per application, other carries the entry-bound fold
 # TYPE xflow_application_bytes_total counter
-xflow_application_bytes_total{application="https",exporter="192.0.2.1"} 700
-xflow_application_bytes_total{application="other",exporter="other"} 0
+xflow_application_bytes_total{application="https",exporter_address="192.0.2.1"} 700
+xflow_application_bytes_total{application="other",exporter_address="other"} 0
 # HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
 # TYPE xflow_asn_pair_bytes_total counter
-xflow_asn_pair_bytes_total{dst_asn="64501",exporter="192.0.2.1",src_asn="64500"} 700
-xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+xflow_asn_pair_bytes_total{dst_asn="64501",exporter_address="192.0.2.1",src_asn="64500"} 700
+xflow_asn_pair_bytes_total{dst_asn="other",exporter_address="other",src_asn="other"} 0
 # HELP xflow_service_bytes_total Sampling-corrected bytes per service five-tuple, other carries the entry-bound fold
 # TYPE xflow_service_bytes_total counter
-xflow_service_bytes_total{dst="10.0.0.2",exporter="192.0.2.1",port="443",proto="tcp",src="10.0.0.1"} 700
-xflow_service_bytes_total{dst="other",exporter="other",port="other",proto="other",src="other"} 0
+xflow_service_bytes_total{dst="10.0.0.2",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",port="443",proto="tcp",src="10.0.0.1"} 700
+xflow_service_bytes_total{dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",port="other",proto="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_service_bytes_total", "xflow_asn_pair_bytes_total",
@@ -199,7 +204,7 @@ func TestFlowCollector_HealthSeries(t *testing.T) {
 	agg := aggregator.New(aggConfig(), aggregator.Modules{Hosts: true})
 	agg.Ingest([]flow.Record{flowRecord("10.0.0.1", "10.0.0.2", 10)})
 
-	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, aggConfig(), nil)
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, aggConfig(), nil, nil)
 
 	expected := `
 # HELP xflow_aggregation_entries Entries held per aggregation table
@@ -303,14 +308,14 @@ func TestFlowCollector_CountryPairs(t *testing.T) {
 
 	agg.Ingest([]flow.Record{placed, partial, unplaced})
 
-	c := NewFlowCollector(agg, modules, aggConfig(), nil)
+	c := NewFlowCollector(agg, modules, aggConfig(), nil, nil)
 
 	expected := `
 # HELP xflow_country_pair_bytes_total Sampling-corrected bytes per country pair, other carries the entry-bound fold
 # TYPE xflow_country_pair_bytes_total counter
-xflow_country_pair_bytes_total{dst_country="US",exporter="192.0.2.1",src_country="JP"} 700
-xflow_country_pair_bytes_total{dst_country="US",exporter="192.0.2.1",src_country="unknown"} 300
-xflow_country_pair_bytes_total{dst_country="other",exporter="other",src_country="other"} 0
+xflow_country_pair_bytes_total{dst_country="US",exporter_address="192.0.2.1",src_country="JP"} 700
+xflow_country_pair_bytes_total{dst_country="US",exporter_address="192.0.2.1",src_country="unknown"} 300
+xflow_country_pair_bytes_total{dst_country="other",exporter_address="other",src_country="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_country_pair_bytes_total"); err != nil {
@@ -333,13 +338,13 @@ func TestFlowCollector_DestinationLabels(t *testing.T) {
 		flowRecord("10.0.0.9", "10.0.0.2", 300),
 	})
 
-	c := NewFlowCollector(agg, modules, aggConfig(), nil)
+	c := NewFlowCollector(agg, modules, aggConfig(), nil, nil)
 
 	expected := `
 # HELP xflow_destination_bytes_total Sampling-corrected bytes per destination service, other carries the entry-bound fold
 # TYPE xflow_destination_bytes_total counter
-xflow_destination_bytes_total{dst="10.0.0.2",exporter="192.0.2.1",port="443",proto="tcp"} 1000
-xflow_destination_bytes_total{dst="other",exporter="other",port="other",proto="other"} 0
+xflow_destination_bytes_total{dst="10.0.0.2",exporter_address="192.0.2.1",port="443",proto="tcp"} 1000
+xflow_destination_bytes_total{dst="other",exporter_address="other",port="other",proto="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_destination_bytes_total"); err != nil {
@@ -416,17 +421,17 @@ func TestFlowCollector_TCPFlagsAndDSCPLabels(t *testing.T) {
 	r.TOS, r.TOSReported = 0xB8, true
 	agg.Ingest([]flow.Record{r})
 
-	c := NewFlowCollector(agg, modules, aggConfig(), nil)
+	c := NewFlowCollector(agg, modules, aggConfig(), nil, nil)
 
 	expected := `
 # HELP xflow_dscp_bytes_total Sampling-corrected bytes per DSCP class, other carries the entry-bound fold
 # TYPE xflow_dscp_bytes_total counter
-xflow_dscp_bytes_total{dscp="ef",exporter="192.0.2.1"} 700
-xflow_dscp_bytes_total{dscp="other",exporter="other"} 0
+xflow_dscp_bytes_total{dscp="ef",exporter_address="192.0.2.1"} 700
+xflow_dscp_bytes_total{dscp="other",exporter_address="other"} 0
 # HELP xflow_tcp_flags_bytes_total Sampling-corrected bytes per TCP control-bit profile, other carries the entry-bound fold
 # TYPE xflow_tcp_flags_bytes_total counter
-xflow_tcp_flags_bytes_total{exporter="192.0.2.1",flags="syn,ack"} 700
-xflow_tcp_flags_bytes_total{exporter="other",flags="other"} 0
+xflow_tcp_flags_bytes_total{exporter_address="192.0.2.1",flags="syn,ack"} 700
+xflow_tcp_flags_bytes_total{exporter_address="other",flags="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_tcp_flags_bytes_total", "xflow_dscp_bytes_total"); err != nil {
@@ -460,7 +465,7 @@ func TestFlowCollector_TopKIsStableAcrossScrapes(t *testing.T) {
 	}
 	agg.Ingest(records)
 
-	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil)
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil, nil)
 
 	first := publishedHostPairs(t, c)
 	if len(first) != topK {
@@ -523,7 +528,7 @@ func TestFlowCollector_ASNNamesRideTheirOwnSeries(t *testing.T) {
 		}
 		return "", false
 	}
-	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), names)
+	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), names, nil)
 
 	expected := `
 # HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table publishes
@@ -558,7 +563,7 @@ func TestFlowCollector_ASNNamesFollowTheTopKCut(t *testing.T) {
 	agg.Ingest(records)
 
 	names := func(as uint32) (string, bool) { return fmt.Sprintf("AS %d", as), true }
-	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, cfg, names)
+	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, cfg, names, nil)
 
 	// The heaviest pair is the last ingested, and it is the only one published.
 	expected := `
@@ -568,8 +573,8 @@ xflow_asn_info{asn="64514",organization="AS 64514"} 1
 xflow_asn_info{asn="64515",organization="AS 64515"} 1
 # HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
 # TYPE xflow_asn_pair_bytes_total counter
-xflow_asn_pair_bytes_total{dst_asn="64515",exporter="192.0.2.1",src_asn="64514"} 107
-xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+xflow_asn_pair_bytes_total{dst_asn="64515",exporter_address="192.0.2.1",src_asn="64514"} 107
+xflow_asn_pair_bytes_total{dst_asn="other",exporter_address="other",src_asn="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_asn_info", "xflow_asn_pair_bytes_total"); err != nil {
@@ -606,7 +611,7 @@ func TestFlowCollector_ASNNamesReadTheSnapshotThePairsCameFrom(t *testing.T) {
 	}}
 
 	names := func(as uint32) (string, bool) { return fmt.Sprintf("AS %d", as), true }
-	c := NewFlowCollector(src, config.Collectors{ASNs: true}, cfg, names)
+	c := NewFlowCollector(src, config.Collectors{ASNs: true}, cfg, names, nil)
 
 	expected := `
 # HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table publishes
@@ -615,8 +620,8 @@ xflow_asn_info{asn="64500",organization="AS 64500"} 1
 xflow_asn_info{asn="64501",organization="AS 64501"} 1
 # HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
 # TYPE xflow_asn_pair_bytes_total counter
-xflow_asn_pair_bytes_total{dst_asn="64501",exporter="192.0.2.1",src_asn="64500"} 5000
-xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+xflow_asn_pair_bytes_total{dst_asn="64501",exporter_address="192.0.2.1",src_asn="64500"} 5000
+xflow_asn_pair_bytes_total{dst_asn="other",exporter_address="other",src_asn="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_asn_info", "xflow_asn_pair_bytes_total"); err != nil {
@@ -648,7 +653,7 @@ func TestFlowCollector_ASNNamesFollowTheByteThreshold(t *testing.T) {
 	agg.Ingest([]flow.Record{heavy, mouse})
 
 	names := func(as uint32) (string, bool) { return fmt.Sprintf("AS %d", as), true }
-	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, cfg, names)
+	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, cfg, names, nil)
 
 	expected := `
 # HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table publishes
@@ -657,8 +662,8 @@ xflow_asn_info{asn="64500",organization="AS 64500"} 1
 xflow_asn_info{asn="64501",organization="AS 64501"} 1
 # HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
 # TYPE xflow_asn_pair_bytes_total counter
-xflow_asn_pair_bytes_total{dst_asn="64501",exporter="192.0.2.1",src_asn="64500"} 5000
-xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+xflow_asn_pair_bytes_total{dst_asn="64501",exporter_address="192.0.2.1",src_asn="64500"} 5000
+xflow_asn_pair_bytes_total{dst_asn="other",exporter_address="other",src_asn="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_asn_info", "xflow_asn_pair_bytes_total"); err != nil {
@@ -685,7 +690,7 @@ func TestFlowCollector_ASNNameNoLabelCanHoldCostsItsOwnSeries(t *testing.T) {
 		}
 		return "Example Peering", true
 	}
-	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), names)
+	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), names, nil)
 
 	expected := `
 # HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table publishes
@@ -693,8 +698,8 @@ func TestFlowCollector_ASNNameNoLabelCanHoldCostsItsOwnSeries(t *testing.T) {
 xflow_asn_info{asn="64501",organization="Example Peering"} 1
 # HELP xflow_asn_pair_bytes_total Sampling-corrected bytes per AS pair, other carries the entry-bound fold
 # TYPE xflow_asn_pair_bytes_total counter
-xflow_asn_pair_bytes_total{dst_asn="64501",exporter="192.0.2.1",src_asn="64500"} 400
-xflow_asn_pair_bytes_total{dst_asn="other",exporter="other",src_asn="other"} 0
+xflow_asn_pair_bytes_total{dst_asn="64501",exporter_address="192.0.2.1",src_asn="64500"} 400
+xflow_asn_pair_bytes_total{dst_asn="other",exporter_address="other",src_asn="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_asn_info", "xflow_asn_pair_bytes_total"); err != nil {
@@ -764,7 +769,7 @@ func TestFlowCollector_ASNNamesAbsentWithoutADatabase(t *testing.T) {
 	r.SrcAS, r.DstAS = 64500, 64501
 	agg.Ingest([]flow.Record{r})
 
-	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), nil)
+	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), nil, nil)
 	if got := testutil.CollectAndCount(c, "xflow_asn_info"); got != 0 {
 		t.Errorf("xflow_asn_info series = %d, want none without a database", got)
 	}
@@ -782,7 +787,7 @@ func TestFlowCollector_ASNNamesSkipZero(t *testing.T) {
 	agg.Ingest([]flow.Record{r})
 
 	names := func(uint32) (string, bool) { return "Example Networks", true }
-	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), names)
+	c := NewFlowCollector(agg, config.Collectors{ASNs: true}, aggConfig(), names, nil)
 
 	expected := `
 # HELP xflow_asn_info Always 1, carrying what a database calls each AS the pair table publishes
@@ -790,6 +795,115 @@ func TestFlowCollector_ASNNamesSkipZero(t *testing.T) {
 xflow_asn_info{asn="64500",organization="Example Networks"} 1
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "xflow_asn_info"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// mappingNames loads one mapping document and returns the collector's reader
+// of it, so the tests below go through the parse the exporter really runs.
+func mappingNames(t *testing.T, document string) func() *enrich.NameSet {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "mapping.yml")
+	if err := os.WriteFile(path, []byte(document), 0o600); err != nil {
+		t.Fatalf("writing the mapping file: %v", err)
+	}
+	m, err := enrich.NewMapping(path)
+	if err != nil {
+		t.Fatalf("NewMapping() error = %v, want nil", err)
+	}
+	return m.Names
+}
+
+// TestFlowCollector_NamesRideTheirOwnSeries pins where a looked-up name goes.
+// It rides a series of its own rather than the counters' labels, because an
+// operator respelling a hostname would otherwise break every counter under
+// that device: the pair table would open a new entry for the new spelling and
+// rate() would read the old one as gone.
+//
+// The three absences are the same rule from the other side. A port the file
+// does not name, a port no published entry crossed, and a device carrying
+// interfaces but no hostname each produce no row, which a join shows by
+// finding nothing to join to.
+func TestFlowCollector_NamesRideTheirOwnSeries(t *testing.T) {
+	t.Parallel()
+
+	agg := aggregator.New(aggConfig(), aggregator.Modules{Hosts: true})
+	agg.Ingest([]flow.Record{flowRecord("10.0.0.1", "10.0.0.2", 1000)})
+
+	// The fixture crosses 3 and 4 on 192.0.2.1: 4 is unnamed, 99 is named
+	// but crossed by nothing, and 192.0.2.9 names no hostname at all.
+	names := mappingNames(t, `devices:
+  192.0.2.1:
+    hostname: sw1.example.net
+    interfaces:
+      3: Gi0/3
+      99: Gi0/99
+  192.0.2.9:
+    interfaces:
+      1: Vl1
+`)
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, aggConfig(), nil, names)
+
+	expected := `
+# HELP xflow_device_info Always 1, carrying what the mapping file calls each device it names
+# TYPE xflow_device_info gauge
+xflow_device_info{exporter_address="192.0.2.1",exporter_name="sw1.example.net"} 1
+# HELP xflow_interface_info Always 1, carrying what the mapping file calls each interface the tables publish
+# TYPE xflow_interface_info gauge
+xflow_interface_info{exporter_address="192.0.2.1",ifindex="3",ifname="Gi0/3"} 1
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_device_info", "xflow_interface_info"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// TestFlowCollector_InterfaceNamesFollowTheTopKCut pins the bound on the
+// interface series. The counters a name joins to are the published ones, so a
+// port whose only entries fell below the cut has nothing to name, and naming
+// it anyway would publish a row for traffic no counter carries.
+func TestFlowCollector_InterfaceNamesFollowTheTopKCut(t *testing.T) {
+	t.Parallel()
+
+	cfg := aggConfig()
+	cfg.TopK = 1
+
+	heavy := flowRecord("10.0.0.1", "10.0.0.9", 5000)
+	mouse := flowRecord("10.0.0.2", "10.0.0.9", 10)
+	mouse.InputIf = 7
+
+	agg := aggregator.New(cfg, aggregator.Modules{Hosts: true})
+	agg.Ingest([]flow.Record{heavy, mouse})
+
+	names := mappingNames(t, "devices:\n  192.0.2.1:\n    interfaces:\n      3: Gi0/3\n      7: Gi0/7\n")
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil, names)
+
+	expected := `
+# HELP xflow_interface_info Always 1, carrying what the mapping file calls each interface the tables publish
+# TYPE xflow_interface_info gauge
+xflow_interface_info{exporter_address="192.0.2.1",ifindex="3",ifname="Gi0/3"} 1
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_interface_info"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// TestFlowCollector_NamesAbsentWithoutAMappingFile pins that neither naming
+// series exists at all without one, rather than existing and holding nothing:
+// an empty family reads as a fleet nobody named, where absence reads as a
+// feature nobody turned on.
+func TestFlowCollector_NamesAbsentWithoutAMappingFile(t *testing.T) {
+	t.Parallel()
+
+	agg := aggregator.New(aggConfig(), aggregator.Modules{Hosts: true})
+	agg.Ingest([]flow.Record{flowRecord("10.0.0.1", "10.0.0.2", 1000)})
+
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, aggConfig(), nil, nil)
+
+	if err := testutil.CollectAndCompare(c, strings.NewReader(""),
+		"xflow_device_info", "xflow_interface_info"); err != nil {
 		t.Errorf("CollectAndCompare() mismatch: %v", err)
 	}
 }
