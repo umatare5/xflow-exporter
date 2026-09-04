@@ -145,7 +145,7 @@ func gatherFamilies(t *testing.T, appName string) []*dto.MetricFamily {
 			return "Example Networks", true
 		}
 		return "", false
-	})
+	}, nil)
 
 	families, err := c.Registry().Gather()
 	if err != nil {
@@ -216,10 +216,14 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	r.Start = time.Unix(1_756_300_000, 0)
 	r.End = r.Start.Add(15 * time.Second)
 	agg.Ingest([]flow.Record{r})
-	// A naming function, so the ASN naming family is gathered rather than
-	// absent and its label values reach the lint below.
+	// A naming function and a mapping file, so the three naming families are
+	// gathered rather than absent and their label values reach the lint
+	// below. A family with no row is not gathered at all, so the file has to
+	// name the device and one interface the fixture record crossed.
+	names := mappingNames(t,
+		"devices:\n  192.0.2.1:\n    hostname: sw1.example.net\n    interfaces:\n      3: Gi0/3\n")
 	c.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation,
-		func(uint32) (string, bool) { return "Example Networks", true })
+		func(uint32) (string, bool) { return "Example Networks", true }, names)
 
 	dist := c.RegisterDistributions()
 	dist.Observe([]flow.Record{r})
@@ -242,7 +246,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	// options template announcing a sampler, and the remote write instant
 	// needs a client that has written, whose counters the package keeps
 	// unexported. Changing the surface is meant to change this number.
-	const wantFamilies = 60
+	const wantFamilies = 62
 	if len(families) != wantFamilies {
 		t.Fatalf("gathered %d families, want %d: the lint below covers only what is registered",
 			len(families), wantFamilies)

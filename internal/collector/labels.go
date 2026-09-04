@@ -31,6 +31,11 @@ const (
 	labelInputIf     = "input_ifindex"  // ifIndex the flow entered the device on
 	labelOutputIf    = "output_ifindex" // ifIndex the flow left the device on
 
+	// Naming labels, on the info series that carry the mapping file's strings.
+	labelExporterName = "exporter_name" // What the file calls that device
+	labelIfIndex      = "ifindex"       // One ifIndex, on the series naming it
+	labelIfName       = "ifname"        // What the file calls that interface
+
 	// Enrichment labels.
 	labelEnricher = "enricher" // Enrichment source a lookup went through
 	labelResult   = "result"   // What an enrichment source made of a record

@@ -2,6 +2,8 @@
 
 Every module is disabled by default and enabled per `--collector.<module>` flag, underscores in the name spelled as hyphens: `tcp_flags` takes `--collector.tcp-flags`. With none enabled the exporter still receives, decodes and counts flows in the [health series](health.md), and publishes no traffic series.
 
+Both naming series need `--enrich.mapping-file` besides, and neither appears with no module enabled: they are registered with the traffic families rather than on their own.
+
 ## Metrics
 
 | Module         | Metric                             | Type    | Description                     |
@@ -37,6 +39,10 @@ Every module is disabled by default and enabled per `--collector.<module>` flag,
 | `threats`      | `xflow_threat_bytes_total`         | Counter | Sampling-corrected bytes        |
 | `threats`      | `xflow_threat_packets_total`       | Counter | Sampling-corrected packets      |
 | `threats`      | `xflow_threat_flows_total`         | Counter | Flow records as exported        |
+| any            | `xflow_device_info`                | Gauge   | Always 1, naming a device       |
+| `hosts`        | `xflow_interface_info`             | Gauge   | Always 1, naming an interface   |
+| `services`     | `xflow_interface_info`             | Gauge   | Always 1, naming an interface   |
+| `threats`      | `xflow_interface_info`             | Gauge   | Always 1, naming an interface   |
 
 ## Labels
 
@@ -57,6 +63,8 @@ Every family carries `exporter_address`, and the labels beside it are its aggreg
 | `application`                    | The AVC name, the inline vendor string, or `engine:selector`     |
 | `src_country`/`dst_country`      | ISO codes, `private` on a LAN, `unknown` where unplaced          |
 | `address`/`direction`            | A flagged address and the side of the flow it was seen on        |
+| `exporter_name`                  | What the mapping file calls that device, on `xflow_device_info`  |
+| `ifindex`/`ifname`               | One ifIndex and its mapping-file name, on `xflow_interface_info` |
 
 **`version`**
 
@@ -151,6 +159,15 @@ it names each AS the published pairs carry, and the name rides its own series ra
 
 - It follows the same cut those pairs take, the table behind that cut running to `--aggregation.max-entries` while a database names every AS there is.
 - An AS no lookup resolved carries no name, which a join shows by finding nothing to join to, and the series is absent altogether without `--enrich.asn-database`.
+
+**`xflow_device_info` and `xflow_interface_info`**
+
+they name what the counters key by address and by number, each name riding its own series for the reason `xflow_asn_info` does: an operator respelling a hostname would otherwise open a new entry for every counter under that device.
+
+- The device rows take no cut, their bound being the mapping file's own device count, and they carry only the devices the file gives a `hostname`.
+- The interface rows follow the cut `hosts`, `services` and `threats` took, so a port whose entries fell below it loses its name with them and reappears when they do.
+- A device or a port the file does not name produces no row rather than an empty one, so a join finds nothing to join to and the counter keeps its number.
+- The fold row of those three families reads `other` on both interface labels, which matches no name, so its bytes stay unattributed to a port.
 
 **the three `xflow_country_pair_*` counters**
 

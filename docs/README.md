@@ -64,7 +64,7 @@ Table families accumulate from entry creation, and an entry evicted then re-crea
 
 ### Enrichment
 
-An `--enrich.*` source fills a dimension the device did not carry. Every source is off by default.
+An `--enrich.*` source supplies what the device did not: a dimension of the record itself, or a name for one the record carries as a number. Every source is off by default.
 
 | Flag                        | Fills                                    |
 | :-------------------------- | :--------------------------------------- |
@@ -72,11 +72,12 @@ An `--enrich.*` source fills a dimension the device did not carry. Every source 
 | `--enrich.asn-database`     | The AS numbers, from a MaxMind-format DB |
 | `--enrich.country-database` | The ISO country codes, from the same     |
 | `--enrich.threat-file`      | A flag on addresses a list file names    |
+| `--enrich.mapping-file`     | Device, interface and port names         |
 
 Lookups are local: nothing is fetched and no credential is held. Neither database ships here, so point the flag at a GeoLite2 or DB-IP file or fetch one with [`scripts/fetch-enrichment-data.sh`](../scripts/fetch-enrichment-data.sh). A path that cannot be opened fails startup.
 
 - **Never overwrites** — an exported reading wins, so enrichment fills absence alone.
-- **Feeds the existing families** — a filled dimension keys the module that publishes it.
+- **Feeds the existing families** — a filled dimension keys the module that publishes it, while a looked-up name rides an info series of its own.
 - **Cardinality** — filling a dimension creates series that were absent, hence the opt-in.
 - **Observability** — `xflow_enrichment_lookups_total` splits by `enricher` and `result`.
 
@@ -101,6 +102,46 @@ Lookups are local: nothing is fetched and no credential is held. Neither databas
 > [!TIP]
 > Fetching the files is the operator's job, and [`scripts/fetch-enrichment-data.sh`](../scripts/fetch-enrichment-data.sh) is one way to do it: it downloads, merges and deduplicates the published lists, and its `databases` subcommand takes the ASN and country databases from DB-IP unless `MAXMIND_LICENSE_KEY` is set. Both write where `THREAT_FILE`, `ASN_DATABASE` and `COUNTRY_DATABASE` point. It checks that each body names an address rather than trusting the status, refuses a merge below `MIN_ADDRESSES` (1000) and a multi-part list no part of which reached `SPLIT_PART_LINES` (131072), and exits non-zero naming its reason, so a bad fetch leaves the previous file in place. Run it from cron and reload afterwards.
 
+### Mapping file
+
+`--enrich.mapping-file` names devices and their interfaces, which no flow protocol exports, and may name transport ports the built-in table does not cover.
+
+```yaml
+devices:
+  192.0.2.1: # the flow's source address
+    hostname: sw1.example.net # optional; without it the device gets no name
+    interfaces: # ifIndex to ifName
+      10102: Gi0/2
+services: # port/proto, ahead of the built-in table
+  5246/udp: capwap-control
+```
+
+- **The names ride `xflow_device_info` and `xflow_interface_info`** — join on `exporter_address` and `ifindex`, plus `job` and `instance`.
+- **Strict** — an unknown key, a key that is not an address, an out-of-range ifIndex or port, a leading zero, a blank or unprintable name, or two spellings of one address each fail the whole load.
+- **Exactly one document** — an empty file and a trailing `---` are both refused, so a truncated write leaves the previous names in force.
+- **`devices: {}` loads** — an operator emptying the file on purpose is how names are taken away at reload.
+- **A `~` key is dropped by YAML itself**, reaching no check here, and a `%YAML 1.2` directive is refused by the parser.
+- **`services:` wins the ports the built-in table also names**, but the tables are consulted whole in turn, so a source port this file names beats a destination port the built-in table does.
+
+This joins a name onto the per-interface traffic of one device, keeping the rows no name reaches:
+
+```promql
+sum by (exporter_address, ifname) (
+  sum without (src, dst, output_ifindex) (rate(xflow_host_pair_bytes_total[5m]))
+  * on (job, instance, exporter_address, input_ifindex) group_left (ifname)
+    label_replace(xflow_interface_info, "input_ifindex", "$1", "ifindex", "(.+)")
+)
+or
+sum by (exporter_address, input_ifindex) (
+  sum without (src, dst, output_ifindex) (rate(xflow_host_pair_bytes_total[5m]))
+  unless on (job, instance, exporter_address, input_ifindex)
+    label_replace(xflow_interface_info, "input_ifindex", "$1", "ifindex", "(.+)")
+)
+```
+
+> [!IMPORTANT]
+> `job` and `instance` belong in `on()`: two Prometheus targets scraping one device make the match many-to-many, which fails the whole evaluation. Neither branch may filter `exporter_address!="other"`. A negative matcher also matches a series lacking the label, so the fold row would fall out of both and the total would drop by what the entry bound folded.
+
 ### Reloading
 
 `--web.enable-lifecycle` exposes `/-/reload`, which re-reads every enrichment source. A `SIGHUP` does the same without the flag.
@@ -108,9 +149,11 @@ Lookups are local: nothing is fetched and no credential is held. Neither databas
 - **POST or PUT only**, and unexposed by default, a reload being a write rather than a read.
 - **A failed reload keeps the previous data** — the set already loaded stays in force.
 - **Atomic** — a new set is built whole before it replaces the old one, so no lookup pauses.
+- **The sources are the ones startup configured** — a reload re-reads their files rather than reading the flags again.
+- **`--dry-run` validates the flags alone** — it opens no source, so a mapping file it accepts may still fail startup.
 
 > [!NOTE]
-> A list gone missing would otherwise unflag every address at once, which reads as a network that had just gone clean; `xflow_threat_reload_failures_total` counts those loads. Each mmdb reader is replaced rather than reopened, so a lookup never sees a half-loaded set and the decode path never pauses. [`SECURITY.md`](../SECURITY.md) covers the exposure.
+> A list gone missing would otherwise unflag every address at once, which reads as a network that had just gone clean; `xflow_threat_reload_failures_total` counts those loads. The mapping file has no such counter, mirroring the databases: a failed load answers `/-/reload` with 500 and logs its reason. Each mmdb reader is replaced rather than reopened, so a lookup never sees a half-loaded set and the decode path never pauses. [`SECURITY.md`](../SECURITY.md) covers the exposure.
 
 ### Bounded state
 

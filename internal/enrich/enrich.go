@@ -24,8 +24,8 @@ const (
 	// ResultUnknown marks a lookup whose source knew nothing, which leaves
 	// the dimension absent rather than guessed.
 	ResultUnknown = "unknown"
-	// ResultSkipped marks a record that needed nothing, the device having
-	// carried the dimension already.
+	// ResultSkipped marks a record that needed nothing, the device or an
+	// earlier source in the chain having carried the dimension already.
 	ResultSkipped = "skipped"
 )
 

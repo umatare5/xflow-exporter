@@ -4697,7 +4697,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "What fraction of the records each database actually resolved: the direct answer to organization names or country codes not appearing. The denominator is filled plus unknown and deliberately excludes skipped, which means the device had already carried the dimension -- counting it as a failure would read a device exporting its own AS numbers as a broken database. The threat source is excluded because its fill result is a list hit rate rather than coverage, and any coverage threshold would read it permanently red. A falling figure over weeks is a stale database.",
+          "description": "What fraction of the records each database actually resolved: the direct answer to organization names or country codes not appearing. The denominator is filled plus unknown and deliberately excludes skipped, which means the device or an earlier source in the chain had already carried the dimension -- counting it as a failure would read a device exporting its own AS numbers as a broken database. The threat and mapping sources are excluded because their fill result is a hit rate against a hand-kept list rather than coverage, and any coverage threshold would read them permanently red. A falling figure over weeks is a stale database.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4760,7 +4760,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (enricher) (rate(xflow_enrichment_lookups_total{result=\"filled\",enricher!=\"threat\"}[$rollup_interval]))\n/\nsum by (enricher) (rate(xflow_enrichment_lookups_total{result=~\"filled|unknown\",enricher!=\"threat\"}[$rollup_interval]))",
+              "expr": "sum by (enricher) (rate(xflow_enrichment_lookups_total{result=\"filled\",enricher!~\"threat|mapping\"}[$rollup_interval]))\n/\nsum by (enricher) (rate(xflow_enrichment_lookups_total{result=~\"filled|unknown\",enricher!~\"threat|mapping\"}[$rollup_interval]))",
               "instant": true,
               "legendFormat": "{{enricher}}",
               "range": false,

@@ -60,7 +60,10 @@ the table a size or an eviction count belongs to, named as its module is.
 
 **`enricher`/`result`**
 
-which source a lookup went through — `asn`, `country`, `services` or `threat` — and what it made of the record: `filled`, `unknown` where the source knew nothing, and `skipped` where the device had carried the dimension already.
+which source a lookup went through — `asn`, `country`, `mapping`, `services` or `threat` — and what it made of the record. `filled` supplied a dimension, `unknown` says the source knew nothing, and `skipped` says the device or an earlier source in the chain had carried it already.
+
+- `mapping` and `services` both name an application from a port and `mapping` runs first, so a record either of them names sends the other one `skipped`.
+- A mapping file carrying `devices:` alone names no port, so `mapping` reads `unknown` on every record: the file's device and interface names ride the naming series rather than passing through a lookup.
 
 ## Specifications
 
