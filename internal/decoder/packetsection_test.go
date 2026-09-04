@@ -7,21 +7,20 @@ import (
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
-// liteSectionSize is the fixed section size the v9 fixtures declare, the
-// device default of the packet-section size setting.
-const liteSectionSize = 64
+// fixtureSectionSize is the fixed section size the v9 fixtures declare.
+const fixtureSectionSize = 64
 
 // padTo zero-pads a frame to the fixed v9 section size.
 func padTo(frame []byte) []byte {
-	padded := make([]byte, liteSectionSize)
+	padded := make([]byte, fixtureSectionSize)
 	copy(padded, frame)
 	return padded
 }
 
-// TestDecodeNetFlowLite_V9PacketSection covers the measured v9 mode: the
+// TestDecodeSection_V9PacketSection covers the v9 mode: the
 // deprecated field 104 carries a fixed-size layer-2 section, zero-padded,
 // which decodes through the same header walk sFlow uses.
-func TestDecodeNetFlowLite_V9PacketSection(t *testing.T) {
+func TestDecodeSection_V9PacketSection(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()
@@ -29,7 +28,7 @@ func TestDecodeNetFlowLite_V9PacketSection(t *testing.T) {
 	tpl := flowSet(templateFlowSetID, templateSpec(fixtureV9TemplateID,
 		[2]uint16{fieldInputSNMP, 4},
 		[2]uint16{fieldOutputSNMP, 4},
-		[2]uint16{fieldPacketSectionV9Data, liteSectionSize},
+		[2]uint16{fieldPacketSectionV9Data, fixtureSectionSize},
 	))
 
 	record := be32(nil, 7)
@@ -67,10 +66,10 @@ func TestDecodeNetFlowLite_V9PacketSection(t *testing.T) {
 	}
 }
 
-// TestDecodeNetFlowLite_IPFIXSectionWithFrameSize covers the IPFIX mode: a
+// TestDecodeSection_IPFIXSectionWithFrameSize covers the IPFIX mode: a
 // variable-length dataLinkFrameSection with the original frame length in
 // dataLinkFrameSize.
-func TestDecodeNetFlowLite_IPFIXSectionWithFrameSize(t *testing.T) {
+func TestDecodeSection_IPFIXSectionWithFrameSize(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()
@@ -106,9 +105,9 @@ func TestDecodeNetFlowLite_IPFIXSectionWithFrameSize(t *testing.T) {
 	}
 }
 
-// TestDecodeNetFlowLite_IPHeaderSection covers IE 313, a section starting at
+// TestDecodeSection_IPHeaderSection covers IE 313, a section starting at
 // the IP header with no layer 2 in front.
-func TestDecodeNetFlowLite_IPHeaderSection(t *testing.T) {
+func TestDecodeSection_IPHeaderSection(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()
@@ -136,10 +135,10 @@ func TestDecodeNetFlowLite_IPHeaderSection(t *testing.T) {
 	}
 }
 
-// TestDecodeNetFlowLite_ParsedFieldsWinOverSection pins the precedence: a
+// TestDecodeSection_ParsedFieldsWinOverSection pins the precedence: a
 // record carrying both the device's parsed fields and a section keeps the
 // device's own classification.
-func TestDecodeNetFlowLite_ParsedFieldsWinOverSection(t *testing.T) {
+func TestDecodeSection_ParsedFieldsWinOverSection(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()
@@ -148,7 +147,7 @@ func TestDecodeNetFlowLite_ParsedFieldsWinOverSection(t *testing.T) {
 		[2]uint16{fieldIPv4SrcAddr, 4},
 		[2]uint16{fieldIPv4DstAddr, 4},
 		[2]uint16{fieldInBytes, 4},
-		[2]uint16{fieldPacketSectionV9Data, liteSectionSize},
+		[2]uint16{fieldPacketSectionV9Data, fixtureSectionSize},
 	))
 
 	record := append([]byte{192, 0, 2, 100}, 192, 0, 2, 200)
@@ -170,15 +169,15 @@ func TestDecodeNetFlowLite_ParsedFieldsWinOverSection(t *testing.T) {
 	}
 }
 
-// TestDecodeNetFlowLite_ShortPaddedSection pins that a section shorter than
+// TestDecodeSection_ShortPaddedSection pins that a section shorter than
 // its padding decodes what fits and fabricates nothing.
-func TestDecodeNetFlowLite_ShortPaddedSection(t *testing.T) {
+func TestDecodeSection_ShortPaddedSection(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()
 
 	tpl := flowSet(templateFlowSetID, templateSpec(fixtureV9TemplateID,
-		[2]uint16{fieldPacketSectionV9Data, liteSectionSize},
+		[2]uint16{fieldPacketSectionV9Data, fixtureSectionSize},
 	))
 
 	// Ethernet and IPv4 only: the section ends before the TCP ports.
@@ -205,9 +204,9 @@ func TestDecodeNetFlowLite_ShortPaddedSection(t *testing.T) {
 	}
 }
 
-// TestDecodeNetFlowLite_RandomSamplerPair covers the 309/310 options pair:
+// TestDecodeSection_RandomSamplerPair covers the 309/310 options pair:
 // size selected out of each population.
-func TestDecodeNetFlowLite_RandomSamplerPair(t *testing.T) {
+func TestDecodeSection_RandomSamplerPair(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()

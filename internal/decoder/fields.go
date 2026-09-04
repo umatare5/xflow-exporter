@@ -13,10 +13,10 @@ import (
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
-// Sampled packet section elements. NetFlow-Lite devices export one sampled
-// packet per record: v9 mode ships the layer-2 section in the deprecated
-// field 104, measured on Cisco devices, and IPFIX mode in IE 315, with the
-// original frame length in IE 312 and an IP-only section in IE 313.
+// Sampled packet section elements, one sampled packet per record: v9 mode
+// ships the layer-2 section in the deprecated field 104, IPFIX mode in IE
+// 315, with the original frame length in IE 312 and an IP-only section in
+// IE 313.
 const (
 	fieldPacketSectionV9Data   = 104
 	fieldDataLinkFrameSize     = 312
@@ -156,7 +156,7 @@ func (p addrPair) carries() bool {
 }
 
 // resolvePacketSection decodes a sampled packet section through the header
-// walkers the sFlow decoder uses — NetFlow-Lite is packet sampling in a
+// walkers the sFlow decoder uses, a section being one sampled packet in a
 // NetFlow envelope, so the two share one parse.
 //
 // The section is walked only where the record carries neither address, so the

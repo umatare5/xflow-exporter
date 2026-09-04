@@ -52,7 +52,7 @@ Configure each device to export flows to the exporter's address, `2055/udp` by d
 docker run -p 10053:10053 -p 2055:2055/udp ghcr.io/umatare5/xflow-exporter:latest
 ```
 
-> [!Tip]
+> [!TIP]
 > If you prefer using binaries, download them from the [Release](https://github.com/umatare5/xflow-exporter/releases).
 >
 > **Supported Platform:** `linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64` and `windows_amd64`
@@ -63,7 +63,7 @@ See [Prometheus Configuration](#prometheus-configuration) for the job and the al
 
 ## Protocol Support
 
-NetFlow v5/v8/v9, NetFlow-Lite, IPFIX and sFlow v5, over plaintext UDP — see [Protocols](docs/protocols.md).
+NetFlow v5/v8/v9, IPFIX and sFlow v5, over plaintext UDP — see [Protocols](docs/protocols.md).
 
 ## Syntax
 
@@ -117,7 +117,7 @@ The series a dashboard usually starts from:
 
 See [`docs/README.md`](docs/README.md) for the absence, folding and sampling rules every module shares.
 
-> [!Important]
+> [!IMPORTANT]
 >
 > All collector modules are **disabled by default** to bound cardinality, and `distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration.
 
@@ -134,7 +134,7 @@ These series describe the exporter itself rather than the traffic it aggregates.
 | `xflow_sampling_rate`                  | Gauge   | Declared rate per domain         |
 | `xflow_aggregation_entries`            | Gauge   | Entries held per table           |
 
-> [!Important]
+> [!IMPORTANT]
 >
 > Alert on freshness with `time() - xflow_last_flow_timestamp_seconds`. A silent device stops moving its timestamp while every counter freezes, and nothing else can tell that from a healthy quiet network.
 
@@ -149,7 +149,7 @@ These series describe the shipping path rather than the exporter, and appear onl
 | `xflow_remote_write_samples_total`                  | Counter | One sample per series per write |
 | `xflow_remote_write_last_success_timestamp_seconds` | Gauge   | Unix time of the last success   |
 
-> [!Important]
+> [!IMPORTANT]
 >
 > Alert on `xflow_remote_write_failures_total` rather than on the timestamp. Shipping runs on its own interval, so a rejected write leaves `/metrics` and `up` untouched, and the timestamp is absent until the first write succeeds — a client that has never reached its endpoint publishes no instant to go stale. A registry gather that fails counts on that same counter.
 
@@ -186,7 +186,7 @@ Add the job from [`examples/prometheus.yml`](./examples/prometheus.yml) to your 
 
 Add the rules from [`examples/prometheus_record_rules.yml`](./examples/prometheus_record_rules.yml) to your configuration.
 
-> [!Note]
+> [!NOTE]
 > The rules collapse the pair- and tuple-keyed families onto one dimension, which is what makes a country, AS or port breakdown affordable to retain — [Recording rules](docs/README.md#recording-rules) carries what each group answers.
 
 #### Alerting Rules Configuration Example
@@ -203,10 +203,10 @@ Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xfl
   <img alt="Grafana dashboard showing flow volume, composition and exporter health panels" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard.png">
 </picture>
 
-> [!Tip]
+> [!TIP]
 > See [`docs/assets/xflow-exporter-dashboard_full.png`](https://github.com/umatare5/xflow-exporter/blob/main/docs/assets/xflow-exporter-dashboard_full.png) for the full capture image of the example.
 
-> [!Note]
+> [!NOTE]
 > Panels rank by packets rather than bytes, and the composition panels rank rather than total — [Dashboards](docs/README.md#dashboards) carries what each panel covers and why.
 
 ## Contributing

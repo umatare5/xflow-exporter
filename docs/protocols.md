@@ -2,17 +2,19 @@
 
 Every listener accepts every protocol below, identified per datagram. Transport is plaintext UDP.
 
-| Protocol                                                | Status    | Verified on       |
-| :------------------------------------------------------ | :-------- | :---------------- |
-| [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Awaiting a device |
-| [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Awaiting a device |
-| [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Catalyst 2960-CX  |
-| [NetFlow-Lite](#netflow-lite) (packet sections)         | Supported | Catalyst 2960-CX  |
-| [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Awaiting a device |
-| [sFlow v5](#sflow-v5)                                   | Supported | Awaiting a device |
+| Protocol                                                | Status    | Verified on                               |
+| :------------------------------------------------------ | :-------- | :---------------------------------------- |
+| [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Cisco C891FJ (planned)                    |
+| [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Cisco C891FJ (planned)                    |
+| [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Cisco WS-C2960CX-8PC-L, Cisco C9800-CL-K9 |
+| [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Cisco C9800-CL-K9                         |
+| [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G (planned)                      |
+
+- **Cisco WS-C2960CX-8PC-L** — a Catalyst 2960-CX on `C2960CX-UNIVERSALK9-M` 15.2(7)E3, the one device here declaring a sampler, exporting v9 under a custom record that parses a 5-tuple.
+- **Cisco C9800-CL-K9** — a Catalyst 9800-CL on `C9800-CL-K9_IOSXE` 17.15.6, exporting IPFIX and NetFlow v9 at once from `record wireless avc basic`, which keys a wireless client rather than a switched port.
 
 > [!NOTE]
-> **Verified on** names the device whose own export this decoder was read against. Synthetic datagrams and unit tests do not count, so a protocol awaiting a device is implemented and covered by fixtures but never measured. The Catalyst 2960-CX is a `C2960CX-UNIVERSALK9-M` 15.2(7)E3 running NetFlow-Lite, which exports NetFlow v9 — under a custom record carrying a parsed 5-tuple, so the packet-section path within NetFlow-Lite is itself still awaiting a device.
+> **Verified on** names the vendor and model whose own export this decoder was read against, so synthetic datagrams and unit tests do not count. A row reading `(planned)` names hardware awaiting measurement, leaving that protocol implemented and covered by fixtures but never read off a wire. Neither verified device names an interface, and neither exports a section. The 2960-CX carries a parsed 5-tuple under a custom record, and the 9800-CL keys a wireless client rather than a switched port.
 
 > [!NOTE]
 > DTLS is not supported. No shipping network OS exports flows over DTLS, and Go has no production DTLS 1.3 implementation yet.
@@ -222,8 +224,11 @@ Method 8, full flow, is the shape the Catalyst family shares: addresses first, n
 
 ## NetFlow v9 and IPFIX
 
-Templates are cached per exporter address and Observation Domain ID together, as RFC 7011 requires, and per protocol besides. The pair RFC 7011 names is not enough here: a v9 Source ID, an IPFIX Observation Domain ID and an sFlow sub-agent id are unrelated numbers over one range, and 0 is the default all three take, so a device exporting two protocols at once from one address has them collide out of the box. The 256 floor RFC 7011 sets is on template ids, not on these. With the protocol in the key, two domains reusing one template ID never corrupt each other.
+NetFlow v9 and IPFIX are distinct protocols that share one template mechanism, which is why a single section covers both. IPFIX carries `0x000A` in the version field NetFlow numbered up to 9, so it is also called NetFlow v10 — a name the IETF never used. [IPFIX against NetFlow v9](#ipfix-against-netflow-v9) tabulates where the two part company.
 
+Templates are cached per exporter address and Observation Domain ID together, as RFC 7011 requires, and per protocol besides. The pair RFC 7011 names is not enough here: a v9 Source ID, an IPFIX Observation Domain ID and an sFlow sub-agent id are numbered independently over one range, so two collide on any repeated value. The 256 floor RFC 7011 sets is on template ids, not on these, so with the protocol in the key two domains reusing one template ID never corrupt each other.
+
+- A Catalyst 9800-CL exporting v9 and IPFIX at once numbers both protocols' options templates 256 and 257 under domain 1, so one address announces each id twice with different field counts.
 - A template declaring a zero-width fixed field, more than `--parser.max-fields-per-template` fields, or specifiers that overrun their set is refused as `invalid_template`.
 - A template unrefreshed for `--parser.template-ttl` expires — an orphaned template may describe a schema the device has replaced — and `missing_template` is expected after a restart until each device re-announces.
 - IPFIX adds enterprise information elements, bounds-checked variable-length fields, and template withdrawals.
@@ -450,13 +455,9 @@ The enterprise bit is what makes an IPFIX field specifier variable in size.
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
-## NetFlow-Lite
+## Packet sections
 
-Catalyst 2960-X/XR, 2960-CX, 3560-CX and 4948E are documented as shipping one sampled packet section per v9 or IPFIX record. Sections decode through the same header walk the sFlow decoder uses.
-
-- Elements: the deprecated v9 field 104 (`layer2packetSectionData`), and IPFIX `dataLinkFrameSection` (315), `ipHeaderPacketSection` (313), `dataLinkFrameSize` (312).
-- The section is walked only where the record carries neither address, so the device's own parse wins; the walk then supplies the addresses, protocol, TOS, ports and flags. One record reads as one sampled packet.
-- The 309/310 `samplingSize`/`samplingPopulation` options pair feeds the sampling correction.
+A record carrying a sampled packet section in place of parsed flow fields decodes through the same header walk the sFlow decoder uses, one record reading as one sampled packet. The section is walked only where the record carries neither address, so a device's own parse wins whole — the walk then supplies the addresses, protocol, TOS, ports and flags. The 309/310 `samplingSize`/`samplingPopulation` options pair feeds the sampling correction.
 
 | Element                   | ID  | Carries                                     |
 | :------------------------ | :-- | :------------------------------------------ |
@@ -465,12 +466,10 @@ Catalyst 2960-X/XR, 2960-CX, 3560-CX and 4948E are documented as shipping one sa
 | `ipHeaderPacketSection`   | 313 | A section that starts at the IP header      |
 | `dataLinkFrameSize`       | 312 | The original frame length, before slicing   |
 
-A fixed-width v9 section is zero-padded, so a frame cut before its transport header reads zero ports — and a flags profile of `none` from the padded flags byte — the one ambiguity a padded section cannot escape.
+The section is taken at whatever width the template declares for the field. A fixed-width v9 section is zero-padded, so a frame cut before its transport header reads zero ports and a flags profile of `none` — the one ambiguity a padded section cannot escape. No device here exports a section, so this path is covered by fixtures alone.
 
-The white paper's own table gives no length for 104, nor for the offset and size elements 102 and 103 beside it, so the section is taken at whatever width the template declares for the field.
-
-> [!IMPORTANT]
-> No device available here exports a section, so this path is covered by fixtures alone — the table at the top of this page carries what each decoder has met.
+> [!TIP]
+> NetFlow Lite carries no section. Cisco's overview of the feature covers the Catalyst 2960-X, 2960-XR, 2960-CX and 3560-CX, and states it classifies packets into flows on the switch and samples ingress only. A 2960-CX measured here accepts `collect interface output`, then reports `0` for every unicast flow.
 
 ## sFlow v5
 

@@ -9,7 +9,7 @@ Reference pages for xflow-exporter. The [README](../README.md) covers getting fl
 | [Health](health.md)               | The exporter's own metrics and reasons |
 | [Configuration](configuration.md) | Flags and defaults, as `--help` prints |
 
-## Technical Information
+## Technical information
 
 ### Push and pull
 
@@ -192,7 +192,7 @@ NetFlow v9 and IPFIX data decode against templates cached per exporter address, 
 
 ### Packet sections
 
-A NetFlow-Lite record carries one sampled packet section instead of parsed flow fields, and decodes through the header walk the sFlow decoder uses — [Protocols](protocols.md#netflow-lite) carries the elements, the precedence and the padding ambiguity.
+A record carrying one sampled packet section instead of parsed flow fields decodes through the header walk the sFlow decoder uses — [Protocols](protocols.md#packet-sections) carries the elements, the precedence and the padding ambiguity.
 
 ### Remote write
 
