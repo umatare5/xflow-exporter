@@ -36,6 +36,8 @@ func flowRecord(src, dst string, bytes uint64) flow.Record {
 		Bytes:    bytes,
 		Packets:  1,
 		Flows:    1,
+		InputIf:  3,
+		OutputIf: 4,
 	}
 }
 
@@ -58,8 +60,8 @@ xflow_exporter_bytes_total{exporter_address="192.0.2.1",version="netflow_v9"} 15
 xflow_exporter_bytes_total{exporter_address="other",version="other"} 0
 # HELP xflow_host_pair_flows_total Flow records as exported per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_flows_total counter
-xflow_host_pair_flows_total{dst="10.0.0.2",exporter_address="192.0.2.1",src="10.0.0.1"} 2
-xflow_host_pair_flows_total{dst="other",exporter_address="other",src="other"} 0
+xflow_host_pair_flows_total{dst="10.0.0.2",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",src="10.0.0.1"} 2
+xflow_host_pair_flows_total{dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_exporter_bytes_total", "xflow_host_pair_flows_total"); err != nil {
@@ -90,9 +92,9 @@ func TestFlowCollector_TopKWithholdsTheLiveTail(t *testing.T) {
 	expected := `
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_bytes_total counter
-xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",src="10.0.0.1"} 5000
-xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",src="10.0.0.2"} 3000
-xflow_host_pair_bytes_total{dst="other",exporter_address="other",src="other"} 0
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",src="10.0.0.1"} 5000
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",src="10.0.0.2"} 3000
+xflow_host_pair_bytes_total{dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_host_pair_bytes_total"); err != nil {
@@ -120,8 +122,8 @@ func TestFlowCollector_MinBytesWithholdsMice(t *testing.T) {
 	expected := `
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_bytes_total counter
-xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",src="10.0.0.1"} 5000
-xflow_host_pair_bytes_total{dst="other",exporter_address="other",src="other"} 0
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",src="10.0.0.1"} 5000
+xflow_host_pair_bytes_total{dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_host_pair_bytes_total"); err != nil {
@@ -149,8 +151,8 @@ func TestFlowCollector_MinBytesAdmitsTheThresholdItself(t *testing.T) {
 	expected := `
 # HELP xflow_host_pair_bytes_total Sampling-corrected bytes per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_bytes_total counter
-xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",src="10.0.0.1"} 1000
-xflow_host_pair_bytes_total{dst="other",exporter_address="other",src="other"} 0
+xflow_host_pair_bytes_total{dst="10.0.0.9",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",src="10.0.0.1"} 1000
+xflow_host_pair_bytes_total{dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_host_pair_bytes_total"); err != nil {
@@ -183,8 +185,8 @@ xflow_asn_pair_bytes_total{dst_asn="64501",exporter_address="192.0.2.1",src_asn=
 xflow_asn_pair_bytes_total{dst_asn="other",exporter_address="other",src_asn="other"} 0
 # HELP xflow_service_bytes_total Sampling-corrected bytes per service five-tuple, other carries the entry-bound fold
 # TYPE xflow_service_bytes_total counter
-xflow_service_bytes_total{dst="10.0.0.2",exporter_address="192.0.2.1",port="443",proto="tcp",src="10.0.0.1"} 700
-xflow_service_bytes_total{dst="other",exporter_address="other",port="other",proto="other",src="other"} 0
+xflow_service_bytes_total{dst="10.0.0.2",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",port="443",proto="tcp",src="10.0.0.1"} 700
+xflow_service_bytes_total{dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",port="other",proto="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_service_bytes_total", "xflow_asn_pair_bytes_total",

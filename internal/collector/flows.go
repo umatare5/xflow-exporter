@@ -146,11 +146,11 @@ func NewFlowCollector(
 	}
 	if modules.Hosts {
 		c.hosts = newFamilyDescs("xflow_host_pair", "source-destination pair",
-			[]string{labelExporter, labelSrc, labelDst})
+			[]string{labelExporter, labelSrc, labelDst, labelInputIf, labelOutputIf})
 	}
 	if modules.Services {
 		c.services = newFamilyDescs("xflow_service", "service five-tuple",
-			[]string{labelExporter, labelSrc, labelDst, labelProto, labelPort})
+			[]string{labelExporter, labelSrc, labelDst, labelProto, labelPort, labelInputIf, labelOutputIf})
 	}
 	if modules.Destinations {
 		c.destinations = newFamilyDescs("xflow_destination", "destination service",
@@ -183,7 +183,7 @@ func NewFlowCollector(
 	}
 	if modules.Threats {
 		c.threats = newFamilyDescs("xflow_threat", "flagged address",
-			[]string{labelExporter, labelAddress, labelDirection})
+			[]string{labelExporter, labelAddress, labelDirection, labelInputIf, labelOutputIf})
 	}
 
 	return c
@@ -363,13 +363,17 @@ func (c *FlowCollector) collectHealth(ch chan<- prometheus.Metric) {
 // Label builders per family.
 
 func hostLabels(k aggregator.HostKey) []string {
-	return []string{k.Exporter.String(), k.Src.String(), k.Dst.String()}
+	return []string{
+		k.Exporter.String(), k.Src.String(), k.Dst.String(),
+		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf),
+	}
 }
 
 func serviceLabels(k aggregator.ServiceKey) []string {
 	return []string{
 		k.Exporter.String(), k.Src.String(), k.Dst.String(),
 		protocolName(k.Protocol), strconv.Itoa(int(k.Port)),
+		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf),
 	}
 }
 
@@ -459,7 +463,18 @@ func countryLabels(k aggregator.CountryKey) []string {
 
 // threatLabels renders one flagged address and the side it was seen on.
 func threatLabels(k aggregator.ThreatKey) []string {
-	return []string{k.Exporter.String(), k.Address.String(), k.Direction}
+	return []string{
+		k.Exporter.String(), k.Address.String(), k.Direction,
+		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf),
+	}
+}
+
+// ifIndexLabel spells one interface. RFC 2863 numbers an interface from 1, so
+// 0 cannot collide with a port and is what an interface the export does not
+// name folds to -- an empty label would be one Prometheus cannot tell from a
+// label never set, and one Remote Write 2.0 refuses to carry.
+func ifIndexLabel(ifIndex uint32) string {
+	return strconv.FormatUint(uint64(ifIndex), 10)
 }
 
 // countryLabel spells one side of a pair.

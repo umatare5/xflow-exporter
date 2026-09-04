@@ -42,11 +42,15 @@ type ExporterKey struct {
 	Version  flow.Version
 }
 
-// HostKey keys the address-pair aggregation.
+// HostKey keys the address-pair aggregation. The interfaces the flow
+// crossed key it too, so one pair reached over two paths reads as two
+// entries rather than one sum a path cannot be read out of.
 type HostKey struct {
 	Exporter netip.Addr
 	Src      netip.Addr
 	Dst      netip.Addr
+	InputIf  uint32
+	OutputIf uint32
 }
 
 // ServiceKey keys the address-pair-with-service aggregation. Port is the
@@ -57,6 +61,8 @@ type ServiceKey struct {
 	Dst      netip.Addr
 	Protocol uint8
 	Port     uint16
+	InputIf  uint32
+	OutputIf uint32
 }
 
 // protocolTCP is the only protocol whose control bits a record can carry.
@@ -119,6 +125,8 @@ type ThreatKey struct {
 	Exporter  netip.Addr
 	Address   netip.Addr
 	Direction string
+	InputIf   uint32
+	OutputIf  uint32
 }
 
 // The sides a flagged address was seen on.
@@ -227,8 +235,13 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 	}
 
 	if a.hosts != nil && r.SrcAddr.IsValid() && r.DstAddr.IsValid() {
-		a.hosts.add(HostKey{Exporter: r.Exporter, Src: r.SrcAddr, Dst: r.DstAddr},
-			bytes, packets, r.Flows, now)
+		a.hosts.add(HostKey{
+			Exporter: r.Exporter,
+			Src:      r.SrcAddr,
+			Dst:      r.DstAddr,
+			InputIf:  r.InputIf,
+			OutputIf: r.OutputIf,
+		}, bytes, packets, r.Flows, now)
 	}
 
 	if a.services != nil && r.SrcAddr.IsValid() && r.DstAddr.IsValid() && r.Protocol != 0 {
@@ -238,6 +251,8 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 			Dst:      r.DstAddr,
 			Protocol: r.Protocol,
 			Port:     r.DstPort,
+			InputIf:  r.InputIf,
+			OutputIf: r.OutputIf,
 		}, bytes, packets, r.Flows, now)
 	}
 
@@ -298,12 +313,22 @@ func (a *Aggregator) ingestThreats(r *flow.Record, bytes, packets uint64, now in
 	}
 
 	if r.SrcFlagged {
-		a.threats.add(ThreatKey{Exporter: r.Exporter, Address: r.SrcAddr, Direction: DirectionSrc},
-			bytes, packets, r.Flows, now)
+		a.threats.add(ThreatKey{
+			Exporter:  r.Exporter,
+			Address:   r.SrcAddr,
+			Direction: DirectionSrc,
+			InputIf:   r.InputIf,
+			OutputIf:  r.OutputIf,
+		}, bytes, packets, r.Flows, now)
 	}
 	if r.DstFlagged {
-		a.threats.add(ThreatKey{Exporter: r.Exporter, Address: r.DstAddr, Direction: DirectionDst},
-			bytes, packets, r.Flows, now)
+		a.threats.add(ThreatKey{
+			Exporter:  r.Exporter,
+			Address:   r.DstAddr,
+			Direction: DirectionDst,
+			InputIf:   r.InputIf,
+			OutputIf:  r.OutputIf,
+		}, bytes, packets, r.Flows, now)
 	}
 }
 

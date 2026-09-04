@@ -393,6 +393,8 @@ Field types are 16-bit and vendor-assigned. Cisco defines 1–104 consistently a
 
 The uptime-relative pair 21 and 22 is what classic NetFlow exports; Flexible NetFlow templates may carry the absolute clocks 150–153 instead, and both are read. [`fields.go`](../internal/decoder/fields.go) is authoritative for the full set consumed, and every other type is skipped over by its declared length.
 
+A variable-width integer is read at 1, 2, 4 or 8 octets, and any other width reports nothing rather than a truncation or a zero-extension. A template declaring `INPUT_SNMP` or `OUTPUT_SNMP` three octets wide therefore leaves the interface unread, which `input_ifindex` publishes as `0`.
+
 ### IPFIX packet layout
 
 A 16-byte message header, then Sets that frame exactly as v9 FlowSets do.

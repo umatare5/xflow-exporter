@@ -177,15 +177,15 @@ tests:
           - labels: 'exporter:xflow_destination_bytes:ratio5m{exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
             value: 0.5
 
-  # The address is what the reduction drops; the side of the flow it was seen
-  # on is what it keeps.
+  # The address and the interfaces crossed are what the reduction drops; the
+  # side of the flow the address was seen on is what it keeps.
   - interval: 1m
     input_series:
-      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.5",direction="dst"}'
+      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.5",direction="dst",input_ifindex="3",output_ifindex="4"}'
         values: "0+6000x10"
-      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.6",direction="dst"}'
+      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.6",direction="dst",input_ifindex="5",output_ifindex="4"}'
         values: "0+6000x10"
-      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.7",direction="src"}'
+      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.7",direction="src",input_ifindex="4",output_ifindex="3"}'
         values: "0+3000x10"
     promql_expr_test:
       - expr: exporter_direction:xflow_threat_bytes:rate5m

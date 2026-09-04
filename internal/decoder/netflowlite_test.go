@@ -28,10 +28,12 @@ func TestDecodeNetFlowLite_V9PacketSection(t *testing.T) {
 
 	tpl := flowSet(templateFlowSetID, templateSpec(fixtureV9TemplateID,
 		[2]uint16{fieldInputSNMP, 4},
+		[2]uint16{fieldOutputSNMP, 4},
 		[2]uint16{fieldPacketSectionV9Data, liteSectionSize},
 	))
 
 	record := be32(nil, 7)
+	record = be32(record, 8)
 	record = append(record, padTo(tcpFrame(false))...)
 
 	records, err := d.Decode(testExporter,
@@ -53,8 +55,9 @@ func TestDecodeNetFlowLite_V9PacketSection(t *testing.T) {
 	if got.TOS != 0xB8 || got.TCPFlags != 0x18 {
 		t.Errorf("tos/flags = %#x/%#x, want the section's readings", got.TOS, got.TCPFlags)
 	}
-	if got.InputIf != 7 {
-		t.Errorf("InputIf = %d, want the device-parsed field kept", got.InputIf)
+	if got.InputIf != 7 || got.OutputIf != 8 {
+		t.Errorf("interfaces = (%d, %d), want the device-parsed fields kept",
+			got.InputIf, got.OutputIf)
 	}
 	if got.Packets != 1 {
 		t.Errorf("Packets = %d, want one sampled packet per record", got.Packets)

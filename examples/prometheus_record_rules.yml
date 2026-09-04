@@ -104,7 +104,7 @@ groups:
   - name: xflow-exporter.threats
     rules:
       - record: exporter_direction:xflow_threat_bytes:rate5m
-        expr: sum without (address) (rate(xflow_threat_bytes_total[5m]))
+        expr: sum without (address, input_ifindex, output_ifindex) (rate(xflow_threat_bytes_total[5m]))
 
       - record: exporter_direction:xflow_threat_flows:rate5m
-        expr: sum without (address) (rate(xflow_threat_flows_total[5m]))
+        expr: sum without (address, input_ifindex, output_ifindex) (rate(xflow_threat_flows_total[5m]))

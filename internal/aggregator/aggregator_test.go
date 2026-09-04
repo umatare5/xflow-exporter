@@ -498,3 +498,83 @@ func TestAggregator_DSCPKeysOnReportedNotOnValue(t *testing.T) {
 		})
 	}
 }
+
+// TestAggregator_InterfacesSplitOnlyTheConversationTables pins which tables
+// the interface pair keys. Three of them already key one conversation, so the
+// path it took is a property of that conversation and a pair reached over two
+// paths reads as two entries. The other seven fold many conversations into one
+// row, so keying the pair there multiplies the row by every path its members
+// crossed -- and on the per-device table, which takes no Top-K cut, that moves
+// the series bound from what the fleet was bought to what its ports are.
+func TestAggregator_InterfacesSplitOnlyTheConversationTables(t *testing.T) {
+	t.Parallel()
+
+	base := testRecord()
+	base.TOSReported = true
+	base.TCPFlagsReported = true
+	base.SrcCountry = "JP"
+	base.DstCountry = "US"
+	base.SrcFlagged = true
+	base.DstFlagged = true
+	base.InputIf = 3
+	base.OutputIf = 4
+
+	byOutput := base
+	byOutput.OutputIf = 5
+
+	byInput := base
+	byInput.InputIf = 6
+
+	modules := Modules{
+		Exporters: true, Hosts: true, Services: true, Destinations: true,
+		TCPFlags: true, DSCP: true, ASNs: true, Applications: true,
+		Countries: true, Threats: true,
+	}
+	a := New(testConfig(), modules)
+	a.Ingest([]flow.Record{base, byOutput, byInput})
+
+	hosts, _ := a.Hosts()
+	services, _ := a.Services()
+	threats, _ := a.Threats()
+	exporters, _ := a.Exporters()
+	destinations, _ := a.Destinations()
+	tcpFlags, _ := a.TCPFlags()
+	dscp, _ := a.DSCP()
+	asns, _ := a.ASNs()
+	apps, _ := a.Applications()
+	countries, _ := a.Countries()
+
+	// Both sides are flagged, so the threat table keys two entries per record.
+	const threatsPerRecord = 2
+	for _, tt := range []struct {
+		name string
+		got  int
+		want int
+	}{
+		{"hosts", len(hosts), 3},
+		{"services", len(services), 3},
+		{"threats", len(threats), 3 * threatsPerRecord},
+	} {
+		if tt.got != tt.want {
+			t.Errorf("%s = %d entries, want %d: each interface pair keys its own",
+				tt.name, tt.got, tt.want)
+		}
+	}
+
+	for _, tt := range []struct {
+		name string
+		got  int
+	}{
+		{"exporters", len(exporters)},
+		{"destinations", len(destinations)},
+		{"tcp flags", len(tcpFlags)},
+		{"dscp", len(dscp)},
+		{"asns", len(asns)},
+		{"applications", len(apps)},
+		{"countries", len(countries)},
+	} {
+		if tt.got != 1 {
+			t.Errorf("%s = %d entries, want 1: the interface pair must not key it", tt.name, tt.got)
+		}
+	}
+}
