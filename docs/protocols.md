@@ -7,7 +7,7 @@ Every listener accepts every protocol below, identified per datagram. Transport 
 | [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Cisco C891FJ (planned)                    |
 | [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Cisco C891FJ (planned)                    |
 | [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Cisco WS-C2960CX-8PC-L, Cisco C9800-CL-K9 |
-| [NetFlow-Lite](#netflow-lite) (packet sections)         | Supported | Awaiting a device                         |
+| [NetFlow Lite](#netflow-lite) (packet sections)         | Supported | Awaiting a device                         |
 | [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Cisco C9800-CL-K9                         |
 | [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G (planned)                      |
 
@@ -456,9 +456,9 @@ The enterprise bit is what makes an IPFIX field specifier variable in size.
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
-## NetFlow-Lite
+## NetFlow Lite
 
-Catalyst 2960-X/XR, 2960-CX, 3560-CX and 4948E are documented as shipping one sampled packet section per v9 or IPFIX record. Sections decode through the same header walk the sFlow decoder uses.
+Catalyst 2960-X/XR and 4948E are documented as shipping one sampled packet section per v9 or IPFIX record, and sections decode through the same header walk the sFlow decoder uses. The 2960-CX and 3560-CX carry a feature of the same name, but their configuration guide lists only parsed `match` and `collect` fields, so those platforms export parsed v9 rather than a section.
 
 - Elements: the deprecated v9 field 104 (`layer2packetSectionData`), and IPFIX `dataLinkFrameSection` (315), `ipHeaderPacketSection` (313), `dataLinkFrameSize` (312).
 - The section is walked only where the record carries neither address, so the device's own parse wins; the walk then supplies the addresses, protocol, TOS, ports and flags. One record reads as one sampled packet.

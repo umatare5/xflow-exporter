@@ -12,7 +12,7 @@ import (
 const (
 	fieldSamplingPacketInterval = 305
 	fieldSamplingPacketSpace    = 306
-	// The random n-out-of-N sampler pair NetFlow-Lite exports: size packets
+	// The random n-out-of-N sampler pair NetFlow Lite exports: size packets
 	// selected out of each population.
 	fieldSamplingSize       = 309
 	fieldSamplingPopulation = 310

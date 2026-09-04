@@ -192,7 +192,7 @@ NetFlow v9 and IPFIX data decode against templates cached per exporter address, 
 
 ### Packet sections
 
-A NetFlow-Lite record carries one sampled packet section instead of parsed flow fields, and decodes through the header walk the sFlow decoder uses — [Protocols](protocols.md#netflow-lite) carries the elements, the precedence and the padding ambiguity.
+A NetFlow Lite record carries one sampled packet section instead of parsed flow fields, and decodes through the header walk the sFlow decoder uses — [Protocols](protocols.md#netflow-lite) carries the elements, the precedence and the padding ambiguity.
 
 ### Remote write
 

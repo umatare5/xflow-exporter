@@ -181,7 +181,7 @@
             "## NetFlow v5", "*",
             "## NetFlow v8", "*",
             "## NetFlow v9 and IPFIX", "*",
-            "## NetFlow-Lite", "*",
+            "## NetFlow Lite", "*",
             "## sFlow v5", "*",
             "## Options and enrichment", "*",
             "## References"
