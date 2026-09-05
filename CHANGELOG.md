@@ -19,6 +19,7 @@ A minor release may rename or remove a metric, change a default, or drop a built
 - [#33](https://github.com/umatare5/xflow-exporter/pull/33) — Receive flows on the registered port 4739 rather than the conventional 2055
 - [#34](https://github.com/umatare5/xflow-exporter/pull/34) — Unify the security policy sections and restate the domain rules as claims
 - [#35](https://github.com/umatare5/xflow-exporter/pull/35) — Name only the protocols a traffic breakdown reads, leaving the rest to a mapping file
+- [#37](https://github.com/umatare5/xflow-exporter/pull/37) — Alert on a listener that receives nothing, and correct what the verified devices export
 
 ## [v0.8.0]
 
