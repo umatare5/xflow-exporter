@@ -16,6 +16,20 @@ groups:
             timestamp is the only signal separating a silent device from a
             quiet network.
 
+      - alert: XflowReceiverIdle
+        expr: increase(xflow_receiver_packets_total[15m]) == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "xflow-exporter received nothing on {{ $labels.listener }}"
+          description: >-
+            No datagram reached this listener for 15 minutes. XflowExporterSilent
+            cannot cover this: its timestamp appears only once a device has
+            decoded, so a receiver nothing ever reached publishes no series for
+            it to age. A listener that never receives is usually addressed at
+            the wrong port.
+
       - alert: XflowReceiverDropping
         expr: increase(xflow_receiver_dropped_packets_total[15m]) > 0
         for: 5m
