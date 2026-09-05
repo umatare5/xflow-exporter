@@ -7,7 +7,7 @@ Reference pages for xflow-exporter. The [README](../README.md) covers getting fl
 | [Protocols](protocols.md)         | Per-protocol behaviour and limits      |
 | [Collectors](collectors.md)       | The traffic modules and their labels   |
 | [Health](health.md)               | The exporter's own metrics and reasons |
-| [Configuration](configuration.md) | Flags and defaults, as `--help` prints |
+| [Help](help.md)                   | Flags and defaults, as `--help` prints |
 
 ## Technical information
 

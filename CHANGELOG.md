@@ -13,6 +13,7 @@ A minor release may rename or remove a metric. Every collector module flag is of
 - [#25](https://github.com/umatare5/xflow-exporter/pull/25) — Rename exporter to exporter_address, add the interface pair and the naming series
 - [#26](https://github.com/umatare5/xflow-exporter/pull/26) — Update umatare5/common action to v0.18.0
 - [#27](https://github.com/umatare5/xflow-exporter/pull/27) — Record the verified devices, separate NetFlow v9 from IPFIX, and document packet sections by their own name
+- [#28](https://github.com/umatare5/xflow-exporter/pull/28) — Rename docs/configuration.md to docs/help.md
 
 ## [v0.8.0]
 

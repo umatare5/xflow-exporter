@@ -130,7 +130,7 @@ func TestFlagNamesAreStable(t *testing.T) {
 	}
 	for name := range got {
 		if !want[name] {
-			t.Errorf("flag %q is new; add it here and to docs/configuration.md", name)
+			t.Errorf("flag %q is new; add it here and to docs/help.md", name)
 		}
 	}
 	if len(got) != len(want) {

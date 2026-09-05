@@ -1,10 +1,8 @@
-# Configuration
+# Help
 
-A verbatim `xflow-exporter --help` transcript: every flag and its default.
+The `xflow-exporter --help` text, transcribed from the binary.
 
-## Flags
-
-```bash
+```text
 NAME:
    xflow-exporter - Prometheus exporter for NetFlow, IPFIX and sFlow
 
