@@ -54,10 +54,10 @@ func (s *mmdbSource) reader() *maxminddb.Reader {
 
 // close releases the reader in force.
 //
-// This is the one Close the process makes, and it is safe because it runs
-// after the decode workers have stopped -- ordering, not synchronization, is
-// what rules out a concurrent lookup. Every reader a reload replaced is left
-// to the runtime cleanup.
+// It is safe because no lookup is in flight at either call: shutdown runs it
+// after the decode workers have stopped, and validation never starts one.
+// Ordering, not synchronization, is what rules out a concurrent lookup. Every
+// reader a reload replaced is left to the runtime cleanup.
 func (s *mmdbSource) close() error {
 	db := s.db.Swap(nil)
 	if db == nil {

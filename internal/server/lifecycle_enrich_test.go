@@ -39,3 +39,42 @@ func TestBuildEnrichmentChain_OperatorPortsWinOverTheBuiltInTable(t *testing.T) 
 			records[0].AppName)
 	}
 }
+
+// TestValidateEnrichment pins that a dry run reaches the files the flags name.
+// The flag promises a configuration is valid without starting the server, and
+// a path that only startup opens is the mistake an operator most often makes
+// and the one a pre-flight check exists to catch.
+func TestValidateEnrichment(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	valid := filepath.Join(dir, "valid.yml")
+	if err := os.WriteFile(valid, []byte("devices:\n  192.0.2.1:\n    hostname: sw1\n"), 0o600); err != nil {
+		t.Fatalf("writing the mapping file: %v", err)
+	}
+	duplicate := filepath.Join(dir, "duplicate.yml")
+	if err := os.WriteFile(duplicate, []byte("devices:\n  192.0.2.1:\n  192.0.2.1:\n"), 0o600); err != nil {
+		t.Fatalf("writing the mapping file: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		cfg     config.Enrichment
+		wantErr bool
+	}{
+		{"nothing configured", config.Enrichment{}, false},
+		{"a file that parses", config.Enrichment{MappingFile: valid}, false},
+		{"a file that does not", config.Enrichment{MappingFile: duplicate}, true},
+		{"a path that is not there", config.Enrichment{MappingFile: filepath.Join(dir, "absent.yml")}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if err := ValidateEnrichment(tt.cfg); (err != nil) != tt.wantErr {
+				t.Errorf("ValidateEnrichment() error = %v, want error %v", err, tt.wantErr)
+			}
+		})
+	}
+}
