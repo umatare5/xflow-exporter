@@ -203,6 +203,20 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	return err
 }
 
+// ValidateEnrichment opens every source the configuration names and closes it
+// again. No listener is bound: a dry run against a configuration already in
+// service would otherwise fail on its own port, which is the case the flag is
+// most often reached for.
+func ValidateEnrichment(cfg config.Enrichment) error {
+	chain, _, _, _, err := buildEnrichmentChain(cfg)
+	if err != nil {
+		return err
+	}
+	chain.Close()
+
+	return nil
+}
+
 // buildEnrichmentChain assembles the enabled enrichment sources in the order
 // they are applied. Order matters where two sources fill one dimension: the
 // first to know wins, and every source leaves a device reading alone.
