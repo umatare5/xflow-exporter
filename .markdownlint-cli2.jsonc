@@ -84,6 +84,7 @@
             "## Quick Start", "*",
             "## Protocol Support", "*",
             "## Flags", "*",
+            "## Environment Variables", "*",
             "## Endpoints", "*",
             "## Metrics", "*",
             "## Use Cases", "*",

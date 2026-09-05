@@ -90,6 +90,15 @@ Each data collector is enabled per module:
 
 `--receiver.*`, `--parser.*` and `--aggregation.*` tune the receive path — see [Push and pull](docs/README.md#push-and-pull).
 
+## Environment Variables
+
+This exporter reads two environment variables:
+
+| Environment Variable          | Description                                  |
+| :---------------------------- | :------------------------------------------- |
+| `XFLOW_REMOTE_WRITE_USERNAME` | Basic auth username for `--remote-write.url` |
+| `XFLOW_REMOTE_WRITE_PASSWORD` | Basic auth password for `--remote-write.url` |
+
 ## Endpoints
 
 The exporter serves four endpoints:
