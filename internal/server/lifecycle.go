@@ -5,9 +5,11 @@ package server
 import (
 	"context"
 	"fmt"
+	"hash/maphash"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"runtime"
@@ -156,18 +158,19 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		sweepDomains(ctx, dec, cfg.Parser.TemplateTTL)
 	}()
 
-	// Decode workers consume the queue. Each record is enriched, then fed to
-	// the aggregation tables and the distributions.
+	// The dispatcher hands the queue to the decode workers, one exporter per
+	// worker. Each record is enriched, then fed to the aggregation tables and
+	// the distributions.
 	workers := cfg.Receiver.Workers
 	if workers == 0 {
 		workers = runtime.GOMAXPROCS(0)
 	}
 	var decodeWG sync.WaitGroup
-	for range workers {
+	for _, shard := range shardPackets(&decodeWG, recv.Packets(), workers) {
 		decodeWG.Add(1)
 		go func() {
 			defer decodeWG.Done()
-			decodeLoop(recv, dec, chain, agg, dist)
+			decodeLoop(recv, shard, dec, chain, agg, dist)
 		}()
 	}
 
@@ -321,16 +324,51 @@ func (lm *LifecycleManager) watchHangup(ctx context.Context) func() {
 	}
 }
 
-// decodeLoop drains the receive queue through the decoder into the enabled
-// consumers until the queue closes. The records slice is reused across
-// datagrams, so a steady worker allocates nothing per packet.
+// shardQueueSize is one recvmmsg batch of slack per worker.
+const shardQueueSize = 64
+
+var shardSeed = maphash.MakeSeed()
+
+// shardPackets hands every datagram from one exporter to one worker, in
+// arrival order: a template has to be compiled before the data set that
+// followed it on the wire, and a sequence gap has to be the wire's rather than
+// the scheduler's. Every shard closes once in does.
+func shardPackets(wg *sync.WaitGroup, in <-chan receiver.Packet, workers int) []chan receiver.Packet {
+	shards := make([]chan receiver.Packet, workers)
+	for i := range shards {
+		shards[i] = make(chan receiver.Packet, shardQueueSize)
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for pkt := range in {
+			shards[shardOf(pkt.Src.Addr(), len(shards))] <- pkt
+		}
+		for _, shard := range shards {
+			close(shard)
+		}
+	}()
+	return shards
+}
+
+// shardOf picks one worker for an address. The low words alone collide on the
+// common numbering, where routers differ only in the middle octets.
+func shardOf(addr netip.Addr, workers int) int {
+	return int(maphash.Comparable(shardSeed, addr.As16()) % uint64(workers)) //nolint:gosec // workers is at least 1.
+}
+
+// decodeLoop drains one shard through the decoder into the enabled consumers
+// until the shard closes. The records slice is reused across datagrams, so a
+// steady worker allocates nothing per packet.
 func decodeLoop(
-	recv *receiver.Receiver, dec *decoder.Decoder, chain *enrich.Chain,
+	recv *receiver.Receiver, packets <-chan receiver.Packet,
+	dec *decoder.Decoder, chain *enrich.Chain,
 	agg *aggregator.Aggregator, dist *collector.Distributions,
 ) {
 	var records []flow.Record
 
-	for pkt := range recv.Packets() {
+	for pkt := range packets {
 		var err error
 		records, err = dec.Decode(pkt.Src.Addr(), pkt.Data, records[:0])
 		if err != nil {

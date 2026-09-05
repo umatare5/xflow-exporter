@@ -19,11 +19,12 @@ Reference pages for xflow-exporter. The [README](../README.md) covers getting fl
 - **Naming** — RFC 7011 calls the device the exporter, and `exporter_address` is where it lands.
 - **Tuning** — `--receiver.*`, `--parser.*` and `--aggregation.*` bound the receive path.
 - **Batching** — Linux read loops use `recvmmsg`, and elsewhere it is one per call.
+- **Ordering** — every datagram of one device decodes on one worker, chosen by hashing its address.
 
 ```mermaid
 flowchart LR
     L["UDP listeners"] --> Q[["Bounded queue"]]
-    Q --> W["Decode workers"]
+    Q -- "hashed by device" --> W["Decode workers"]
     W -- "write lock" --> T[("Aggregation tables")]
     SW["Idle sweeper"] -. "evict on the TTL" ..-> T
     COL["Collector"] -- "read lock, then the cut" ---> T

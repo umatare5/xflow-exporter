@@ -126,7 +126,7 @@ func registerReceiverFlags() []cli.Flag {
 		},
 		&cli.IntFlag{
 			Name:     "receiver.workers",
-			Usage:    "Decode workers consuming the queue (0 sizes to GOMAXPROCS)",
+			Usage:    "Decode workers, each device hashed to one of them (0 sizes to GOMAXPROCS)",
 			Value:    config.DefaultReceiverWorkers,
 			Category: "* Receiver Options",
 		},
