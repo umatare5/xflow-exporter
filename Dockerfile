@@ -6,7 +6,7 @@ FROM scratch
 ARG TARGETPLATFORM
 
 # Copy ca-certificates: the remote write client is the only outbound TLS path
-COPY --from=alpine:latest@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Copy the pre-built binary from GoReleaser
 COPY $TARGETPLATFORM/xflow-exporter /xflow-exporter
