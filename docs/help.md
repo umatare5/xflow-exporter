@@ -64,7 +64,7 @@ GLOBAL OPTIONS:
 
    * Receiver Options
 
-   --receiver.address string [ --receiver.address string ]  Address to receive flow datagrams on (repeatable) (default: ":2055")
+   --receiver.address string [ --receiver.address string ]  Address to receive flow datagrams on (repeatable) (default: ":4739")
    --receiver.batch-size int                                Maximum datagrams read per kernel round trip (default: 64)
    --receiver.buffer-bytes int                              UDP socket receive buffer size in bytes (0 keeps the OS default) (default: 4194304)
    --receiver.max-packet-size int                           Largest datagram in bytes kept whole, dropping larger ones (default: 9216)

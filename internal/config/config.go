@@ -21,11 +21,11 @@ const (
 	DefaultListenPort    = 10053
 	DefaultTelemetryPath = "/metrics"
 
-	// DefaultReceiverAddress is where flow datagrams are expected. 2055 is the
-	// port NetFlow and IPFIX exporters are conventionally pointed at, and every
-	// listener accepts every supported protocol, so an sFlow deployment adds
-	// its own address rather than changing this one.
-	DefaultReceiverAddress = ":2055"
+	// DefaultReceiverAddress is where flow datagrams are expected. 4739 is the
+	// port IANA registers for IPFIX and RFC 7011 has a collector listen on, and
+	// every listener accepts every supported protocol, so a NetFlow or sFlow
+	// deployment reaches this one rather than adding an address of its own.
+	DefaultReceiverAddress = ":4739"
 	// DefaultReceiverBatchSize bounds how many datagrams one kernel round trip
 	// may hand back on platforms with recvmmsg.
 	DefaultReceiverBatchSize = 64

@@ -16,6 +16,7 @@ A minor release may rename or remove a metric. Every collector module flag is of
 - [#28](https://github.com/umatare5/xflow-exporter/pull/28) — Rename docs/configuration.md to docs/help.md
 - [#29](https://github.com/umatare5/xflow-exporter/pull/29) — Withhold the size histogram where the record carried no byte count
 - [#30](https://github.com/umatare5/xflow-exporter/pull/30) — Decode each device's datagrams in wire order, which reordering had counted as sequence loss
+- [#33](https://github.com/umatare5/xflow-exporter/pull/33) — Receive flows on the registered port 4739 rather than the conventional 2055
 
 ## [v0.8.0]
 
