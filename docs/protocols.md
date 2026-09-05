@@ -14,7 +14,7 @@ Every listener accepts every protocol below, identified per datagram. Transport 
 - **Cisco C9800-CL-K9** — a Catalyst 9800-CL on `C9800-CL-K9_IOSXE` 17.15.6, exporting IPFIX and NetFlow v9 at once from `record wireless avc basic`, which keys a wireless client rather than a switched port.
 
 > [!NOTE]
-> **Verified on** names the vendor and model whose own export this decoder was read against, so synthetic datagrams and unit tests do not count. A row reading `(planned)` names hardware awaiting measurement, leaving that protocol implemented and covered by fixtures but never read off a wire. Neither verified device names an interface, and neither exports a section. The 2960-CX carries a parsed 5-tuple under a custom record, and the 9800-CL keys a wireless client rather than a switched port.
+> **Verified on** names the vendor and model whose own export this decoder was read against, so synthetic datagrams and unit tests do not count. A row reading `(planned)` names hardware awaiting measurement, leaving that protocol implemented and covered by fixtures but never read off a wire. Neither verified device exports a section. The 2960-CX carries a parsed 5-tuple under a custom record, and an input `ifIndex` with it, while the 9800-CL keys a wireless client rather than a switched port. The 2960-CX also names its ports, in an options template this decoder does not read.
 
 > [!NOTE]
 > DTLS is not supported. No shipping network OS exports flows over DTLS, and Go has no production DTLS 1.3 implementation yet.
