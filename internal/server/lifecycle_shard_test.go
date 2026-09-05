@@ -120,13 +120,24 @@ func TestShardOf_SpreadsOneHostPerSubnet(t *testing.T) {
 	for i := range 256 {
 		used[shardOf(netip.AddrFrom4([4]byte{10, 1, byte(i), 1}), workers)] = true
 	}
-	// The default listener binds dual-stack, so a native IPv6 device reaches
-	// the same hash with a 16-byte address, which As4 would panic on.
-	used[shardOf(netip.MustParseAddr("2001:db8::1"), workers)] = true
 	for shard, ok := range used {
 		if !ok {
 			t.Errorf("shard %d took none of 256 one-host subnets", shard)
 		}
+	}
+}
+
+// TestShardOf_TakesANativeIPv6Exporter pins the address width the hash reads.
+// An empty host binds the listener dual-stack, so a device exporting over IPv6
+// arrives unmapped at 16 bytes, and As4 panics on one -- on the dispatcher
+// goroutine, where nothing recovers and the process goes with it.
+func TestShardOf_TakesANativeIPv6Exporter(t *testing.T) {
+	t.Parallel()
+
+	const workers = 8
+
+	if shard := shardOf(netip.MustParseAddr("2001:db8::1"), workers); shard >= workers {
+		t.Errorf("shardOf() = %d, want a shard below %d", shard, workers)
 	}
 }
 
