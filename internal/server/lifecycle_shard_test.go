@@ -120,6 +120,9 @@ func TestShardOf_SpreadsOneHostPerSubnet(t *testing.T) {
 	for i := range 256 {
 		used[shardOf(netip.AddrFrom4([4]byte{10, 1, byte(i), 1}), workers)] = true
 	}
+	// The default listener binds dual-stack, so a native IPv6 device reaches
+	// the same hash with a 16-byte address, which As4 would panic on.
+	used[shardOf(netip.MustParseAddr("2001:db8::1"), workers)] = true
 	for shard, ok := range used {
 		if !ok {
 			t.Errorf("shard %d took none of 256 one-host subnets", shard)
