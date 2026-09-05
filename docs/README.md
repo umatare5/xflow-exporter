@@ -107,7 +107,7 @@ Lookups are local: nothing is fetched and no credential is held. Neither databas
 
 ### Mapping file
 
-`--enrich.mapping-file` names devices and their interfaces, which no flow protocol exports, and may name transport ports the built-in table does not cover.
+`--enrich.mapping-file` names devices and their interfaces, which this decoder does not read, and may name transport ports the built-in table does not cover.
 
 ```yaml
 devices:

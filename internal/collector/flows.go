@@ -349,10 +349,10 @@ func (c *FlowCollector) collectNames(
 		return
 	}
 
-	// A file string reaches the label unchecked past the parse, which
-	// rejects a blank or unprintable name but not every byte Prometheus
-	// refuses. Dropping the one row it cannot hold costs that row, where the
-	// panic MustNewConstMetric would raise costs every family behind it.
+	// Unreachable for a file string: the parse refuses invalid UTF-8, which is
+	// the only label value Prometheus rejects. The guard stays because dropping
+	// the one row it cannot hold costs that row, where the panic
+	// MustNewConstMetric would raise costs every family behind it.
 	for exporter, hostname := range names.Devices() {
 		m, err := prometheus.NewConstMetric(c.deviceInfoDesc, prometheus.GaugeValue, 1,
 			exporter.String(), hostname)

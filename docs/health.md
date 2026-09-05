@@ -62,8 +62,9 @@ the table a size or an eviction count belongs to, named as its module is.
 
 which source a lookup went through — `asn`, `country`, `mapping`, `services` or `threat` — and what it made of the record. `filled` supplied a dimension, `unknown` says the source knew nothing, and `skipped` says the device or an earlier source in the chain had carried it already.
 
-- `mapping` and `services` both name an application from a port and `mapping` runs first, so a record either of them names sends the other one `skipped`.
-- A mapping file carrying `devices:` alone names no port, so `mapping` reads `unknown` on every record: the file's device and interface names ride the naming series rather than passing through a lookup.
+- `mapping` and `services` both name an application from a port, and `mapping` runs first, so a port it names leaves `services` `skipped`.
+- A port only `services` names was already counted `unknown` by `mapping`, which cannot know a later source will name it.
+- A mapping file carrying `devices:` alone names no port, so `mapping` reads `unknown` on every record the device did not name. The file's device and interface names ride the naming series rather than passing through a lookup.
 
 ## Specifications
 

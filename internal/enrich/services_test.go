@@ -257,15 +257,16 @@ func TestServices_RetiredNumbersNameNothing(t *testing.T) {
 	}
 }
 
-// TestServiceNames_StaysWithinItsCeiling holds the table to its bound. The 48
-// registrations expand to this many entries, a shared number holding two.
+// TestServiceNames_StaysWithinItsCeiling pins the table's size. The 48
+// registrations expand to this many entries, a shared number holding two, and
+// an exact count is what catches a row leaving as well as one arriving.
 func TestServiceNames_StaysWithinItsCeiling(t *testing.T) {
 	t.Parallel()
 
-	const ceiling = 86
+	const entries = 86
 
-	if got := len(serviceNames); got > ceiling {
-		t.Errorf("serviceNames holds %d entries, want at most %d", got, ceiling)
+	if got := len(serviceNames); got != entries {
+		t.Errorf("serviceNames holds %d entries, want exactly %d", got, entries)
 	}
 }
 
