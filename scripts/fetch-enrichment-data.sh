@@ -163,7 +163,7 @@ is_full_part() {
 	[ "$1" -ge "$SPLIT_PART_LINES" ]
 }
 
-# Does the licence key select MaxMind?
+# Does the license key select MaxMind?
 uses_maxmind() {
 	[ -n "$MAXMIND_LICENSE_KEY" ]
 }
@@ -528,7 +528,7 @@ fetch_database() {
 	echo "Wrote $bytes bytes to $target_path"
 }
 
-# Names the publisher the licence key selects.
+# Names the publisher the license key selects.
 announce_publisher() {
 	if uses_maxmind; then
 		echo "Fetching the databases from MaxMind..."
