@@ -953,6 +953,79 @@ xflow_interface_info{exporter_address="192.0.2.1",ifindex="3",ifname="Gi0/3"} 1
 	}
 }
 
+// TestFlowCollector_ThreatLabels pins which side of a flow the flagged
+// address came from. The direction is the only label separating the two rows a
+// flow with both sides listed produces, so a rendering that read the wrong end
+// would blame the peer for the listed host's traffic.
+func TestFlowCollector_ThreatLabels(t *testing.T) {
+	t.Parallel()
+
+	modules := config.Collectors{Threats: true}
+	agg := aggregator.New(aggConfig(), aggregator.Modules{Threats: true})
+
+	r := flowRecord("10.0.0.1", "10.0.0.2", 700)
+	r.SrcFlagged, r.DstFlagged = true, true
+	agg.Ingest([]flow.Record{r})
+
+	c := NewFlowCollector(agg, modules, aggConfig(), nil, nil)
+
+	expected := `
+# HELP xflow_threat_bytes_total Sampling-corrected bytes per flagged address, other carries the entry-bound fold
+# TYPE xflow_threat_bytes_total counter
+xflow_threat_bytes_total{address="10.0.0.1",direction="src",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4"} 700
+xflow_threat_bytes_total{address="10.0.0.2",direction="dst",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4"} 700
+xflow_threat_bytes_total{address="other",direction="other",exporter_address="other",input_ifindex="other",output_ifindex="other"} 0
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_threat_bytes_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// TestFlowCollector_EveryPairTableNamesBothPorts pins the interface series
+// against each table that carries the pair. The three feed one deduplicated
+// set, so a table dropped from that set leaves its ports unnamed while the
+// others still publish theirs, which reads as a mapping file missing an entry.
+func TestFlowCollector_EveryPairTableNamesBothPorts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		modules config.Collectors
+		agg     aggregator.Modules
+	}{
+		{"hosts", config.Collectors{Hosts: true}, aggregator.Modules{Hosts: true}},
+		{"services", config.Collectors{Services: true}, aggregator.Modules{Services: true}},
+		{"threats", config.Collectors{Threats: true}, aggregator.Modules{Threats: true}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := flowRecord("10.0.0.1", "10.0.0.2", 1000)
+			r.SrcFlagged = true
+
+			agg := aggregator.New(aggConfig(), tt.agg)
+			agg.Ingest([]flow.Record{r})
+
+			names := mappingNames(t, "devices:\n  192.0.2.1:\n    interfaces:\n      3: Gi0/3\n      4: Gi0/4\n")
+			c := NewFlowCollector(agg, tt.modules, aggConfig(), nil, names)
+
+			expected := `
+# HELP xflow_interface_info Always 1, carrying what the mapping file calls each interface the tables publish
+# TYPE xflow_interface_info gauge
+xflow_interface_info{exporter_address="192.0.2.1",ifindex="3",ifname="Gi0/3"} 1
+xflow_interface_info{exporter_address="192.0.2.1",ifindex="4",ifname="Gi0/4"} 1
+`
+			if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+				"xflow_interface_info"); err != nil {
+				t.Errorf("CollectAndCompare() mismatch: %v", err)
+			}
+		})
+	}
+}
+
 // TestFlowCollector_NamesAbsentWithoutAMappingFile pins that neither naming
 // series exists at all without one, rather than existing and holding nothing:
 // an empty family reads as a fleet nobody named, where absence reads as a

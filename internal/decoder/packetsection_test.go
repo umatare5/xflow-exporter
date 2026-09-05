@@ -106,6 +106,46 @@ func TestDecodeSection_IPFIXSectionWithFrameSize(t *testing.T) {
 	}
 }
 
+// TestDecodeSection_CountersWinOverTheSection pins that a section fills only
+// what the record left empty. RFC 7133 section 3.1.2 puts section elements in
+// an ordinary Flow Record, so a template may carry counters beside one, and
+// the frame's own length and the one-packet-per-sample rule are then readings
+// nobody took.
+func TestDecodeSection_CountersWinOverTheSection(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	tpl := ipfixTemplateSet(
+		ipfixSpec(fieldInBytes, 4, 0),
+		ipfixSpec(fieldInPackets, 4, 0),
+		ipfixSpec(fieldDataLinkFrameSize, 2, 0), // unsigned16, per RFC 7133
+		ipfixSpec(fieldDataLinkFrameSection, variableFieldLength, 0),
+	)
+
+	frame := tcpFrame(false)
+	record := be32(nil, 5555)
+	record = be32(record, 3)
+	record = be16(record, 1518)
+	record = append(record, byte(len(frame)))
+	record = append(record, frame...)
+
+	records, err := d.Decode(testExporter,
+		ipfixMessage(0, tpl, flowSet(fixtureIPFIXTemplateID, record)), nil)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
+	}
+
+	got := records[0]
+	if got.Bytes != 5555 || !got.BytesReported {
+		t.Errorf("Bytes = %d reported = %v, want the octetDeltaCount 5555 and true",
+			got.Bytes, got.BytesReported)
+	}
+	if got.Packets != 3 {
+		t.Errorf("Packets = %d, want the packetDeltaCount 3", got.Packets)
+	}
+}
+
 // TestDecodeSection_IPHeaderSection covers IE 313, a section starting at
 // the IP header with no layer 2 in front.
 func TestDecodeSection_IPHeaderSection(t *testing.T) {
