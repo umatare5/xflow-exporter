@@ -215,7 +215,6 @@ func TestServices_NamesTheCurrentTable(t *testing.T) {
 		{name: "radsec over tcp", protocol: protocolTCP, port: 2083, want: "radsec"},
 		{name: "vxlan over udp", protocol: protocolUDP, port: 4789, want: "vxlan"},
 		{name: "vxlan not over tcp", protocol: protocolTCP, port: 4789, want: ""},
-		{name: "wireguard over udp", protocol: protocolUDP, port: 51820, want: "wireguard"},
 		{name: "kerberos over either", protocol: protocolUDP, port: 88, want: "kerberos"},
 	}
 
@@ -240,23 +239,30 @@ func TestServices_NamesTheCurrentTable(t *testing.T) {
 func TestServices_RetiredNumbersNameNothing(t *testing.T) {
 	t.Parallel()
 
-	for _, port := range []uint16{20, 110, 119, 515, 520, 1194, 1723, 5900, 11211} {
-		s := NewServices()
-		r := serviceRecord(protocolTCP, 51234, port)
-		s.Enrich(&r)
+	ports := []uint16{
+		20, 110, 119, 515, 520, 1194, 1723, 5900, 11211,
+		3000, 3100, 4317, 4318, 6443, 9090, 9092, 9100, 9115, 9116, 9200, 51820,
+	}
 
-		if r.AppName != "" {
-			t.Errorf("port %d named %q, want nothing", port, r.AppName)
+	for _, protocol := range []uint8{protocolTCP, protocolUDP} {
+		for _, port := range ports {
+			s := NewServices()
+			r := serviceRecord(protocol, 51234, port)
+			s.Enrich(&r)
+
+			if r.AppName != "" {
+				t.Errorf("port %d/%d named %q, want nothing", port, protocol, r.AppName)
+			}
 		}
 	}
 }
 
-// TestServiceNames_StaysWithinItsCeiling holds the table to its bound. The 60
+// TestServiceNames_StaysWithinItsCeiling holds the table to its bound. The 48
 // registrations expand to this many entries, a shared number holding two.
 func TestServiceNames_StaysWithinItsCeiling(t *testing.T) {
 	t.Parallel()
 
-	const ceiling = 99
+	const ceiling = 86
 
 	if got := len(serviceNames); got > ceiling {
 		t.Errorf("serviceNames holds %d entries, want at most %d", got, ceiling)

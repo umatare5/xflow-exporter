@@ -18,6 +18,7 @@ A minor release may rename or remove a metric. Every collector module flag is of
 - [#30](https://github.com/umatare5/xflow-exporter/pull/30) — Decode each device's datagrams in wire order, which reordering had counted as sequence loss
 - [#33](https://github.com/umatare5/xflow-exporter/pull/33) — Receive flows on the registered port 4739 rather than the conventional 2055
 - [#34](https://github.com/umatare5/xflow-exporter/pull/34) — Unify the security policy sections and restate the domain rules as claims
+- [#35](https://github.com/umatare5/xflow-exporter/pull/35) — Name only the protocols a traffic breakdown reads, leaving the rest to a mapping file
 
 ## [v0.8.0]
 
