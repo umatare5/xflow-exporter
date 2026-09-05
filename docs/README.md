@@ -128,6 +128,8 @@ services: # port/proto, ahead of the built-in table
 - **`services:` outranks the built-in table** — on any port both of them name.
 - **Application ports** — the built-in table names protocols rather than products.
 - **One table at a time** — a source port here beats a destination port in the built-in one.
+- **Cost follows key count, not file size** — 14,000 devices parse in 320 ms, where 1,000 of 48 ports each parse in 77 ms from a file 2.5 times larger.
+- **Parsed whole before any lookup** — that larger file holds 37 MiB while it parses, which `--dry-run` and `/-/reload` each pay again.
 
 > [!TIP]
 > [`scripts/fetch-device-names.sh`](../scripts/fetch-device-names.sh) walks the devices over SNMP and writes the file. Nothing here speaks SNMP; the exporter reads what that left behind, so run it from cron and reload afterwards. It refuses a device answering no usable name rather than writing it out unnamed, and installs by rename, so a failed walk leaves the previous names in force. [`SECURITY.md`](../SECURITY.md) covers where the community string ends up.
@@ -159,7 +161,7 @@ sum by (exporter_address, input_ifindex) (
 - **A failed reload keeps the previous data** — the set already loaded stays in force.
 - **Atomic** — a new set is built whole before it replaces the old one, so no lookup pauses.
 - **Only the sources startup opened** — a reload re-reads their files, never the flags.
-- **`--dry-run` opens no source** — a mapping file it accepts can still fail startup.
+- **`--dry-run` opens every source** — it binds no listener, so a port already taken is not its answer.
 
 > [!NOTE]
 > A list gone missing would otherwise unflag every address at once, which reads as a network that had just gone clean; `xflow_threat_reload_failures_total` counts those loads. The mapping file has no such counter, mirroring the databases: a failed load answers `/-/reload` with 500 and logs its reason. Each mmdb reader is replaced rather than reopened, so a lookup never sees a half-loaded set and the decode path never pauses. [`SECURITY.md`](../SECURITY.md) covers the exposure.
