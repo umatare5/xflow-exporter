@@ -86,9 +86,10 @@ func netflowV5Record(
 		InputIf:  uint32(binary.BigEndian.Uint16(record[12:14])),
 		OutputIf: uint32(binary.BigEndian.Uint16(record[14:16])),
 
-		Packets: uint64(binary.BigEndian.Uint32(record[16:20])),
-		Bytes:   uint64(binary.BigEndian.Uint32(record[20:24])),
-		Flows:   1,
+		Packets:       uint64(binary.BigEndian.Uint32(record[16:20])),
+		Bytes:         uint64(binary.BigEndian.Uint32(record[20:24])),
+		BytesReported: true,
+		Flows:         1,
 
 		SrcAS: uint32(binary.BigEndian.Uint16(record[40:42])),
 		DstAS: uint32(binary.BigEndian.Uint16(record[42:44])),

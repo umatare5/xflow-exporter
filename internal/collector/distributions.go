@@ -35,7 +35,7 @@ func NewDistributions() *Distributions {
 	return &Distributions{
 		flowBytes: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:                            "xflow_flow_bytes",
-			Help:                            "Sampling-corrected bytes per flow record, as a native histogram",
+			Help:                            "Sampling-corrected bytes per flow record where the record carried a byte count, as a native histogram",
 			NativeHistogramBucketFactor:     bucketFactor,
 			NativeHistogramMaxBucketNumber:  maxBuckets,
 			NativeHistogramMinResetDuration: minResetSpacing,
@@ -65,7 +65,11 @@ func (d *Distributions) Observe(records []flow.Record) {
 		if rate == 0 {
 			rate = 1
 		}
-		d.flowBytes.WithLabelValues(exporter).Observe(float64(r.Bytes * rate))
+		// A record whose counters rode elements the decoder does not read has
+		// no byte count, and a zero would claim an empty flow nobody measured.
+		if r.BytesReported {
+			d.flowBytes.WithLabelValues(exporter).Observe(float64(r.Bytes * rate))
+		}
 
 		// A record without both instants has no duration, and observing a
 		// zero would claim an instant flow the device never measured.

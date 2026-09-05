@@ -62,6 +62,7 @@ type fieldState struct {
 	hasUptime                   bool
 	startAbs, endAbs            time.Time
 	outBytes, outPackets        uint64
+	outBytesReported            bool
 	intern                      *interner
 
 	// The two address families, kept apart until every field is read: which
@@ -89,8 +90,8 @@ func finishRecord(r *flow.Record, state *fieldState, bootTime time.Time, domain 
 
 	// An egress-only template carries OUT_* alone; both present would double
 	// the flow if summed, so IN_* wins.
-	if r.Bytes == 0 {
-		r.Bytes = state.outBytes
+	if r.Bytes == 0 && state.outBytesReported {
+		r.Bytes, r.BytesReported = state.outBytes, true
 	}
 	if r.Packets == 0 {
 		r.Packets = state.outPackets
@@ -182,8 +183,8 @@ func resolvePacketSection(r *flow.Record, state *fieldState) {
 	if r.Packets == 0 {
 		r.Packets = 1
 	}
-	if r.Bytes == 0 {
-		r.Bytes = state.frameSize
+	if r.Bytes == 0 && state.frameSize > 0 {
+		r.Bytes, r.BytesReported = state.frameSize, true
 	}
 }
 
@@ -199,11 +200,15 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 
 	switch fieldType {
 	case fieldInBytes:
-		r.Bytes, _ = beUint(value)
+		if v, ok := beUint(value); ok {
+			r.Bytes, r.BytesReported = v, true
+		}
 	case fieldInPackets:
 		r.Packets, _ = beUint(value)
 	case fieldOutBytes:
-		state.outBytes, _ = beUint(value)
+		if v, ok := beUint(value); ok {
+			state.outBytes, state.outBytesReported = v, true
+		}
 	case fieldOutPackets:
 		state.outPackets, _ = beUint(value)
 	case fieldProtocol:
