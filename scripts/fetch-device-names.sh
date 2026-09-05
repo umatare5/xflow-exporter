@@ -232,7 +232,7 @@ append_hostname() {
 	assert_printable "$address" "$kept" "a system name"
 	# net-snmp already quotes and escapes as a YAML double-quoted scalar
 	# does, so the value is passed through rather than quoted again.
-	sed -E "s/$OID_PREFIX = STRING: /    hostname: /" "$kept" >>"$out"
+	sed -n -E "s/$OID_PREFIX = STRING: /    hostname: /p" "$kept" >>"$out"
 }
 
 # Appends one device's entry to the document.
@@ -243,7 +243,7 @@ append_device() {
 	printf '  %s:\n' "$address" >>"$out"
 	append_hostname "$address" "$out"
 	printf '    interfaces:\n' >>"$out"
-	sed -E "s/$OID_PREFIX\.([0-9]+) = STRING: /      \1: /" "$kept" >>"$out"
+	sed -n -E "s/$OID_PREFIX\.([0-9]+) = STRING: /      \1: /p" "$kept" >>"$out"
 }
 
 # Writes the whole document, which every device has to answer for.
