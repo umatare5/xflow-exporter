@@ -43,6 +43,11 @@ IFNAME_OID=".1.3.6.1.2.1.31.1.1.1.1"
 # which would otherwise be written out as an unterminated YAML string.
 SCALAR_LINE='^\.[0-9.]+ = STRING: "([^"\\]|\\.)*"$'
 
+# The OID a value is keyed by, for cutting that key back off. Only digits and
+# dots may precede the separator, so a value carrying that same separator is
+# not where the cut lands.
+OID_PREFIX='^\.[0-9.]+'
+
 # net-snmp takes a hostname the exporter would refuse as a key.
 ADDRESS_SHAPE='^([0-9]{1,3}(\.[0-9]{1,3}){3}|([0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f.]{0,39})$'
 
@@ -134,7 +139,15 @@ assert_names_interfaces() {
 # Refuses a name no label could hold.
 assert_printable() {
 	! carries_control_character "$2" ||
-		abort "$1 answered an interface name carrying a control character"
+		abort "$1 answered ${3:-an interface name} carrying a control character"
+}
+
+# Refuses an address named more than once.
+assert_no_duplicates() {
+	local repeated
+	repeated="$(printf '%s\n' "$@" | sort | uniq -d)"
+	[[ -z "$repeated" ]] || abort "${repeated%%$'\n'*} is named more than once" \
+		"The exporter refuses a file that defines one address twice."
 }
 
 # Reads the arguments, which name the devices to walk.
@@ -145,6 +158,7 @@ parse_addresses() {
 	for address in "$@"; do
 		assert_address_literal "$address"
 	done
+	assert_no_duplicates "$@"
 	addresses=("$@")
 }
 
@@ -211,12 +225,14 @@ collect_interfaces() {
 
 # Appends the hostname, if answered.
 append_hostname() {
-	local address="$1" out="$2" walk
-	walk="$(mktemp "$workdir/sysname-XXXXXX")"
-	walk_into "$address" "$SYSNAME_OID" "$walk"
+	local address="$1" out="$2" kept
+	kept="$(mktemp "$workdir/sysname-XXXXXX")"
+	walk_into "$address" "$SYSNAME_OID" "$kept.raw"
+	keep_scalars "$kept.raw" "$kept"
+	assert_printable "$address" "$kept" "a system name"
 	# net-snmp already quotes and escapes as a YAML double-quoted scalar
 	# does, so the value is passed through rather than quoted again.
-	grep -E "$SCALAR_LINE" "$walk" | sed -E 's/^.*STRING: /    hostname: /' >>"$out" || true
+	sed -E "s/$OID_PREFIX = STRING: /    hostname: /" "$kept" >>"$out"
 }
 
 # Appends one device's entry to the document.
@@ -227,7 +243,7 @@ append_device() {
 	printf '  %s:\n' "$address" >>"$out"
 	append_hostname "$address" "$out"
 	printf '    interfaces:\n' >>"$out"
-	sed -E 's/^.*\.([0-9]+) = STRING: /      \1: /' "$kept" >>"$out"
+	sed -E "s/$OID_PREFIX\.([0-9]+) = STRING: /      \1: /" "$kept" >>"$out"
 }
 
 # Writes the whole document, which every device has to answer for.
