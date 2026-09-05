@@ -117,6 +117,7 @@ devices:
       10102: Gi0/2
 services: # port/proto, ahead of the built-in table
   5246/udp: capwap-control
+  9200/tcp: elasticsearch
 ```
 
 - **Two info series** — `xflow_device_info` and `xflow_interface_info` carry the names.
@@ -125,6 +126,7 @@ services: # port/proto, ahead of the built-in table
 - **`devices: {}` loads** — emptying the file on purpose is how a reload takes names away.
 - **YAML acts first** — a `~` key is dropped before any check, `%YAML 1.2` is refused.
 - **`services:` outranks the built-in table** — on any port both of them name.
+- **Application ports live here** — the built-in table names transport and infrastructure protocols, so a number one product conventionally uses is this file's job.
 - **One table at a time** — a source port here beats a destination port in the built-in one.
 
 > [!TIP]
