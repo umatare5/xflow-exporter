@@ -10,11 +10,11 @@ Every listener accepts every protocol below, identified per datagram. Transport 
 | [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Cisco C9800-CL-K9                         |
 | [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G (planned)                      |
 
-- **Cisco WS-C2960CX-8PC-L** — a Catalyst 2960-CX on `C2960CX-UNIVERSALK9-M` 15.2(7)E3, the one device here declaring a sampler, exporting v9 under a custom record that parses a 5-tuple.
+- **Cisco WS-C2960CX-8PC-L** — a Catalyst 2960-CX on `C2960CX-UNIVERSALK9-M` 15.2(7)E3, the one device here declaring a sampler, exporting v9 under a custom record that parses a 5-tuple and an input `ifIndex`.
 - **Cisco C9800-CL-K9** — a Catalyst 9800-CL on `C9800-CL-K9_IOSXE` 17.15.6, exporting IPFIX and NetFlow v9 at once from `record wireless avc basic`, which keys a wireless client rather than a switched port.
 
 > [!NOTE]
-> **Verified on** names the vendor and model whose own export this decoder was read against, so synthetic datagrams and unit tests do not count. A row reading `(planned)` names hardware awaiting measurement, leaving that protocol implemented and covered by fixtures but never read off a wire. Neither verified device exports a section. The 2960-CX carries a parsed 5-tuple under a custom record, and an input `ifIndex` with it, while the 9800-CL keys a wireless client rather than a switched port. The 2960-CX also names its ports, in an options template this decoder does not read.
+> **Verified on** names the vendor and model whose own export this decoder was read against, so synthetic datagrams and unit tests do not count. A row reading `(planned)` names hardware awaiting measurement, leaving that protocol implemented and covered by fixtures but never read off a wire. Neither verified device exports a section.
 
 > [!NOTE]
 > DTLS is not supported. No shipping network OS exports flows over DTLS, and Go has no production DTLS 1.3 implementation yet.

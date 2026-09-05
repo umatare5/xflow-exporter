@@ -90,7 +90,7 @@ release:
     This release contains the Prometheus Exporter for NetFlow, IPFIX and sFlow.
 
     > [!IMPORTANT]
-    > A minor release may rename or remove a metric, change a default, or drop a built-in name. Read the [CHANGELOG](https://github.com/umatare5/xflow-exporter/blob/{{ .Tag }}/CHANGELOG.md) before upgrading.
+    > A minor release may rename or remove a metric, change a default, or drop a built-in application name. Read the [CHANGELOG](https://github.com/umatare5/xflow-exporter/blob/{{ .Tag }}/CHANGELOG.md) before upgrading.
 
     ### 🐳 Container Images
 

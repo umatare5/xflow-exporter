@@ -2,7 +2,7 @@
 
 Notable changes to the metric surface, one section per release, listing the pull requests that release carries.
 
-A minor release may rename or remove a metric, change a default, or drop a built-in name. Every collector module flag is off by default, so a release that adds one adds no series until you set it.
+A minor release may rename or remove a metric, change a default, or drop a built-in application name. Every collector module flag is off by default, so a release that adds one adds no series until you set it.
 
 ## [Unreleased]
 
