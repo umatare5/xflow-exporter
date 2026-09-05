@@ -28,3 +28,17 @@ devices:
 services:
   5246/udp: capwap-control
   5247/udp: capwap-data
+  # v0.9.0 dropped these from the built-in table, each naming one product
+  # rather than a protocol. Uncomment what this network runs.
+  # 3000/tcp: dev-server
+  # 3100/tcp: loki
+  # 4317/tcp: otlp-grpc
+  # 4318/tcp: otlp-http
+  # 6443/tcp: kubernetes-api
+  # 9090/tcp: prometheus
+  # 9092/tcp: kafka
+  # 9100/tcp: raw
+  # 9115/tcp: blackbox-exporter
+  # 9116/tcp: snmp-exporter
+  # 9200/tcp: elasticsearch
+  # 51820/udp: wireguard
