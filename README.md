@@ -44,10 +44,10 @@ A scrape reads the in-memory aggregation tables and never waits on flow arrival 
 
 ### 1. Point your devices at the exporter
 
-Configure each device to export flows to the exporter's address, `4739/udp` by default — the port IANA registers for IPFIX.
+Configure each device to export flows to the exporter's IP, `4739/udp` by default — the port IANA registers for IPFIX.
 
 > [!TIP]
-> NetFlow v5, v8, v9 and sFlow reach that same port. Every datagram carries its own version, so one listener takes every supported protocol and a legacy exporter needs no port of its own.
+> **NetFlow v5, v8, v9 and sFlow reach that same port.** Every datagram carries its own version, so one listener takes every supported protocol and a legacy exporter needs no port of its own.
 
 ### 2. Run the exporter with Docker
 
