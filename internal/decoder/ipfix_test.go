@@ -377,18 +377,19 @@ func TestDecodeIPFIX_TemplateThenData(t *testing.T) {
 	}
 
 	want := flow.Record{
-		Exporter: testExporter,
-		Version:  flow.VersionIPFIX,
-		SrcAddr:  netip.MustParseAddr("2001:db8::1"),
-		DstAddr:  netip.MustParseAddr("2001:db8::2"),
-		SrcPort:  51234,
-		DstPort:  443,
-		Protocol: 6,
-		Bytes:    512000,
-		Packets:  1000,
-		Flows:    1,
-		Start:    time.UnixMilli(1_756_400_100_000),
-		End:      time.UnixMilli(1_756_400_160_000),
+		Exporter:      testExporter,
+		Version:       flow.VersionIPFIX,
+		SrcAddr:       netip.MustParseAddr("2001:db8::1"),
+		DstAddr:       netip.MustParseAddr("2001:db8::2"),
+		SrcPort:       51234,
+		DstPort:       443,
+		Protocol:      6,
+		Bytes:         512000,
+		Packets:       1000,
+		BytesReported: true,
+		Flows:         1,
+		Start:         time.UnixMilli(1_756_400_100_000),
+		End:           time.UnixMilli(1_756_400_160_000),
 	}
 	if records[0] != want {
 		t.Errorf("Decode() record =\n%+v\nwant\n%+v", records[0], want)
@@ -924,6 +925,69 @@ func TestDecodeIPFIX_DiffServCodePoint(t *testing.T) {
 			}
 			if got := records[0].TOSReported; got != tt.wantReported {
 				t.Errorf("TOSReported = %v, want %v", got, tt.wantReported)
+			}
+		})
+	}
+}
+
+// TestDecodeIPFIX_BytesReported separates a byte count of zero from a record
+// that carried none: the histogram observes the first and withholds the
+// second, and only the flag tells them apart.
+func TestDecodeIPFIX_BytesReported(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		specs        [][]byte
+		record       []byte
+		wantBytes    uint64
+		wantReported bool
+	}{
+		{
+			name:   "no counter element",
+			specs:  [][]byte{ipfixSpec(fieldIPv4SrcAddr, 4, 0)},
+			record: []byte{10, 0, 0, 1},
+		},
+		{
+			name:         "octetDeltaCount reports zero",
+			specs:        [][]byte{ipfixSpec(fieldInBytes, 4, 0)},
+			record:       be32(nil, 0),
+			wantReported: true,
+		},
+		{
+			// RFC 7011 section 6.2 allows any width from one to eight
+			// octets, and beUint takes only 1, 2, 4 and 8.
+			name:   "octetDeltaCount in three octets",
+			specs:  [][]byte{ipfixSpec(fieldInBytes, 3, 0)},
+			record: []byte{0, 0x02, 0xBC},
+		},
+		{
+			name:         "postOctetDeltaCount alone",
+			specs:        [][]byte{ipfixSpec(fieldOutBytes, 4, 0)},
+			record:       be32(nil, 700),
+			wantBytes:    700,
+			wantReported: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			records, err := d.Decode(testExporter, ipfixMessage(0,
+				ipfixTemplateSet(tt.specs...),
+				flowSet(fixtureIPFIXTemplateID, tt.record),
+			), nil)
+			if err != nil || len(records) != 1 {
+				t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
+			}
+
+			if got := records[0].Bytes; got != tt.wantBytes {
+				t.Errorf("Bytes = %d, want %d", got, tt.wantBytes)
+			}
+			if got := records[0].BytesReported; got != tt.wantReported {
+				t.Errorf("BytesReported = %v, want %v", got, tt.wantReported)
 			}
 		})
 	}

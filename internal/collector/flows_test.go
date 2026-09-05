@@ -30,17 +30,18 @@ func aggConfig() config.Aggregation {
 
 func flowRecord(src, dst string, bytes uint64) flow.Record {
 	return flow.Record{
-		Exporter: netip.MustParseAddr("192.0.2.1"),
-		Version:  flow.VersionNetFlowV9,
-		SrcAddr:  netip.MustParseAddr(src),
-		DstAddr:  netip.MustParseAddr(dst),
-		DstPort:  443,
-		Protocol: 6,
-		Bytes:    bytes,
-		Packets:  1,
-		Flows:    1,
-		InputIf:  3,
-		OutputIf: 4,
+		Exporter:      netip.MustParseAddr("192.0.2.1"),
+		Version:       flow.VersionNetFlowV9,
+		SrcAddr:       netip.MustParseAddr(src),
+		DstAddr:       netip.MustParseAddr(dst),
+		DstPort:       443,
+		Protocol:      6,
+		Bytes:         bytes,
+		Packets:       1,
+		BytesReported: true,
+		Flows:         1,
+		InputIf:       3,
+		OutputIf:      4,
 	}
 }
 
@@ -285,6 +286,68 @@ func TestDistributions_ObserveWithholdsAbsentDurations(t *testing.T) {
 					h.GetSampleCount())
 			}
 		}
+	}
+}
+
+// TestDistributions_ObserveWithholdsAbsentBytes pins the size histogram to the
+// same rule the duration one follows: a record that carried no byte count is
+// not observed at all, so no series appears for it.
+func TestDistributions_ObserveWithholdsAbsentBytes(t *testing.T) {
+	t.Parallel()
+
+	c := NewCollector(testConfig())
+	d := c.RegisterDistributions()
+
+	r := flowRecord("10.0.0.1", "10.0.0.2", 0)
+	r.BytesReported = false
+	d.Observe([]flow.Record{r})
+
+	families, err := c.Registry().Gather()
+	if err != nil {
+		t.Fatalf("Gather() error = %v, want nil", err)
+	}
+
+	for _, family := range families {
+		if family.GetName() != "xflow_flow_bytes" {
+			continue
+		}
+		if got := family.GetMetric()[0].GetHistogram().GetSampleCount(); got != 0 {
+			t.Errorf("flow bytes histogram count = %d, want 0 for a record with no byte count", got)
+		}
+	}
+}
+
+// TestDistributions_ObserveRecordsAReportedZero pins the other half: a device
+// that measured zero bytes is observed as zero. Guarding on the value rather
+// than the flag would drop the series entirely, which the family assert below
+// is what catches.
+func TestDistributions_ObserveRecordsAReportedZero(t *testing.T) {
+	t.Parallel()
+
+	c := NewCollector(testConfig())
+	d := c.RegisterDistributions()
+
+	d.Observe([]flow.Record{flowRecord("10.0.0.1", "10.0.0.2", 0)})
+
+	families, err := c.Registry().Gather()
+	if err != nil {
+		t.Fatalf("Gather() error = %v, want nil", err)
+	}
+
+	found := false
+	for _, family := range families {
+		if family.GetName() != "xflow_flow_bytes" {
+			continue
+		}
+		found = true
+		h := family.GetMetric()[0].GetHistogram()
+		if h.GetSampleCount() != 1 || h.GetZeroCount() != 1 {
+			t.Errorf("flow bytes histogram = count %d zero %d, want 1 and 1",
+				h.GetSampleCount(), h.GetZeroCount())
+		}
+	}
+	if !found {
+		t.Error("xflow_flow_bytes is absent, want a zero observation to keep the series")
 	}
 }
 

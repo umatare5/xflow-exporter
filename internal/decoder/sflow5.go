@@ -211,13 +211,16 @@ func (d *Decoder) appendSFlowRecord(
 	}
 
 	dst = append(dst, flow.Record{
-		Exporter:     exporter,
-		Version:      flow.VersionSFlowV5,
-		Flows:        1,
-		Packets:      1,
-		SamplingRate: samplingRate,
-		InputIf:      inputIf,
-		OutputIf:     outputIf,
+		Exporter: exporter,
+		Version:  flow.VersionSFlowV5,
+		Flows:    1,
+		Packets:  1,
+		// Every reader below sets Bytes from a wire length on its success
+		// path, and a reader that fails takes the record with it.
+		BytesReported: true,
+		SamplingRate:  samplingRate,
+		InputIf:       inputIf,
+		OutputIf:      outputIf,
 	})
 
 	// A record of a known format that does not parse is a structure problem

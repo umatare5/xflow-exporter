@@ -52,13 +52,14 @@ func putV8Common(record []byte) {
 // dimensions are added.
 func baseV8Want() flow.Record {
 	return flow.Record{
-		Exporter: testExporter,
-		Version:  flow.VersionNetFlowV8,
-		Flows:    9,
-		Packets:  200,
-		Bytes:    90000,
-		Start:    fixtureBootTime().Add(fixtureV8FirstMs * time.Millisecond),
-		End:      fixtureBootTime().Add(fixtureV8LastMs * time.Millisecond),
+		Exporter:      testExporter,
+		Version:       flow.VersionNetFlowV8,
+		Flows:         9,
+		Packets:       200,
+		Bytes:         90000,
+		BytesReported: true,
+		Start:         fixtureBootTime().Add(fixtureV8FirstMs * time.Millisecond),
+		End:           fixtureBootTime().Add(fixtureV8LastMs * time.Millisecond),
 	}
 }
 

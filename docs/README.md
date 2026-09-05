@@ -224,10 +224,11 @@ A record carrying one sampled packet section instead of parsed flow fields decod
 
 - **Scraping** — Prometheus v3.8+ with `scrape_native_histograms: true` in the scrape config.
 - **Duration** — observed only where the record carried both flow instants, not on every one.
+- **Size** — observed only where the record carried a byte count, so its count never exceeds `xflow_flows_total` summed over `version`.
 - **Scrape-only** — `--remote-write.url` ships the counters and gauges, never a histogram.
 
 > [!NOTE]
-> [`examples/prometheus.yml`](../examples/prometheus.yml) sets the scrape option; without it the scrape negotiates the classic text exposition, which carries a `_count`, a `_sum` and one `+Inf` bucket. sFlow samples and clock-less templates contribute size but no duration. Remote Write 2.0 sends a histogram as its own message, and reducing one to a single sample would be a value nobody measured.
+> [`examples/prometheus.yml`](../examples/prometheus.yml) sets the scrape option; without it the scrape negotiates the classic text exposition, which carries a `_count`, a `_sum` and one `+Inf` bucket. sFlow samples and clock-less templates contribute size but no duration, and a record counting its bytes in elements this decoder skips contributes no size. Remote Write 2.0 sends a histogram as its own message, and reducing one to a single sample would be a value nobody measured.
 
 ### Dashboards
 

@@ -97,8 +97,9 @@ func TestDecodeSection_IPFIXSectionWithFrameSize(t *testing.T) {
 	if got.SrcPort != 51234 || got.DstPort != 443 {
 		t.Errorf("ports = %d -> %d, want the tuple read through the VLAN tag", got.SrcPort, got.DstPort)
 	}
-	if got.Bytes != 1518 {
-		t.Errorf("Bytes = %d, want the dataLinkFrameSize 1518", got.Bytes)
+	if got.Bytes != 1518 || !got.BytesReported {
+		t.Errorf("Bytes = %d reported = %v, want the dataLinkFrameSize 1518 and true",
+			got.Bytes, got.BytesReported)
 	}
 	if got.Packets != 1 {
 		t.Errorf("Packets = %d, want 1", got.Packets)
@@ -132,6 +133,10 @@ func TestDecodeSection_IPHeaderSection(t *testing.T) {
 	got := records[0]
 	if got.SrcAddr != netip.MustParseAddr("10.0.0.1") || got.DstPort != 443 {
 		t.Errorf("record = %+v, want the IP-only section decoded", got)
+	}
+	// A section without the frame size element carries no length of its own.
+	if got.BytesReported {
+		t.Errorf("BytesReported = true, want false without a dataLinkFrameSize")
 	}
 }
 
