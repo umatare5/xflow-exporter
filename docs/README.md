@@ -1,6 +1,8 @@
 # Documentation
 
-Reference pages for xflow-exporter. The [README](../README.md) covers getting flows received and scraped; these pages carry the catalogues and the behaviour every module shares.
+Reference pages for xflow-exporter.
+
+The [README](../README.md) covers getting flows received and scraped; these pages carry the catalogues and the behaviour every module shares.
 
 | Page                              | Focus                                  |
 | :-------------------------------- | :------------------------------------- |
