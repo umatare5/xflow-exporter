@@ -139,7 +139,7 @@ func TestDecoderCollector_ReportsDomainState(t *testing.T) {
 	c := NewDecoderCollector(d)
 
 	expected := `
-# HELP xflow_sequence_missed_total Export packets the sequence numbers say were lost, per protocol and observation domain
+# HELP xflow_sequence_missed_total Packets on v9 and sFlow, or data records on IPFIX, the sequence numbers say were lost, per domain
 # TYPE xflow_sequence_missed_total counter
 xflow_sequence_missed_total{exporter_address="192.0.2.20",odid="256",version="netflow_v9"} 0
 # HELP xflow_templates Unexpired templates held per exporter, protocol, observation domain and kind

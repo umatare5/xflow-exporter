@@ -10,7 +10,7 @@ USAGE:
    xflow-exporter [global options]
 
 VERSION:
-   dev
+   0.8.0
 
 GLOBAL OPTIONS:
    --dry-run                    Validate configuration without starting the server
@@ -69,7 +69,7 @@ GLOBAL OPTIONS:
    --receiver.buffer-bytes int                              UDP socket receive buffer size in bytes (0 keeps the OS default) (default: 4194304)
    --receiver.max-packet-size int                           Largest datagram in bytes kept whole, dropping larger ones (default: 9216)
    --receiver.queue-size int                                Datagrams buffered between the read loops and the decoders (default: 8192)
-   --receiver.workers int                                   Decode workers consuming the queue (0 sizes to GOMAXPROCS) (default: 0)
+   --receiver.workers int                                   Decode workers, each device hashed to one of them (0 sizes to GOMAXPROCS) (default: 0)
 
    * Remote Write Options
 
@@ -85,4 +85,6 @@ GLOBAL OPTIONS:
 
 `--receiver.buffer-bytes` asks the kernel for that much `SO_RCVBUF`, and Linux clamps the grant to `net.core.rmem_max`, which this exporter cannot raise. Size it, and `--receiver.queue-size`, to absorb the export storms Flexible NetFlow emits after a cache flush.
 
-A listener accepts every supported protocol, identified per datagram, so `--receiver.address` entries separate networks or ports rather than protocols.
+One worker decodes everything a device sends, so `--receiver.workers` above the device count adds nothing. A device that outruns one worker fills the shared queue, which every listener then drops from as `queue_full`.
+
+A listener accepts every supported protocol, identified per datagram, so `--receiver.address` entries separate networks or ports rather than protocols. Each stream a device sends belongs on one listener, because two read loops are not ordered against each other.

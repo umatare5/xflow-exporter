@@ -17,7 +17,7 @@ This is the whole set of series the exporter publishes about itself, and none ta
 | `decoder`     | `xflow_decode_errors_total`                | Counter | Rejections per device and `reason`            |
 | `decoder`     | `xflow_last_flow_timestamp_seconds`        | Gauge   | Unix time of the last decode                  |
 | `decoder`     | `xflow_templates`                          | Gauge   | Templates held per domain and `type`          |
-| `decoder`     | `xflow_sequence_missed_total`              | Counter | Export packets lost per domain                |
+| `decoder`     | `xflow_sequence_missed_total`              | Counter | Packets or IPFIX records lost per domain      |
 | `decoder`     | `xflow_sampling_rate`                      | Gauge   | Declared sampling rate per domain             |
 | `decoder`     | `xflow_domains_refused_total`              | Counter | Datagrams past the domain budget              |
 | `decoder`     | `xflow_vendor_strings_refused_total`       | Counter | Unrepresentable strings, per field            |
@@ -117,6 +117,8 @@ its `reason` names what the decoder refused rather than where it stopped.
 all three carry `exporter_address`, `version` and `odid` together, and a domain is that triple rather than the identifier alone: the three protocols number their domains independently, so one number from one device names as many domains as it speaks protocols.
 
 - `xflow_sampling_rate` reads a v9 or IPFIX options declaration alone, so a v5 or sFlow device corrects its counts with no rate series to audit them by — [Sampling correction](README.md#sampling-correction) carries the precedence.
+- `xflow_sequence_missed_total` counts what each sequence number counts, packets on v9 and sFlow and data records on IPFIX, so one lost IPFIX message adds every record it carried.
+- A device's datagrams decode in the order they were queued, one worker holding each device, so a rise here is loss or reordering on the wire rather than a race between the decoders.
 
 **the four `_refused_total` counters**
 

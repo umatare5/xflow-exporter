@@ -65,7 +65,7 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		),
 		seqMissedDesc: prometheus.NewDesc(
 			"xflow_sequence_missed_total",
-			"Export packets the sequence numbers say were lost, per protocol and observation domain",
+			"Packets on v9 and sFlow, or data records on IPFIX, the sequence numbers say were lost, per domain",
 			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
 		samplingDesc: prometheus.NewDesc(
