@@ -68,7 +68,7 @@ See [Prometheus Configuration](#prometheus-configuration) for the job and the al
 
 NetFlow v5/v8/v9, IPFIX and sFlow v5, over plaintext UDP — see [Protocols](docs/protocols.md).
 
-## Syntax
+## Flags
 
 `xflow-exporter --help` prints every flag, and [`docs/help.md`](docs/help.md) carries the same list.
 
