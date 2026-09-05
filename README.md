@@ -67,7 +67,7 @@ NetFlow v5/v8/v9, IPFIX and sFlow v5, over plaintext UDP — see [Protocols](doc
 
 ## Syntax
 
-`xflow-exporter --help` prints every flag, and [`docs/configuration.md`](docs/configuration.md) carries the same list.
+`xflow-exporter --help` prints every flag, and [`docs/help.md`](docs/help.md) carries the same list.
 
 Each data collector is enabled per module:
 
