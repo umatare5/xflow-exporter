@@ -6,6 +6,8 @@ A minor release may rename or remove a metric. Every collector module flag is of
 
 ## [Unreleased]
 
+## [v0.9.0]
+
 - [#21](https://github.com/umatare5/xflow-exporter/pull/21) — Add the govulncheck badge to the README
 - [#22](https://github.com/umatare5/xflow-exporter/pull/22) — Give each overview point something only it says
 - [#23](https://github.com/umatare5/xflow-exporter/pull/23) — Hold the architecture diagram to the line it illustrates
@@ -60,7 +62,8 @@ A minor release may rename or remove a metric. Every collector module flag is of
 - [#1](https://github.com/umatare5/xflow-exporter/pull/1) — Start the exporter with its flags, HTTP surface and UDP receiver
 - [#2](https://github.com/umatare5/xflow-exporter/pull/2) — Add the release workflow the tag and the artifacts come from
 
-[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.9.0...HEAD
+[v0.9.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.9.0
 [v0.8.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.8.0
 [v0.7.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.7.0
 [v0.6.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.6.0
