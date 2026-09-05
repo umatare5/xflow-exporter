@@ -1,6 +1,8 @@
 # Documentation
 
-Reference pages for xflow-exporter. The [README](../README.md) covers getting flows received and scraped; these pages carry the catalogues and the behaviour every module shares.
+Reference pages for xflow-exporter.
+
+The [README](../README.md) covers getting flows received and scraped; these pages carry the catalogues and the behaviour every module shares.
 
 | Page                              | Focus                                  |
 | :-------------------------------- | :------------------------------------- |
@@ -105,7 +107,7 @@ Lookups are local: nothing is fetched and no credential is held. Neither databas
 
 ### Mapping file
 
-`--enrich.mapping-file` names devices and their interfaces, which no flow protocol exports, and may name transport ports the built-in table does not cover.
+`--enrich.mapping-file` names devices and their interfaces, which this decoder does not read, and may name transport ports the built-in table does not cover.
 
 ```yaml
 devices:
@@ -115,6 +117,7 @@ devices:
       10102: Gi0/2
 services: # port/proto, ahead of the built-in table
   5246/udp: capwap-control
+  9200/tcp: elasticsearch
 ```
 
 - **Two info series** — `xflow_device_info` and `xflow_interface_info` carry the names.
@@ -123,6 +126,7 @@ services: # port/proto, ahead of the built-in table
 - **`devices: {}` loads** — emptying the file on purpose is how a reload takes names away.
 - **YAML acts first** — a `~` key is dropped before any check, `%YAML 1.2` is refused.
 - **`services:` outranks the built-in table** — on any port both of them name.
+- **Application ports** — the built-in table names protocols rather than products.
 - **One table at a time** — a source port here beats a destination port in the built-in one.
 
 > [!TIP]

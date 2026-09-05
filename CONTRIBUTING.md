@@ -29,7 +29,7 @@ The repository includes a ready to use `Dockerfile`. To build a new Docker image
 make image
 ```
 
-This cross-compiles a Linux binary into `./tmp/image/linux/<arch>`, then builds from `./tmp/image` because the `Dockerfile` expects the GoReleaser context layout, `linux/<arch>/xflow-exporter` beside `LICENSE` and `NOTICE`. The image is tagged `$USER/xflow-exporter` and declares ports 10053 and 2055/udp without publishing them, so publish them with `docker run -p`. Released images are pushed to `ghcr.io/umatare5/xflow-exporter` by GoReleaser instead.
+This cross-compiles a Linux binary into `./tmp/image/linux/<arch>`, then builds from `./tmp/image` because the `Dockerfile` expects the GoReleaser context layout, `linux/<arch>/xflow-exporter` beside `LICENSE` and `NOTICE`. The image is tagged `$USER/xflow-exporter` and declares ports 10053 and 4739/udp without publishing them, so publish them with `docker run -p`. Released images are pushed to `ghcr.io/umatare5/xflow-exporter` by GoReleaser instead.
 
 ## Release
 

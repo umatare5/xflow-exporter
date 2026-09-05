@@ -26,7 +26,7 @@ const serviceNetBIOS = "netbios"
 
 // serviceTableSize is the table's capacity hint: a number registered under
 // both transports holds two entries, a single-transport one holds one.
-const serviceTableSize = 100
+const serviceTableSize = 86
 
 // tcpudp registers one name under both transports, which is how IANA assigns
 // the overwhelming majority of these.
@@ -52,7 +52,8 @@ func udpOnly(port uint16, name string, table map[servicePort]string) {
 // The table is deliberately short. It carries the services an operator reads
 // a traffic breakdown for, not the several thousand numbers IANA has on
 // record: a name nobody recognizes adds a label value without adding meaning,
-// and a wrong guess is worse than the number it replaced.
+// and a wrong guess is worse than the number it replaced. A number one product
+// conventionally uses is a mapping file's entry rather than one of these.
 var serviceNames = buildServiceNames()
 
 func buildServiceNames() map[servicePort]string {
@@ -99,28 +100,17 @@ func buildServiceNames() map[servicePort]string {
 		6379:  "redis",
 		8080:  "http-alt",
 		8443:  "https-alt",
-		9090:  "prometheus",
 		27017: "mongodb",
 	} {
 		tcpudp(port, name, table)
 	}
 
-	// The stream services, and the two numbers whose UDP side below carries a
-	// different protocol rather than the same one over datagrams.
+	// RadSec, and the two numbers whose UDP side below carries a different
+	// protocol rather than the same one over datagrams.
 	for port, name := range map[uint16]string{
 		443:  "https",
 		853:  "dns-over-tls",
 		2083: "radsec",
-		3000: "dev-server",
-		3100: "loki",
-		4317: "otlp-grpc",
-		4318: "otlp-http",
-		6443: "kubernetes-api",
-		9092: "kafka",
-		9100: "raw",
-		9115: "blackbox-exporter",
-		9116: "snmp-exporter",
-		9200: "elasticsearch",
 	} {
 		tcpOnly(port, name, table)
 	}
@@ -128,14 +118,13 @@ func buildServiceNames() map[servicePort]string {
 	// The tunnels, the flow protocols, and the QUIC-borne successors to two
 	// of the TCP services above.
 	for port, name := range map[uint16]string{
-		443:   "http3",
-		500:   "isakmp",
-		853:   "dns-over-quic",
-		2055:  "netflow",
-		4739:  "ipfix",
-		4789:  "vxlan",
-		6343:  "sflow",
-		51820: "wireguard",
+		443:  "http3",
+		500:  "isakmp",
+		853:  "dns-over-quic",
+		2055: "netflow",
+		4739: "ipfix",
+		4789: "vxlan",
+		6343: "sflow",
 	} {
 		udpOnly(port, name, table)
 	}

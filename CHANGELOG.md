@@ -2,7 +2,7 @@
 
 Notable changes to the metric surface, one section per release, listing the pull requests that release carries.
 
-A minor release may rename or remove a metric. Every collector module flag is off by default, so a release that adds one adds no series until you set it.
+A minor release may rename or remove a metric, change a default, or drop a built-in application name. Every collector module flag is off by default, so a release that adds one adds no series until you set it.
 
 ## [Unreleased]
 
@@ -18,6 +18,10 @@ A minor release may rename or remove a metric. Every collector module flag is of
 - [#28](https://github.com/umatare5/xflow-exporter/pull/28) — Rename docs/configuration.md to docs/help.md
 - [#29](https://github.com/umatare5/xflow-exporter/pull/29) — Withhold the size histogram where the record carried no byte count
 - [#30](https://github.com/umatare5/xflow-exporter/pull/30) — Decode each device's datagrams in wire order, which reordering had counted as sequence loss
+- [#33](https://github.com/umatare5/xflow-exporter/pull/33) — Receive flows on the registered port 4739 rather than the conventional 2055
+- [#34](https://github.com/umatare5/xflow-exporter/pull/34) — Unify the security policy sections and restate the domain rules as claims
+- [#35](https://github.com/umatare5/xflow-exporter/pull/35) — Name only the protocols a traffic breakdown reads, leaving the rest to a mapping file
+- [#37](https://github.com/umatare5/xflow-exporter/pull/37) — Alert on a listener that receives nothing, and correct what the verified devices export
 
 ## [v0.8.0]
 

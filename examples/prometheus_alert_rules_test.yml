@@ -45,11 +45,48 @@ tests:
           - labels: 'ALERTS{alertname="XflowExporterSilent", alertstate="firing", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow", severity="warning"}'
             value: 1
 
+  # A listener addressed at the wrong port receives nothing, and the counter
+  # that proves it is flat rather than absent.
+  - interval: 1m
+    input_series:
+      - series: 'xflow_receiver_packets_total{job="xflow",instance="localhost:10053",listener=":4739"}'
+        values: "0+0x40"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: XflowReceiverIdle
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: XflowReceiverIdle
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: xflow
+              instance: localhost:10053
+              listener: ":4739"
+            exp_annotations:
+              summary: "xflow-exporter received nothing on :4739"
+              description: >-
+                No datagram reached this listener for 15 minutes. XflowExporterSilent
+                cannot cover this: its timestamp appears only once a device has
+                decoded, so a receiver nothing ever reached publishes no series for
+                it to age. A listener that never receives is usually addressed at
+                the wrong port.
+
+  # A listener that is receiving must never reach XflowReceiverIdle.
+  - interval: 1m
+    input_series:
+      - series: 'xflow_receiver_packets_total{job="xflow",instance="localhost:10053",listener=":4739"}'
+        values: "0+120x40"
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: XflowReceiverIdle
+        exp_alerts: []
+
   # A counter that dropped in the past and has since stopped stays flat, and
   # a flat counter is the case a > 0 rule must never alert on.
   - interval: 1m
     input_series:
-      - series: 'xflow_receiver_dropped_packets_total{job="xflow",instance="localhost:10053",listener=":2055",reason="queue_full"}'
+      - series: 'xflow_receiver_dropped_packets_total{job="xflow",instance="localhost:10053",listener=":4739",reason="queue_full"}'
         values: "0+0x10 0+10x15"
     alert_rule_test:
       - eval_time: 10m
@@ -62,7 +99,7 @@ tests:
       - expr: ALERTS{alertname="XflowReceiverDropping", alertstate="firing"}
         eval_time: 20m
         exp_samples:
-          - labels: 'ALERTS{alertname="XflowReceiverDropping", alertstate="firing", instance="localhost:10053", job="xflow", listener=":2055", reason="queue_full", severity="warning"}'
+          - labels: 'ALERTS{alertname="XflowReceiverDropping", alertstate="firing", instance="localhost:10053", job="xflow", listener=":4739", reason="queue_full", severity="warning"}'
             value: 1
 
   - interval: 1m

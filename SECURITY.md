@@ -1,16 +1,35 @@
 # Security Policy
 
-## Supported versions
+## Supported Versions
 
 Only the latest release carries fixes, and no older tag gets a patch branch. Reproduce a finding against the latest release before reporting it.
 
-## Reporting a vulnerability
+## Reporting a Vulnerability
 
 Report privately through GitHub Security Advisories, never an issue or a pull request — open the repository's **Security** tab and choose **Report a vulnerability**.
 
 One maintainer works on this in their own time, so no response time is promised. The advisory goes out after the fix ships and credits the reporter unless they ask otherwise.
 
-## What this exporter holds and exposes
+## What to Include
+
+**Redact these first.** None of them belongs in a report.
+
+- A monitored address, from a datagram, a capture or a `/metrics` sample
+- The exporting device's address, and any name a mapping file gave it
+- A remote write credential, from a flag, an environment variable or a header
+
+Then include the following:
+
+- **Affected versions** (required): The `xflow-exporter` release, and the exporting device and its firmware
+- **Reproduction steps** (required): The flags in force, and the datagram or capture that triggers it
+- **Output** (required): The log line, the metric or the stack trace, with every value above removed
+- **Impact assessment** (required): What the exploit reaches, given an unauthenticated receiver and metrics endpoint
+- **Suggested fix** (optional): Proposed remediation, if any
+- **Disclosure status** (required): Whether it is shared elsewhere, and your plan for sharing it
+
+## Scope
+
+### What this exporter holds and exposes
 
 This exporter receives traffic flow records (NetFlow, IPFIX, sFlow) from network devices over UDP, and exposes aggregates of them as Prometheus metrics. Flow records reveal who talked to whom, so both the receiver and the metrics endpoint deserve a controlled network path.
 
@@ -25,11 +44,11 @@ This exporter receives traffic flow records (NetFlow, IPFIX, sFlow) from network
 Restricting the port looks like this with nftables.
 
 ```bash
-nft add rule inet filter input udp dport 2055 ip saddr { 10.0.0.0/24, 192.0.2.10 } accept
-nft add rule inet filter input udp dport 2055 drop
+nft add rule inet filter input udp dport 4739 ip saddr { 10.0.0.0/24, 192.0.2.10 } accept
+nft add rule inet filter input udp dport 4739 drop
 ```
 
-## What leaves the host
+### What leaves the host
 
 Nothing, unless `--remote-write.url` is set. That flag enables the Remote Write 2.0 client, which gathers the registry every `--remote-write.interval` (default 60 seconds) and sends its counters and gauges to the configured endpoint. Label sets can carry monitored IP addresses, so a write carries what a scrape exposes — point it only at a store trusted with flow data.
 
@@ -41,6 +60,6 @@ The same holds for the mapping file: this exporter speaks no SNMP, and [`scripts
 
 `--web.enable-lifecycle` exposes `/-/reload`, which re-reads those files. It is unauthenticated, like the metrics endpoint, so keep it on a controlled path. It is off by default, and a `SIGHUP` reloads without exposing anything.
 
-## Out of scope
+### Out of scope
 
 A defect in a network device's own flow export implementation belongs to its vendor — report it there, not to this third-party exporter.

@@ -44,12 +44,15 @@ A scrape reads the in-memory aggregation tables and never waits on flow arrival 
 
 ### 1. Point your devices at the exporter
 
-Configure each device to export flows to the exporter's address, `2055/udp` by default.
+Configure each device to export flows to the exporter's IP, `4739/udp` by default — the port IANA registers for IPFIX.
+
+> [!TIP]
+> **NetFlow v5, v8, v9 and sFlow reach that same port.** Every datagram carries its own version, so one listener takes every supported protocol and a legacy exporter needs no port of its own.
 
 ### 2. Run the exporter with Docker
 
 ```bash
-docker run -p 10053:10053 -p 2055:2055/udp ghcr.io/umatare5/xflow-exporter:latest
+docker run -p 10053:10053 -p 4739:4739/udp ghcr.io/umatare5/xflow-exporter:latest
 ```
 
 > [!TIP]
@@ -160,7 +163,7 @@ These series describe the shipping path rather than the exporter, and appear onl
 ```bash
 $ ./xflow-exporter --log.format text
 time=2026-08-26T19:58:24.288+09:00 level=INFO msg="Starting xflow-exporter" version=0.1.0 listen_address=0.0.0.0 listen_port=10053 telemetry_path=/metrics
-time=2026-08-26T19:58:24.291+09:00 level=INFO msg="Flow receiver listening" listener=:2055
+time=2026-08-26T19:58:24.291+09:00 level=INFO msg="Flow receiver listening" listener=:4739
 time=2026-08-26T19:58:24.292+09:00 level=INFO msg="HTTP server listening" addr=0.0.0.0:10053
 ```
 
