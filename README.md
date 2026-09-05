@@ -68,7 +68,7 @@ See [Prometheus Configuration](#prometheus-configuration) for the job and the al
 
 NetFlow v5/v8/v9, IPFIX and sFlow v5, over plaintext UDP — see [Protocols](docs/protocols.md).
 
-## Syntax
+## Flags
 
 `xflow-exporter --help` prints every flag, and [`docs/help.md`](docs/help.md) carries the same list.
 
@@ -89,6 +89,15 @@ Each data collector is enabled per module:
 | `--collector.distributions` | Flow size and duration native histograms               |
 
 `--receiver.*`, `--parser.*` and `--aggregation.*` tune the receive path — see [Push and pull](docs/README.md#push-and-pull).
+
+## Environment Variables
+
+This exporter reads two environment variables:
+
+| Environment Variable          | Description                                  |
+| :---------------------------- | :------------------------------------------- |
+| `XFLOW_REMOTE_WRITE_USERNAME` | Basic auth username for `--remote-write.url` |
+| `XFLOW_REMOTE_WRITE_PASSWORD` | Basic auth password for `--remote-write.url` |
 
 ## Endpoints
 

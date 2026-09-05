@@ -97,7 +97,7 @@ Lookups are local: nothing is fetched and no credential is held. Neither databas
 - **An unlisted address is not a clean one** — it is absence rather than a finding.
 - **Both directions** — a hit on either address keys `direction="src"` or `direction="dst"`.
 - **Size** — roughly 420,000 addresses, about 20 MiB, answering a lookup in nanoseconds.
-- **Licence** — the lists the bundled script fetches are MIT and CC0, though others differ.
+- **License** — the lists the bundled script fetches are MIT and CC0, though others differ.
 
 > [!IMPORTANT]
 > `xflow_threat_skipped_lines` counts what a load passed over, blank lines and comments excluded, so a list published in CIDR notation shows its gap rather than reading as full coverage. An over-long line fails the whole file because the reader cannot resume past it, and a set silently missing its tail would under-flag. Several published aggregates inherit a non-commercial clause from an upstream feed.
