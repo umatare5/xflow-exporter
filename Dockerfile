@@ -18,8 +18,8 @@ COPY LICENSE NOTICE /
 USER 65534:65534
 
 # Declare the ports; publishing them still requires docker run -p.
-# 10053 serves /metrics and 2055/udp is the default flow receiver port.
+# 10053 serves /metrics and 4739/udp is the default flow receiver port.
 EXPOSE 10053
-EXPOSE 2055/udp
+EXPOSE 4739/udp
 
 ENTRYPOINT ["/xflow-exporter"]

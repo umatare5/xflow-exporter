@@ -25,8 +25,8 @@ This exporter receives traffic flow records (NetFlow, IPFIX, sFlow) from network
 Restricting the port looks like this with nftables.
 
 ```bash
-nft add rule inet filter input udp dport 2055 ip saddr { 10.0.0.0/24, 192.0.2.10 } accept
-nft add rule inet filter input udp dport 2055 drop
+nft add rule inet filter input udp dport 4739 ip saddr { 10.0.0.0/24, 192.0.2.10 } accept
+nft add rule inet filter input udp dport 4739 drop
 ```
 
 ## What leaves the host
