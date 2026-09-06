@@ -128,8 +128,6 @@ services: # port/proto, ahead of the built-in table
 - **`services:` outranks the built-in table** — on any port both of them name.
 - **Application ports** — the built-in table names protocols rather than products.
 - **One table at a time** — a source port here beats a destination port in the built-in one.
-- **Cost follows key count, not file size** — 14,000 devices parse in 320 ms, and 14,000 `services:` entries in 340 ms, where 1,000 devices of 48 ports each parse in 77 ms from a larger file.
-- **Parsed whole before any lookup** — that larger file holds 37 MiB while it parses, which `--dry-run` and `/-/reload` each pay again.
 
 > [!TIP]
 > [`scripts/fetch-device-names.sh`](../scripts/fetch-device-names.sh) walks the devices over SNMP and writes the file. Nothing here speaks SNMP; the exporter reads what that left behind, so run it from cron and reload afterwards. It refuses a device answering no usable name rather than writing it out unnamed, and installs by rename, so a failed walk leaves the previous names in force. [`SECURITY.md`](../SECURITY.md) covers where the community string ends up.
