@@ -4,7 +4,7 @@ Notable changes to the metric surface, one section per release, listing the pull
 
 ## [Unreleased]
 
-- [#49](https://github.com/umatare5/xflow-exporter/pull/49) — Ship only the licences and the parsed config beside the binary
+- [#47](https://github.com/umatare5/xflow-exporter/pull/47) — Split the docs by owner, rename the collector, and fix the rendering
 
 ## [v0.9.1]
 
