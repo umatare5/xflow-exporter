@@ -38,7 +38,8 @@ Devices push flow datagrams into the exporter, and Prometheus pulls aggregates o
   <img alt="Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/readme_architecture.png" width="705px">
 </picture>
 
-A scrape reads the in-memory tables and never waits on flow arrival. See [Push and Pull](docs/README.md#push-and-pull).
+> [!NOTE]
+> A scrape reads the in-memory tables and never waits on flow arrival. See [Push and Pull](docs/README.md#push-and-pull).
 
 ## Quick Start
 
@@ -86,7 +87,8 @@ Every collector is off by default and enabled by its own `--collector.<name>` fl
 | `--collector.threats`       | Traffic per flagged address, needs `--enrich.threat-file`     |
 | `--collector.distributions` | Flow size and duration native histograms                      |
 
-`--enrich.*` sources fill what a device did not export, from local files. See [Enrichment](docs/enrichment.md).
+> [!NOTE]
+> `--enrich.*` sources fill what a device did not export, from local files. See [Enrichment](docs/enrichment.md).
 
 ## Flags
 
@@ -128,7 +130,8 @@ The series a dashboard usually starts from:
 | `applications`  | `xflow_application_bytes_total` | Counter   | Traffic by application |
 | `distributions` | `xflow_flow_bytes`              | Histogram | Flow size distribution |
 
-See [`docs/README.md`](docs/README.md) for the absence, folding and sampling rules every collector shares.
+> [!NOTE]
+> See [`docs/README.md`](docs/README.md) for the absence, folding and sampling rules every collector shares.
 
 > [!IMPORTANT]
 > All collectors are **disabled by default** to bound cardinality, and `distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration. A minor release may rename or remove a series, change a default or drop a built-in application. Copying a new label back onto the old one with `metric_relabel_configs` keeps a rule written against the old name evaluating across the upgrade.
@@ -146,7 +149,10 @@ These series describe the exporter itself rather than the traffic it aggregates.
 | `xflow_sampling_rate`                  | Gauge   | Declared rate per domain               |
 | `xflow_aggregation_entries`            | Gauge   | Entries held per collector             |
 
-Alert on freshness with `time() - xflow_last_flow_timestamp_seconds`, because nothing else separates a silent device from a quiet network. `--remote-write.url` adds four `xflow_remote_write_*` series. The same page catalogues them with the counter to alert on.
+> [!NOTE]
+> Alert on freshness with `time() - xflow_last_flow_timestamp_seconds`, the only signal that separates a silent device from a quiet network.
+>
+> `--remote-write.url` adds four `xflow_remote_write_*` series, catalogued on the same page.
 
 ## Examples
 
