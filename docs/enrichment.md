@@ -12,13 +12,13 @@ An `--enrich.*` source supplies what the device did not: a dimension of the reco
 | `--enrich.threat-file`      | A flag on addresses a list file names    | `threats`                         |
 | `--enrich.mapping-file`     | Device, interface and port names         | The naming series, `applications` |
 
-- **Lookups are local** — nothing is fetched and no credential is held, so a label never costs the exporter a network round trip.
+- **Lookups are local** — nothing is fetched and no credential is held, so no round trip is taken.
 - **A path that cannot be opened fails startup** — and `--dry-run` opens every source the same way, binding nothing — [Help](help.md#notes) carries what else it checks.
-- **Nothing ships here** — neither database nor list is bundled, and [`scripts/fetch-enrichment-data.sh`](../scripts/fetch-enrichment-data.sh) is one way to fetch them.
+- **Neither database nor list ships** — [`scripts/fetch-enrichment-data.sh`](../scripts/fetch-enrichment-data.sh) is one way to fetch them.
 - **A fetch takes effect on reload** — either script writes a file the exporter reads only when told to, so run it from cron and reload afterwards.
 - **Coverage is published** — `xflow_enrichment_lookups_total` counts the records each source saw by outcome — [Health](health.md#labels) carries what `filled`, `unknown` and `skipped` mean.
 
-## Service names
+## Service Names
 
 `--enrich.services` names the application from the transport port where the device named none, out of a built-in table that [`internal/enrich/services.go`](../internal/enrich/services.go) is the authoritative list of.
 
@@ -36,12 +36,12 @@ An `--enrich.*` source supplies what the device did not: a dimension of the reco
 - **Replaced whole** — the exporter memory-maps each file, so a fetch installs by rename rather than writing into a file a reader is serving.
 - **A country is a registration** — the database places a prefix where it is registered, not where the traffic went — [Collectors](collectors.md#specifications) carries how the pair reads.
 
-## Threat lists
+## Threat Lists
 
-`--enrich.threat-file` reads flagged addresses, one per line, and is repeatable so several lists combine into one set.
+`--enrich.threat-file` reads flagged addresses and is repeatable, so lists combine into one set.
 
 - **Format** — one address per line; blank lines, `#` and `;` comments and trailing fields are skipped.
-- **A prefix is not an address** — a CIDR line is skipped like any other non-address, and counted in `xflow_threat_skipped_lines`.
+- **A prefix is not an address** — a CIDR line is skipped, counted in `xflow_threat_skipped_lines`.
 - **A line over 255 bytes fails the file** — nothing a list publishes is that long.
 - **An unlisted address is not a clean one** — it is absence rather than a finding.
 - **Both directions** — a hit on either address keys `direction="src"` or `direction="dst"`.
@@ -52,18 +52,19 @@ An `--enrich.*` source supplies what the device did not: a dimension of the reco
 > [!IMPORTANT]
 > An over-long line fails the whole file because the reader cannot resume past it, and a set silently missing its tail would under-flag. Several published aggregates inherit a non-commercial clause from an upstream feed.
 
-## Mapping file
+## Mapping File
 
 `--enrich.mapping-file` names devices and their interfaces, which no flow protocol carries, and may name transport ports the built-in table does not cover. [`examples/mapping.yml`](../examples/mapping.yml) carries the layout.
 
-- **Two info series** — `xflow_device_info` and `xflow_interface_info` carry the names — [Collectors](collectors.md#specifications) carries what both follow.
+- **Two info series** — `xflow_device_info` and `xflow_interface_info` carry the names.
+- **The rules both follow** — [Collectors](collectors.md#specifications) carries them.
 - **Strict** — an unusable key or name, or one address spelled twice, fails the whole load.
 - **Exactly one document** — an empty file and a trailing `---` are both refused.
 - **`devices: {}` loads** — emptying the file on purpose is how a reload takes names away.
 - **YAML acts first** — the library drops a `~` key before any check and refuses `%YAML 1.2`.
 - **Fetching** — [`scripts/fetch-device-names.sh`](../scripts/fetch-device-names.sh) walks the devices over SNMP and writes the file whole, so a hand-written `services:` block lives elsewhere. It refuses a device answering no usable name rather than writing it out unnamed — [`SECURITY.md`](../SECURITY.md) carries where the community string ends up.
 
-This joins a name onto the per-interface traffic of one device, keeping the rows no name reaches:
+This joins a name onto the per-interface traffic of one device, keeping rows no name reaches:
 
 ```promql
 sum by (exporter_address, ifname) (
@@ -84,14 +85,15 @@ sum by (exporter_address, input_ifindex) (
 
 ## Reloading
 
-`--web.enable-lifecycle` exposes `/-/reload`, which re-reads every enrichment source. A `SIGHUP` does the same without the flag.
+`--web.enable-lifecycle` exposes `/-/reload`, and a `SIGHUP` re-reads every source without it.
 
-- **POST or PUT only**, and unexposed by default, a reload being a write rather than a read — [Endpoints](README.md#endpoints) carries the status contract.
-- **A failed reload keeps the previous data** — the set already loaded stays in force, and the endpoint answers 500 with the reason.
-- **Every source is attempted** — one source failing does not stop the next, and the answer names every failure.
+- **POST or PUT only** — a reload is a write rather than a read.
+- **Unexposed by default** — [Endpoints](README.md#endpoints) carries the status contract.
+- **A failed reload keeps the previous data** — the endpoint answers 500 with the reason.
+- **Every source is attempted** — one failing does not stop the next, and the answer names each.
 - **Atomic** — a new set is built whole before it replaces the old one, so no lookup pauses.
 - **Only the sources startup opened** — a reload re-reads their files, never the flags.
-- **`--dry-run` opens every source** the same way and binds nothing — [Help](help.md#notes) carries what else it checks.
+- **`--dry-run` opens every source** the same way and binds nothing — [Help](help.md#notes) carries its other checks.
 
 > [!NOTE]
 > A list gone missing would otherwise unflag every address at once, which reads as a network that had just gone clean; `xflow_threat_reload_failures_total` counts those loads. The mapping file has no such counter, mirroring the databases: a failed load answers `/-/reload` with 500 and logs its reason. Each mmdb reader is replaced rather than reopened, so a lookup never sees a half-loaded set and the decode path never pauses.

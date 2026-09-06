@@ -118,7 +118,7 @@
           "match_case": true,
           "headings": [
             "# Documentation",
-            "## Technical information",
+            "## Technical Information",
             "*"
           ]
         }
@@ -148,10 +148,10 @@
           "headings": [
             "# Enrichment",
             "## Sources", "*",
-            "## Service names", "*",
+            "## Service Names", "*",
             "## Databases", "*",
-            "## Threat lists", "*",
-            "## Mapping file", "*",
+            "## Threat Lists", "*",
+            "## Mapping File", "*",
             "## Reloading"
           ]
         }
@@ -177,7 +177,7 @@
         "MD043": {
           "match_case": true,
           "headings": [
-            "# Exporter health",
+            "# Exporter Health",
             "## Metrics", "*",
             "## Labels", "*",
             "## Specifications"
@@ -193,13 +193,13 @@
           "match_case": true,
           "headings": [
             "# Protocols",
-            "## Version identification", "*",
+            "## Version Identification", "*",
             "## NetFlow v5", "*",
             "## NetFlow v8", "*",
             "## NetFlow v9 and IPFIX", "*",
-            "## Packet sections", "*",
+            "## Packet Sections", "*",
             "## sFlow v5", "*",
-            "## Options templates", "*",
+            "## Options Templates", "*",
             "## References"
           ]
         }

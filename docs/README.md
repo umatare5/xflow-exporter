@@ -12,9 +12,9 @@ The [README](../README.md) covers getting flows received and scraped; these page
 | [Protocols](protocols.md)   | Per-protocol behaviour and limits            |
 | [Help](help.md)             | Flags and defaults, as `--help` prints       |
 
-## Technical information
+## Technical Information
 
-### Push and pull
+### Push and Pull
 
 - **Scrapes never wait** — a scrape reads the tables as they stand, whatever is arriving.
 - **No target to probe** — nothing answers an `up`-style reachability check toward a sender.
@@ -41,9 +41,9 @@ Every route answers on the address `--web.listen-address` and `--web.listen-port
 - **`/healthz` reads nothing** — it answers 200 to any method, so a quiet network cannot make an orchestrator restart the exporter and lose its tables.
 - **`/-/reload` is POST or PUT** — another method answers 405 with an `Allow` header, a failed reload 500 with its reason, and a success `Reloaded`.
 - **Unexposed means unregistered** — without `--web.enable-lifecycle` the path falls through to the landing page, so a `POST /-/reload` answers 200 and reloads nothing.
-- **Ten scrapes in flight** — `/metrics` answers an eleventh concurrent request with 503, which bounds the gathers running at once.
-- **Shutdown** — SIGINT or SIGTERM stops the listeners and gives the requests in flight five seconds before the process exits.
-- **SIGHUP reloads** — the sources are re-read without the endpoint being exposed — [Reloading](enrichment.md#reloading) carries the path.
+- **Ten scrapes in flight** — `/metrics` answers an eleventh concurrent request with 503 rather than queueing it, which bounds the registry gathers.
+- **Shutdown** — SIGINT or SIGTERM stops the listeners and gives the requests in flight five seconds before the process exits, cutting a slower scrape.
+- **SIGHUP reloads** — the sources are re-read without the endpoint — [Reloading](enrichment.md#reloading) carries the path.
 
 ### Absence
 
@@ -54,9 +54,9 @@ A dimension the record did not carry produces no series — never `0`, `false` o
 - **Eviction** — an entry idle past `--aggregation.entry-ttl` is removed with its series.
 - **Freshness** — the timestamp appears on the first decode, the rate on the first rate.
 
-### Counter semantics
+### Counter Semantics
 
-The counters of every collector accumulate from entry creation, and an entry evicted then re-created restarts at zero.
+The counters of every collector accumulate from entry creation, and an entry evicted then re-created restarts at zero rather than resuming its total.
 
 - **Rebirth** — Prometheus's staleness marker separates the old series from the new one.
 - **Folding** — `other` carries what `--aggregation.max-entries` rejected at ingest.
@@ -66,9 +66,9 @@ The counters of every collector accumulate from entry creation, and an entry evi
 > [!NOTE]
 > The tail is still accumulating, so summing it per scrape would make the counter fall whenever an entry is evicted or grows into the cut. An evicted entry's bytes already reached Prometheus on its own series, so folding them again would make `sum(rate())` over the family read twice what was ingested.
 
-### Sampling correction
+### Sampling Correction
 
-`_bytes_total` and `_packets_total` carry the record's value multiplied by the rate in force at decode.
+`_bytes_total` and `_packets_total` carry the record's value times the rate in force at decode.
 
 - **Sources** — the v5 header interval, the v9/IPFIX options rates, sFlow's inline rate.
 - **Precedence** — the options pairs rank as [Protocols](protocols.md#options-templates) tabulates.
@@ -86,19 +86,19 @@ An `--enrich.*` source fills a dimension the device did not export and never ove
 - **Feeds the existing families** — a dimension keys its collector, a name rides its own series.
 - **Cardinality** — filling a dimension creates series that were absent, hence the opt-in.
 
-### Bounded state
+### Bounded State
 
 Every map keyed by wire data carries a bound, a push protocol not choosing its senders.
 
-| Bounded                           | Limit                                        | Past it                                                    |
-| :-------------------------------- | :------------------------------------------- | :--------------------------------------------------------- |
-| Observation domains per device    | [256](../internal/decoder/templates.go#L26)  | The datagram is discarded, counting `domain_limit`         |
-| Templates per domain              | [8192](../internal/decoder/templates.go#L18) | Expired templates go first, then `invalid_template`        |
-| Interned vendor strings           | [65536](../internal/decoder/apps.go#L143)    | The value is copied per occurrence rather than refused     |
-| One vendor string                 | [255 B](../internal/decoder/apps.go#L150)    | Refused, as invalid UTF-8 is, counting once per field      |
-| Announced applications per device | [16384](../internal/decoder/apps.go#L38)     | The application stays numbered rather than named           |
-| Devices holding decode statistics | [65536](../internal/decoder/stats.go#L29)    | The device decodes but reaches no per-device health series |
-| AS names held from the database   | [65536](../internal/enrich/mmdb.go#L86)      | The AS goes unnamed, which a join shows by finding nothing |
+| Bounded                           | Limit                                        | Past it                                     |
+| :-------------------------------- | :------------------------------------------- | :------------------------------------------ |
+| Observation domains per device    | [256](../internal/decoder/templates.go#L26)  | Datagram discarded, counting `domain_limit` |
+| Templates per domain              | [8192](../internal/decoder/templates.go#L18) | Expired go first, then `invalid_template`   |
+| Interned vendor strings           | [65536](../internal/decoder/apps.go#L143)    | Copied per occurrence, not refused          |
+| One vendor string                 | [255 B](../internal/decoder/apps.go#L150)    | Refused like invalid UTF-8, once per field  |
+| Announced applications per device | [16384](../internal/decoder/apps.go#L38)     | Stays numbered rather than named            |
+| Devices holding decode statistics | [65536](../internal/decoder/stats.go#L29)    | Decodes, but no per-device health series    |
+| AS names held from the database   | [65536](../internal/enrich/mmdb.go#L86)      | Unnamed, so a join finds nothing            |
 
 - **Announced applications** — the bound is ten times the 1500 an NBAR2 pack names.
 - **Refusal counters** — the four `_refused_total` series count attempts, not entities.
@@ -109,23 +109,23 @@ Every map keyed by wire data carries a bound, a push protocol not choosing its s
 > [!NOTE]
 > A refused device keeps decoding and keeps feeding every aggregation table, but reaches no per-device health series. A device that has gone silent keeps the freshness series an alert on silence has to read. The per-device application tables and the distribution histograms key on the source address alone. [Health](health.md) carries what each refusal costs the records behind it.
 
-### Reason values
+### Reason Values
 
-The `reason` label of `xflow_decode_errors_total` and `xflow_receiver_dropped_packets_total` is a closed set — [Health](health.md#specifications) tabulates both.
+The `reason` label of `xflow_decode_errors_total` and `xflow_receiver_dropped_packets_total` is a closed set the wire cannot extend — [Health](health.md#specifications) tabulates both.
 
 ### Templates
 
 NetFlow v9 and IPFIX data decode against templates cached per exporter address, protocol and Observation Domain ID together — [Protocols](protocols.md#netflow-v9-and-ipfix) carries the scope rationale, the refusal conditions and the expiry rule.
 
-### Packet sections
+### Packet Sections
 
 A record carrying one sampled packet section instead of parsed flow fields decodes through the header walk the sFlow decoder uses — [Protocols](protocols.md#packet-sections) carries the elements, the precedence and the padding ambiguity.
 
-### Native histograms
+### Native Histograms
 
 `--collector.distributions` publishes `xflow_flow_bytes` and `xflow_flow_duration_seconds` as native histograms that reach a scrape alone — [Collectors](collectors.md#specifications) carries what each observes and the scrape option they need.
 
-### Remote write
+### Remote Write
 
 `--remote-write.url` ships the registry's counters and gauges to a Remote Write 2.0 endpoint, alongside or instead of `/metrics` — [Health](health.md#specifications) carries the four series that account for it.
 
@@ -136,9 +136,9 @@ A record carrying one sampled packet section instead of parsed flow fields decod
 > [!NOTE]
 > The address-keyed families turn their Top-K over as talkers come and go, measured at 5.3× the live series count per hour for `xflow_service_*` on a quiet link. The figure predates the ordering fix that removed the share a byte tie was causing. The dimensional families — `asns`, `applications`, `tcp_flags`, `dscp` and `countries` — stay flat at 1.0×.
 
-### Recording rules
+### Recording Rules
 
-[`examples/prometheus_record_rules.yml`](../examples/prometheus_record_rules.yml) collapses the pair- and tuple-keyed families onto one dimension, in seven groups.
+[`examples/prometheus_record_rules.yml`](../examples/prometheus_record_rules.yml) collapses the pair- and tuple-keyed families onto one dimension with `sum without()`, in seven groups.
 
 - **A ranking, not a total** — the tail below the Top-K cut reaches no recorded series.
 - **The one exception** — `xflow_exporter_*` takes no cut, so the ratios divide by it.
@@ -157,4 +157,4 @@ A record carrying one sampled packet section instead of parsed flow fields decod
 - **A ranking, not a total** — entries below the Top-K cut publish nothing at all.
 
 > [!NOTE]
-> Both counts are sampled estimates, so read volume as a proportion and take an exact figure from the device's SNMP interface counters.
+> Both counts are sampled estimates, so read volume as a proportion. An exact figure comes from the device's own SNMP interface counters.

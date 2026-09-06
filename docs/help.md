@@ -83,11 +83,11 @@ GLOBAL OPTIONS:
 
 ## Notes
 
-`--receiver.buffer-bytes` asks the kernel for that much `SO_RCVBUF`, and Linux clamps the grant to `net.core.rmem_max`, which this exporter cannot raise. Size it, and `--receiver.queue-size`, to absorb the export storms Flexible NetFlow emits after a cache flush.
+`--receiver.buffer-bytes` asks the kernel for that much `SO_RCVBUF`, and Linux clamps the grant to `net.core.rmem_max`, which this exporter cannot raise. Size both it and `--receiver.queue-size` to absorb a Flexible NetFlow cache-flush storm.
 
-One worker decodes everything a device sends, so `--receiver.workers` above the device count adds nothing. A device that outruns one worker fills the shared queue, which every listener then drops from as `queue_full`.
+Each device hashes to one worker, so `--receiver.workers` above the device count adds nothing. A device outrunning its worker fills the shared queue, so every listener drops as `queue_full`.
 
-Every listener accepts every supported protocol, told apart as [Protocols](protocols.md#version-identification) describes, so `--receiver.address` entries separate networks or ports rather than protocols. Each stream a device sends belongs on one listener, because two read loops are not ordered against each other.
+Every listener accepts every supported protocol, told apart as [Protocols](protocols.md#version-identification) describes, so `--receiver.address` entries separate networks or ports rather than protocols. Each stream a device sends belongs on one listener, because two read loops share no ordering.
 
 `--dry-run` validates the whole flag set first, then opens every file an `--enrich.*` flag names and closes it again, and exits 1 on the first one a real startup would refuse. It binds neither the UDP listeners nor the HTTP server and makes no remote-write connection, so a port already taken or an unreachable endpoint is not something it reports.
 
