@@ -2,11 +2,9 @@
 
 Notable changes to the metric surface, one section per release, listing the pull requests that release carries.
 
-A minor release may rename or remove a metric, change a default, or drop a built-in application name. Every collector module flag is off by default, so a release that adds one adds no series until you set it. Copying a new label back onto the old one with `metric_relabel_configs` keeps a rule written against the old name evaluating across the upgrade that renamed it.
-
 ## [Unreleased]
 
-- [#49](https://github.com/umatare5/xflow-exporter/pull/49) — Ship only the licences and the parsed config beside the binary
+- [#47](https://github.com/umatare5/xflow-exporter/pull/47) — Split the docs by owner, rename the collector, and fix the rendering
 
 ## [v0.9.1]
 
