@@ -127,6 +127,20 @@ func TestShardOf_SpreadsOneHostPerSubnet(t *testing.T) {
 	}
 }
 
+// TestShardOf_TakesANativeIPv6Exporter pins the address width the hash reads.
+// An empty host binds the listener dual-stack, so a device exporting over IPv6
+// arrives unmapped at 16 bytes, and As4 panics on one -- on the dispatcher
+// goroutine, where nothing recovers and the process goes with it.
+func TestShardOf_TakesANativeIPv6Exporter(t *testing.T) {
+	t.Parallel()
+
+	const workers = 8
+
+	if shard := shardOf(netip.MustParseAddr("2001:db8::1"), workers); shard >= workers {
+		t.Errorf("shardOf() = %d, want a shard below %d", shard, workers)
+	}
+}
+
 // TestDecodeLoop_KeepsSequencePerExporter is the regression this change exists
 // for: the same datagrams through one shared queue had the workers racing each
 // other, and the sequence counters read that race as export loss.

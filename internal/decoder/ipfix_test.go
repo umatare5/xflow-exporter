@@ -968,6 +968,23 @@ func TestDecodeIPFIX_BytesReported(t *testing.T) {
 			wantBytes:    700,
 			wantReported: true,
 		},
+		{
+			// Both counters on one bidirectional template: summing them
+			// would double the flow, so the ingress reading is the record's.
+			name: "octetDeltaCount wins over postOctetDeltaCount",
+			specs: [][]byte{
+				ipfixSpec(fieldInBytes, 4, 0),
+				ipfixSpec(fieldOutBytes, 4, 0),
+			},
+			record:       be32(be32(nil, 300), 700),
+			wantBytes:    300,
+			wantReported: true,
+		},
+		{
+			name:   "postOctetDeltaCount in three octets",
+			specs:  [][]byte{ipfixSpec(fieldOutBytes, 3, 0)},
+			record: []byte{0, 0x02, 0xBC},
+		},
 	}
 
 	for _, tt := range tests {
