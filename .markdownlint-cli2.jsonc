@@ -60,12 +60,9 @@
           "headings": [
             "# Contributing",
             "## Development", "*",
-            "## Build", "*",
             "## Testing", "*",
             "## Code Style", "*",
-            "## Documentation", "*",
-            "## Release", "*",
-            "## Pull Requests"
+            "## Documentation"
           ]
         }
       }
@@ -105,11 +102,9 @@
           "match_case": true,
           "headings": [
             "# Security Policy",
-            "## Supported Versions", "*",
-            "## Reporting a Vulnerability", "*",
             "## What to Include", "*",
             "## Exposure", "*",
-            "## Egress", "*",
+            "## Egress Paths", "*",
             "## Out of Scope"
           ]
         }
