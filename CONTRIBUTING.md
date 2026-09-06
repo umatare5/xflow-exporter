@@ -1,6 +1,6 @@
 # Contributing
 
-The [shared conventions](https://github.com/umatare5/.github/blob/main/CONTRIBUTING.md) carry the tool setup, the `make` targets, the hook order, the release procedure and the pull request rules. This page carries what is specific to this exporter.
+The [shared conventions](https://github.com/umatare5/.github/blob/main/CONTRIBUTING.md) cover what every exporter here shares. This page carries the rest.
 
 ## Development
 

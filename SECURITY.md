@@ -1,6 +1,6 @@
 # Security Policy
 
-The [shared policy](https://github.com/umatare5/.github/blob/main/SECURITY.md) carries the supported versions, the reporting channel, what a report must contain and the out-of-scope list. This page carries what is specific to a flow collector.
+The [shared policy](https://github.com/umatare5/.github/blob/main/SECURITY.md) covers what every exporter here shares. This page carries the rest.
 
 ## What to Include
 
