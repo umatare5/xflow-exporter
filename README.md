@@ -38,7 +38,7 @@ Devices push flow datagrams into the exporter, and Prometheus pulls aggregates o
   <img alt="Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/readme_architecture.png" width="705px">
 </picture>
 
-A scrape reads the in-memory aggregation tables and never waits on flow arrival — see [`docs/README.md`](docs/README.md).
+A scrape reads the in-memory aggregation tables and never waits on flow arrival. See [Push and pull](docs/README.md#push-and-pull) for the path a datagram takes.
 
 ## Quick Start
 
@@ -47,7 +47,7 @@ A scrape reads the in-memory aggregation tables and never waits on flow arrival 
 Configure each device to export flows to the exporter's IP, `4739/udp` by default — the port IANA registers for IPFIX.
 
 > [!TIP]
-> **NetFlow v5, v8, v9 and sFlow reach that same port.** Every datagram carries its own version, so one listener takes every supported protocol and a legacy exporter needs no port of its own.
+> **NetFlow v5, v8, v9 and sFlow reach that same port.** One listener takes every supported protocol, so a legacy exporter needs no port of its own. See [Version identification](docs/protocols.md#version-identification) for how a datagram is told apart.
 
 ### 2. Run the exporter with Docker
 
@@ -64,110 +64,94 @@ docker run -p 10053:10053 -p 4739:4739/udp ghcr.io/umatare5/xflow-exporter:lates
 
 See [Prometheus Configuration](#prometheus-configuration) for the job and the alerting rules.
 
-## Protocol Support
+## Supported Protocols
 
-NetFlow v5/v8/v9, IPFIX and sFlow v5, over plaintext UDP — see [Protocols](docs/protocols.md).
+NetFlow v5/v8/v9, IPFIX and sFlow v5, over plaintext UDP. See [Protocols](docs/protocols.md) for the wire formats and the devices each decoder was read against.
+
+## Collectors
+
+Every collector is off by default and enabled by its own `--collector.<name>` flag, so an exporter with none enabled receives and counts flows but publishes no traffic series.
+
+| Collector                   | Publishes                                                     |
+| :-------------------------- | :------------------------------------------------------------ |
+| `--collector.exporters`     | Per-device traffic by `exporter_address` and `version`        |
+| `--collector.hosts`         | Traffic per source-destination address pair                   |
+| `--collector.services`      | Traffic per address pair, protocol and port                   |
+| `--collector.destinations`  | Traffic per destination address, protocol and port            |
+| `--collector.tcp-flags`     | Traffic per TCP control-bit profile                           |
+| `--collector.dscp`          | Traffic per DSCP class, from the TOS byte or the code point   |
+| `--collector.asns`          | Traffic per AS pair, exported or from `--enrich.asn-database` |
+| `--collector.applications`  | Traffic per application, exported or from `--enrich.services` |
+| `--collector.countries`     | Traffic per country pair, needs `--enrich.country-database`   |
+| `--collector.threats`       | Traffic per flagged address, needs `--enrich.threat-file`     |
+| `--collector.distributions` | Flow size and duration native histograms                      |
+
+`--enrich.*` sources fill what a device did not export, from local files. See [Enrichment](docs/enrichment.md) for the file each one reads.
 
 ## Flags
 
-`xflow-exporter --help` prints every flag, and [`docs/help.md`](docs/help.md) carries the same list.
+`xflow-exporter --help` prints every flag, and [`docs/help.md`](docs/help.md) carries the same list with notes on the ones that need tuning.
 
-Each data collector is enabled per module:
-
-| Module                      | Publishes                                              |
-| :-------------------------- | :----------------------------------------------------- |
-| `--collector.exporters`     | Per-device traffic by `exporter_address` and `version` |
-| `--collector.hosts`         | Traffic per source-destination address pair            |
-| `--collector.services`      | Traffic per address pair, protocol and port            |
-| `--collector.destinations`  | Traffic per destination address, protocol and port     |
-| `--collector.tcp-flags`     | Traffic per TCP control-bit profile                    |
-| `--collector.dscp`          | Traffic per DSCP class from the exported TOS byte      |
-| `--collector.asns`          | Traffic per AS pair from device-exported numbers       |
-| `--collector.applications`  | Traffic per AVC / App-ID / applicationId name          |
-| `--collector.countries`     | Traffic per country pair from a country database       |
-| `--collector.threats`       | Traffic per flagged address, needs a list file         |
-| `--collector.distributions` | Flow size and duration native histograms               |
-
-`--receiver.*`, `--parser.*` and `--aggregation.*` tune the receive path — see [Push and pull](docs/README.md#push-and-pull).
-
-## Environment Variables
-
-This exporter reads two environment variables:
-
-| Environment Variable          | Description                                  |
-| :---------------------------- | :------------------------------------------- |
-| `XFLOW_REMOTE_WRITE_USERNAME` | Basic auth username for `--remote-write.url` |
-| `XFLOW_REMOTE_WRITE_PASSWORD` | Basic auth password for `--remote-write.url` |
+- `--receiver.*`, `--parser.*` and `--aggregation.*` bound the receive path. See [Push and pull](docs/README.md#push-and-pull).
+- `--enrich.*` names the local files that fill labels. See [Enrichment](docs/enrichment.md).
+- `--remote-write.*` ships the registry to a Remote Write 2.0 endpoint. See [Remote write](docs/README.md#remote-write).
+- `--remote-write.username` and `--remote-write.password` also read `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD`, which keep the credential off the process table. See [Help](docs/help.md#notes).
 
 ## Endpoints
 
-The exporter serves four endpoints:
+The exporter serves these endpoints:
 
 - `/` — landing page, which confirms the exporter is running when reached at <http://localhost:10053/>
 - `/metrics` — metrics endpoint, configurable via `--web.telemetry-path`
 - `/healthz` — liveness probe, which returns a static 200 and deliberately ignores flow reception
-- `/-/reload` — [re-reads the enrichment sources](docs/README.md#reloading) on POST or PUT, needs `--web.enable-lifecycle`
+- `/-/reload` — re-reads the enrichment sources on POST or PUT, needs `--web.enable-lifecycle`
+
+See [Endpoints](docs/README.md#endpoints) for the method and status contract each one keeps, and [Reloading](docs/enrichment.md#reloading) for what a reload does.
 
 ## Metrics
 
-Eleven modules aggregate the flows, and the catalogues live in `docs/`:
+Eleven collectors aggregate the flows, and the catalogues live in `docs/`:
 
-| Page                                  | Covers                                                 |
-| :------------------------------------ | :----------------------------------------------------- |
-| **[Collectors](docs/collectors.md)**  | The ten table families, their metrics and their labels |
-| **[Exporter health](docs/health.md)** | Reception, decoding, aggregation and enrichment        |
+| Page                                  | Covers                                                        |
+| :------------------------------------ | :------------------------------------------------------------ |
+| **[Collectors](docs/collectors.md)**  | The eleven collectors, their metrics and their labels         |
+| **[Exporter health](docs/health.md)** | Reception, decoding, aggregation, enrichment and remote write |
 
 The series a dashboard usually starts from:
 
-| Module          | Metric                          | Type             | Description            |
-| :-------------- | :------------------------------ | :--------------- | :--------------------- |
-| `exporters`     | `xflow_exporter_bytes_total`    | Counter          | Throughput per device  |
-| `hosts`         | `xflow_host_pair_bytes_total`   | Counter          | Top talkers            |
-| `services`      | `xflow_service_bytes_total`     | Counter          | Top conversations      |
-| `applications`  | `xflow_application_bytes_total` | Counter          | Traffic by application |
-| `distributions` | `xflow_flow_bytes`              | Native histogram | Flow size distribution |
+| Collector       | Metric                          | Type             | Description                         |
+| :-------------- | :------------------------------ | :--------------- | :---------------------------------- |
+| `exporters`     | `xflow_exporter_bytes_total`    | Counter          | Sampling-corrected bytes per device |
+| `hosts`         | `xflow_host_pair_bytes_total`   | Counter          | Top talkers                         |
+| `services`      | `xflow_service_bytes_total`     | Counter          | Top conversations                   |
+| `applications`  | `xflow_application_bytes_total` | Counter          | Traffic by application              |
+| `distributions` | `xflow_flow_bytes`              | Native histogram | Flow size distribution              |
 
-See [`docs/README.md`](docs/README.md) for the absence, folding and sampling rules every module shares.
+See [`docs/README.md`](docs/README.md) for the absence, folding and sampling rules every collector shares.
 
 > [!IMPORTANT]
->
-> All collector modules are **disabled by default** to bound cardinality, and `distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration.
+> All collectors are **disabled by default** to bound cardinality, and `distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration. A minor release may still rename or remove a series, change a default or drop a built-in application name. Copying a new label back onto the old one with `metric_relabel_configs` keeps a rule written against the old name evaluating across the upgrade.
 
 ### Exporter Health Metrics
 
-These series describe the exporter itself rather than the traffic it aggregates. They have no module and no collector flag, and [`docs/health.md`](docs/health.md) carries the whole set with its labels and reason values.
+These series describe the exporter itself rather than the traffic it aggregates. They take no collector flag, and [`docs/health.md`](docs/health.md) carries the whole set with its labels, its reason values and what to alert on.
 
-| Metric                                 | Type    | Description                      |
-| :------------------------------------- | :------ | :------------------------------- |
-| `xflow_flows_total`                    | Counter | Records decoded per device       |
-| `xflow_decode_errors_total`            | Counter | Rejections per device and reason |
-| `xflow_last_flow_timestamp_seconds`    | Gauge   | Unix time of the last decode     |
-| `xflow_receiver_dropped_packets_total` | Counter | Pre-decode drops per listener    |
-| `xflow_sampling_rate`                  | Gauge   | Declared rate per domain         |
-| `xflow_aggregation_entries`            | Gauge   | Entries held per table           |
+| Metric                                 | Type    | Description                            |
+| :------------------------------------- | :------ | :------------------------------------- |
+| `xflow_flows_total`                    | Counter | Records decoded per device and version |
+| `xflow_decode_errors_total`            | Counter | Rejections per device and reason       |
+| `xflow_last_flow_timestamp_seconds`    | Gauge   | Unix time of the last decode           |
+| `xflow_receiver_dropped_packets_total` | Counter | Pre-decode drops per listener          |
+| `xflow_sampling_rate`                  | Gauge   | Declared rate per domain               |
+| `xflow_aggregation_entries`            | Gauge   | Entries held per collector             |
 
-> [!IMPORTANT]
->
-> Alert on freshness with `time() - xflow_last_flow_timestamp_seconds`. A silent device stops moving its timestamp while every counter freezes, and nothing else can tell that from a healthy quiet network.
+Alert on freshness with `time() - xflow_last_flow_timestamp_seconds`, because nothing else separates a silent device from a quiet network. `--remote-write.url` adds four `xflow_remote_write_*` series, catalogued on the same page with the counter to alert on.
 
-### Remote Write Metrics
+## Examples
 
-These series describe the shipping path rather than the exporter, and appear only while `--remote-write.url` is set. See [Remote write](docs/README.md#remote-write) for what a long-term store accumulates and how to bound it.
+### Command lines
 
-| Metric                                              | Type    | Description                     |
-| :-------------------------------------------------- | :------ | :------------------------------ |
-| `xflow_remote_write_sends_total`                    | Counter | Writes the endpoint accepted    |
-| `xflow_remote_write_failures_total`                 | Counter | Writes that failed              |
-| `xflow_remote_write_samples_total`                  | Counter | One sample per series per write |
-| `xflow_remote_write_last_success_timestamp_seconds` | Gauge   | Unix time of the last success   |
-
-> [!IMPORTANT]
->
-> Alert on `xflow_remote_write_failures_total` rather than on the timestamp. Shipping runs on its own interval, so a rejected write leaves `/metrics` and `up` untouched, and the timestamp is absent until the first write succeeds — a client that has never reached its endpoint publishes no instant to go stale. A registry gather that fails counts on that same counter.
-
-## Use Cases
-
-### Basic Usage - No Collectors
+With no collector enabled the receiver listens and the health series count every datagram, but no traffic series is published:
 
 ```bash
 $ ./xflow-exporter --log.format text
@@ -176,17 +160,13 @@ time=2026-08-26T19:58:24.291+09:00 level=INFO msg="Flow receiver listening" list
 time=2026-08-26T19:58:24.292+09:00 level=INFO msg="HTTP server listening" addr=0.0.0.0:10053
 ```
 
-The receiver listens and the health series count every datagram, but no traffic series is published.
-
-### Essential Usage
+The three collectors a dashboard usually starts from:
 
 ```bash
 ./xflow-exporter --collector.exporters --collector.hosts --collector.services
 ```
 
-### Complete Usage
-
-For complete monitoring, see [`.air.toml`](https://github.com/umatare5/xflow-exporter/blob/main/.air.toml) which enables every collector module.
+For complete monitoring, see [`.air.toml`](https://github.com/umatare5/xflow-exporter/blob/main/.air.toml), which enables every collector.
 
 ### Prometheus Configuration
 
@@ -196,14 +176,11 @@ Add the job from [`examples/prometheus.yml`](./examples/prometheus.yml) to your 
 
 #### Recording Rules Configuration Example
 
-Add the rules from [`examples/prometheus_record_rules.yml`](./examples/prometheus_record_rules.yml) to your configuration.
-
-> [!NOTE]
-> The rules collapse the pair- and tuple-keyed families onto one dimension, which is what makes a country, AS or port breakdown affordable to retain — [Recording rules](docs/README.md#recording-rules) carries what each group answers.
+Add the rules from [`examples/prometheus_record_rules.yml`](./examples/prometheus_record_rules.yml) to your configuration. They collapse the pair- and tuple-keyed families onto one dimension, which is what makes a country, AS or port breakdown affordable to retain. See [Recording rules](docs/README.md#recording-rules) for what each group answers.
 
 #### Alerting Rules Configuration Example
 
-Add the rules from [`examples/prometheus_alert_rules.yml`](./examples/prometheus_alert_rules.yml) to your configuration.
+Add the rules from [`examples/prometheus_alert_rules.yml`](./examples/prometheus_alert_rules.yml) to your configuration. See [Exporter health](docs/health.md#specifications) for what each rule reads.
 
 ### Grafana Dashboard
 
@@ -219,15 +196,11 @@ Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xfl
 > See [`docs/assets/xflow-exporter-dashboard_full.png`](https://github.com/umatare5/xflow-exporter/blob/main/docs/assets/xflow-exporter-dashboard_full.png) for the full capture image of the example.
 
 > [!NOTE]
-> Panels rank by packets rather than bytes, and the composition panels rank rather than total — [Dashboards](docs/README.md#dashboards) carries what each panel covers and why.
+> Panels rank by packets rather than bytes, and the composition panels rank rather than total. See [Dashboards](docs/README.md#dashboards) for what each panel covers and why.
 
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the `make` targets, the Docker build and the release process.
-
-## Acknowledgement
-
-I launched this project with the help of **Claude Code by Anthropic**, and I am grateful to the global developer community for their contributions to open source projects and public repositories.
 
 ## License
 

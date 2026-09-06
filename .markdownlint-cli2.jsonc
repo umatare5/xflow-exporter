@@ -82,14 +82,13 @@
             "## Overview", "*",
             "## Architecture", "*",
             "## Quick Start", "*",
-            "## Protocol Support", "*",
+            "## Supported Protocols", "*",
+            "## Collectors", "*",
             "## Flags", "*",
-            "## Environment Variables", "*",
             "## Endpoints", "*",
             "## Metrics", "*",
-            "## Use Cases", "*",
+            "## Examples", "*",
             "## Contributing", "*",
-            "## Acknowledgement", "*",
             "## License"
           ]
         }
@@ -141,6 +140,24 @@
       }
     },
     {
+      "filter": ["docs/enrichment.md"],
+      "combine": "merge",
+      "config": {
+        "MD043": {
+          "match_case": true,
+          "headings": [
+            "# Enrichment",
+            "## Sources", "*",
+            "## Service names", "*",
+            "## Databases", "*",
+            "## Threat lists", "*",
+            "## Mapping file", "*",
+            "## Reloading"
+          ]
+        }
+      }
+    },
+    {
       "filter": ["docs/help.md"],
       "combine": "merge",
       "config": {
@@ -175,14 +192,14 @@
         "MD043": {
           "match_case": true,
           "headings": [
-            "# Protocol Support",
+            "# Protocols",
             "## Version identification", "*",
             "## NetFlow v5", "*",
             "## NetFlow v8", "*",
             "## NetFlow v9 and IPFIX", "*",
             "## Packet sections", "*",
             "## sFlow v5", "*",
-            "## Options and enrichment", "*",
+            "## Options templates", "*",
             "## References"
           ]
         }

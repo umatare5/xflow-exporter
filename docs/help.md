@@ -87,4 +87,8 @@ GLOBAL OPTIONS:
 
 One worker decodes everything a device sends, so `--receiver.workers` above the device count adds nothing. A device that outruns one worker fills the shared queue, which every listener then drops from as `queue_full`.
 
-A listener accepts every supported protocol, identified per datagram, so `--receiver.address` entries separate networks or ports rather than protocols. Each stream a device sends belongs on one listener, because two read loops are not ordered against each other.
+Every listener accepts every supported protocol, told apart as [Protocols](protocols.md#version-identification) describes, so `--receiver.address` entries separate networks or ports rather than protocols. Each stream a device sends belongs on one listener, because two read loops are not ordered against each other.
+
+`--dry-run` validates the whole flag set first, then opens every file an `--enrich.*` flag names and closes it again, and exits 1 on the first one a real startup would refuse. It binds neither the UDP listeners nor the HTTP server and makes no remote-write connection, so a port already taken or an unreachable endpoint is not something it reports.
+
+`--remote-write.username` and `--remote-write.password` read `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD` where the flag is absent, and a flag given on the command line wins over the variable. The variable keeps the credential out of the process table, where any account on the host reads a flag — [`SECURITY.md`](../SECURITY.md) carries what else the exporter holds.

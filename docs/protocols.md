@@ -1,4 +1,4 @@
-# Protocol Support
+# Protocols
 
 Every listener accepts every protocol below, identified per datagram. Transport is plaintext UDP.
 
@@ -595,9 +595,9 @@ A raw packet header record is a header protocol, the original frame length, the 
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
-## Options and enrichment
+## Options templates
 
-Options templates feed the packet sampling rate, preferred in this order: the PSAMP interval/space pair, the sampler size/population pair, the random-sampler interval, the legacy interval. The rate in force is published as `xflow_sampling_rate`.
+Options templates feed the packet sampling rate, preferred in this order: the PSAMP interval/space pair, the sampler size/population pair, the random-sampler interval, the legacy interval. The rate in force reaches `xflow_sampling_rate` — [Health](health.md#specifications) carries which protocols feed it.
 
 | Elements | Pair or value               | Preference |
 | :------- | :-------------------------- | :--------- |
