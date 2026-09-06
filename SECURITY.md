@@ -2,13 +2,11 @@
 
 ## Supported Versions
 
-Only the latest release carries fixes, and no older tag gets a patch branch. Reproduce a finding against the latest release before reporting it.
+Only the latest release carries fixes, and no older tag gets a patch branch. Reproduce a finding against that release before reporting it.
 
 ## Reporting a Vulnerability
 
-Report privately through GitHub Security Advisories, never an issue or a pull request — open the repository's **Security** tab and choose **Report a vulnerability**.
-
-One maintainer works on this in their own time, so no response time is promised. The advisory goes out after the fix ships and credits the reporter unless they ask otherwise.
+Report privately through [GitHub Security Advisories](https://github.com/umatare5/xflow-exporter/security/advisories/new), never through an issue or a pull request. One maintainer works on this in their own time, so no response time is promised. The advisory goes out after the fix ships and credits the reporter unless they ask otherwise.
 
 ## What to Include
 
@@ -18,48 +16,48 @@ One maintainer works on this in their own time, so no response time is promised.
 - The exporting device's address, and any name a mapping file gave it
 - A remote write credential, from a flag, an environment variable or a header
 
-Then include the following:
+Then include the following.
 
-- **Affected versions** (required): The `xflow-exporter` release, and the exporting device and its firmware
-- **Reproduction steps** (required): The flags in force, and the datagram or capture that triggers it
-- **Output** (required): The log line, the metric or the stack trace, with every value above removed
-- **Impact assessment** (required): What the exploit reaches, given an unauthenticated receiver and metrics endpoint
-- **Suggested fix** (optional): Proposed remediation, if any
-- **Disclosure status** (required): Whether it is shared elsewhere, and your plan for sharing it
+- **Affected versions** — name the `xflow-exporter` release, plus the device and its firmware.
+- **Reproduction steps** — list the flags in force, the datagram or capture that triggers it, and the log line, metric or stack trace it produced.
+- **Impact** — state what the exploit reaches, given an unauthenticated receiver and `/metrics`.
+- **Disclosure status** — say whether it is shared elsewhere, and give your plan for sharing it.
+- **Suggested fix** — propose a remediation where you have one; this one is optional.
 
-## Scope
+## Exposure
 
-### What this exporter holds and exposes
+This exporter receives NetFlow, IPFIX and sFlow records from network devices over UDP, and exposes aggregates of them as Prometheus metrics. Every received datagram is untrusted, and the parsers bound it.
 
-This exporter receives traffic flow records (NetFlow, IPFIX, sFlow) from network devices over UDP, and exposes aggregates of them as Prometheus metrics. Flow records reveal who talked to whom, so both the receiver and the metrics endpoint deserve a controlled network path.
+Flow records reveal who talked to whom, and carry the addresses, ports and volumes of the monitored networks, so the receiver and `/metrics` both need a controlled network path.
 
-- **Flow records** — IP addresses, ports and volumes of the monitored networks.
-- **Parser input** — every received datagram is untrusted, and the parsers bound it.
-- **Permitted senders** — restrict the receiver port to your own devices at the filter.
-- **Metrics** — unauthenticated plain HTTP whose labels can carry monitored addresses.
+- **Metrics** — `/metrics` serves unauthenticated plain HTTP whose labels carry monitored addresses.
+- **Container** — the image is built from `scratch`, runs as UID 65534 and carries one CA bundle, which the remote-write client alone uses because nothing else calls out over TLS.
 
-> [!IMPORTANT]
-> Keep the receiver reachable from the exporting devices alone, and the metrics endpoint on a controlled path. The parsers enforce hard limits on field counts, record sizes, observation domains per device and interned vendor strings — report a way around any of them as a vulnerability. State keyed by the source address grows with the number of distinct senders, and a push protocol cannot choose them, so a proxy is no substitute: it replaces the source address, which collapses every device into one and breaks the template scoping RFC 7011 requires.
-
-Restricting the port looks like this with nftables.
+Restrict the receiver port to your own devices at the packet filter, as nftables does here.
 
 ```bash
 nft add rule inet filter input udp dport 4739 ip saddr { 10.0.0.0/24, 192.0.2.10 } accept
 nft add rule inet filter input udp dport 4739 drop
 ```
 
-### What leaves the host
+> [!IMPORTANT]
+> The parsers enforce hard limits on field counts, datagram sizes, observation domains per device and interned vendor strings, so a way around any of them is a vulnerability.
+>
+> State keyed by the source address grows with every distinct sender, and a push protocol cannot choose them, so the restriction belongs at the filter. A proxy is no substitute: it replaces the source address, which collapses every device into one and breaks the template scoping RFC 7011 requires.
 
-Nothing, unless `--remote-write.url` is set. That flag enables the Remote Write 2.0 client, which gathers the registry every `--remote-write.interval` (default 60 seconds) and sends its counters and gauges to the configured endpoint. Label sets can carry monitored IP addresses, so a write carries what a scrape exposes — point it only at a store trusted with flow data.
+## Egress
 
-When remote write is enabled, the exporter holds that endpoint's credentials: `--remote-write.username` and `--remote-write.password` (or `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD`) send basic auth, and `--remote-write.header` attaches arbitrary request headers, which can carry a bearer token. Validation accepts a plain `http://` URL without a warning, and basic auth over it travels in cleartext, so use `https://` on any path that is not fully trusted.
+Nothing leaves the host unless `--remote-write.url` is set, and a write carries the monitored addresses a scrape exposes, so point it only at a store trusted with flow data.
 
-Every enrichment source reads a file on local disk, and a lookup sends no address anywhere. Fetching the threat lists and the MaxMind-format databases is a separate job, run by the operator through [`scripts/fetch-enrichment-data.sh`](scripts/fetch-enrichment-data.sh) or any equivalent.
+- **Remote write** — `--remote-write.url` enables the Remote Write 2.0 client, which gathers the registry every `--remote-write.interval`, 60 seconds by default, and sends its counters and gauges.
+- **Credentials** — `--remote-write.username` and `--remote-write.password`, or `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD`, send basic auth.
+- **Headers** — `--remote-write.header` attaches any header, including a bearer token.
+- **Plain HTTP** — validation accepts an `http://` URL without a warning, and basic auth over it travels in cleartext, so use `https://` on any path that is not fully trusted.
+- **Enrichment** — every source reads a local file, and a lookup sends no address anywhere; the operator fetches threat lists and MaxMind-format databases through [`scripts/fetch-enrichment-data.sh`](scripts/fetch-enrichment-data.sh).
+- **SNMP** — this exporter speaks none, and [`scripts/fetch-device-names.sh`](scripts/fetch-device-names.sh) walks the devices with `SNMP_OPTIONS` on the `snmpwalk` command line, where every account on the host reads it out of `ps`.
+- **Community string** — set `SNMP_OPTIONS` empty and put `defCommunity` in `snmp.conf` instead, wherever the community string is not already public.
+- **Reload** — `--web.enable-lifecycle` exposes an unauthenticated `/-/reload`, which re-reads the enrichment sources on request, so keep it on a controlled path or leave the flag off and reload with a `SIGHUP`.
 
-The same holds for the mapping file: this exporter speaks no SNMP, and [`scripts/fetch-device-names.sh`](scripts/fetch-device-names.sh) is what walks the devices. Its `SNMP_OPTIONS` reaches `snmpwalk` on the command line, where every account on the host reads it out of `ps`. Set that variable empty and put `defCommunity` in `snmp.conf` wherever the community string is not already public.
+## Out of Scope
 
-`--web.enable-lifecycle` exposes `/-/reload`, which re-reads those files. It is unauthenticated, like the metrics endpoint, so keep it on a controlled path. It is off by default, and a `SIGHUP` reloads without exposing anything.
-
-### Out of scope
-
-A defect in a network device's own flow export implementation belongs to its vendor — report it there, not to this third-party exporter.
+A defect in a network device's own flow export implementation belongs to that device's vendor — report it there, not to this third-party exporter. A dependency advisory with no path reachable from `./cmd` is out of scope as well — show the reachable path, or the `govulncheck` finding that proves it.
