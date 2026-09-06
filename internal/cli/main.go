@@ -31,6 +31,10 @@ func NewApp() *cli.Command {
 			slog.SetDefault(log.Setup(cfg.Log))
 
 			if cfg.DryRun {
+				if err := server.ValidateEnrichment(cfg.Enrichment); err != nil {
+					slog.Error("Configuration validation failed", "error", err)
+					return errors.New("configuration error")
+				}
 				slog.Info("Configuration validation successful", "dry_run", true)
 				return nil
 			}
