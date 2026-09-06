@@ -5,6 +5,7 @@ Notable changes to the metric surface, one section per release, listing the pull
 ## [Unreleased]
 
 - [#47](https://github.com/umatare5/xflow-exporter/pull/47) — Split the docs by owner, rename the collector, and fix the rendering
+- [#48](https://github.com/umatare5/xflow-exporter/pull/48) — Gather the contributor conventions and cut them to reading length
 
 ## [v0.9.1]
 
