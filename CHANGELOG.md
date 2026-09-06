@@ -2,9 +2,14 @@
 
 Notable changes to the metric surface, one section per release, listing the pull requests that release carries.
 
-A minor release may rename or remove a metric, change a default, or drop a built-in application name. Every collector module flag is off by default, so a release that adds one adds no series until you set it.
+A minor release may rename or remove a metric, change a default, or drop a built-in application name. Every collector module flag is off by default, so a release that adds one adds no series until you set it. Copying a new label back onto the old one with `metric_relabel_configs` keeps a rule written against the old name evaluating across the upgrade that renamed it.
 
 ## [Unreleased]
+
+- [#40](https://github.com/umatare5/xflow-exporter/pull/40) — Pin the counter, threat and interface guards nine surviving mutations found unheld
+- [#41](https://github.com/umatare5/xflow-exporter/pull/41) — Stop the SNMP walk writing a mapping file the exporter refuses
+- [#42](https://github.com/umatare5/xflow-exporter/pull/42) — Fail `--dry-run` on the enrichment files only a real startup opened
+- [#43](https://github.com/umatare5/xflow-exporter/pull/43) — Record what a dry run now opens and what it still does not check
 
 ## [v0.9.0]
 

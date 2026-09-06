@@ -159,7 +159,7 @@ sum by (exporter_address, input_ifindex) (
 - **A failed reload keeps the previous data** — the set already loaded stays in force.
 - **Atomic** — a new set is built whole before it replaces the old one, so no lookup pauses.
 - **Only the sources startup opened** — a reload re-reads their files, never the flags.
-- **`--dry-run` opens no source** — a mapping file it accepts can still fail startup.
+- **`--dry-run` opens every source** — it binds no listener, so a port already taken is not its answer.
 
 > [!NOTE]
 > A list gone missing would otherwise unflag every address at once, which reads as a network that had just gone clean; `xflow_threat_reload_failures_total` counts those loads. The mapping file has no such counter, mirroring the databases: a failed load answers `/-/reload` with 500 and logs its reason. Each mmdb reader is replaced rather than reopened, so a lookup never sees a half-loaded set and the decode path never pauses. [`SECURITY.md`](../SECURITY.md) covers the exposure.
