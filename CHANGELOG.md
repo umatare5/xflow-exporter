@@ -9,6 +9,8 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#49](https://github.com/umatare5/xflow-exporter/pull/49) — Ship only the licences and the parsed config beside the binary
 - [#50](https://github.com/umatare5/xflow-exporter/pull/50) — Point the contributor pages at the shared baseline
 
+- [#50](https://github.com/umatare5/xflow-exporter/pull/50) — Point the contributor pages at the shared baseline
+
 ## [v0.9.1]
 
 - [#40](https://github.com/umatare5/xflow-exporter/pull/40) — Pin the counter, threat and interface guards nine surviving mutations found unheld
