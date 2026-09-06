@@ -1,6 +1,6 @@
 # Contributing
 
-The [shared conventions](https://github.com/umatare5/.github/blob/main/CONTRIBUTING.md) cover what every exporter here shares. This page carries the rest.
+The [shared contribution guide](https://github.com/umatare5/.github/blob/main/CONTRIBUTING.md) covers what every exporter shares. This page carries the rest.
 
 ## Development
 
@@ -8,7 +8,10 @@ CI runs Format and Lint, Test and Build, Coverage against a threshold of 80 perc
 
 ## Testing
 
-- **Fixtures are datagrams** — each is laid out as a device lays it out, and its addresses come from the RFC 5737 documentation ranges or RFC 1918, never from a monitored network or a real device.
+The shared guide carries placement, mutation and coverage. These are the flow-specific rules.
+
+- **Fixtures are datagrams** — each is laid out as a device lays it out on the wire.
+- **Addresses are reserved** — RFC 5737 or RFC 1918, never a monitored network or a real device.
 - **One skip is normal** — a test skips unless `XFLOW_TEST_ASN_DATABASE` names a MaxMind database.
 
 Three commands reproduce the `Prometheus Rules` job locally.

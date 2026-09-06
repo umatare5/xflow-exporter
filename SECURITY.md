@@ -1,6 +1,6 @@
 # Security Policy
 
-The [shared policy](https://github.com/umatare5/.github/blob/main/SECURITY.md) covers what every exporter here shares. This page carries the rest.
+The [shared security policy](https://github.com/umatare5/.github/blob/main/SECURITY.md) covers what every exporter here shares. This page carries the rest.
 
 ## What to Include
 
@@ -16,9 +16,8 @@ Reproduction needs the flags in force and the datagram or capture that triggers 
 
 This exporter receives NetFlow, IPFIX and sFlow records from network devices over UDP, and exposes aggregates of them as Prometheus metrics. Every received datagram is untrusted, and the parsers bound it.
 
-Flow records reveal who talked to whom, and carry the addresses, ports and volumes of the monitored networks, so the receiver and `/metrics` both need a controlled network path.
-
-- **Metrics** — every collector is off by default, and enabling one puts monitored addresses in the labels of an unauthenticated plain-HTTP endpoint.
+- **Flow records** — they reveal who talked to whom, with addresses, ports and volumes.
+- **Labels** — collectors are off by default, and enabling one publishes monitored addresses.
 - **Senders** — restrict the receiver port to your own devices at the packet filter.
 
 ```bash
@@ -31,18 +30,33 @@ nft add rule inet filter input udp dport 4739 drop
 >
 > State keyed by the source address grows with every distinct sender, and a push protocol cannot choose them, so the restriction belongs at the filter. A proxy is no substitute: it replaces the source address, which collapses every device into one and breaks the template scoping RFC 7011 requires.
 
-## Egress
+## Egress Paths
 
-Nothing leaves the host unless `--remote-write.url` is set, and a write carries the monitored addresses a scrape exposes, so point it only at a store trusted with flow data.
+Nothing leaves the host unless `--remote-write.url` is set.
 
-- **Remote write** — the Remote Write 2.0 client gathers the registry every `--remote-write.interval`, 60 seconds by default, and sends its counters and gauges.
-- **Credentials** — `--remote-write.username` and `--remote-write.password`, or `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD`, send basic auth.
+### Remote Write
+
+- **Payload** — counters and gauges, carrying the monitored addresses a scrape exposes.
+- **Interval** — the client gathers the registry every `--remote-write.interval`, 60s by default.
+- **Credentials** — `--remote-write.username` and `--remote-write.password` send basic auth.
+- **Environment** — `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD` do the same.
 - **Headers** — `--remote-write.header` attaches any header, including a bearer token.
-- **Plain HTTP** — validation accepts an `http://` URL without a warning, and basic auth over it travels in cleartext, so use `https://` on any path that is not fully trusted.
-- **Enrichment** — every source reads a local file and a lookup sends no address anywhere; the operator fetches the lists and databases through [`scripts/fetch-enrichment-data.sh`](scripts/fetch-enrichment-data.sh).
-- **SNMP** — this exporter speaks none, and [`scripts/fetch-device-names.sh`](scripts/fetch-device-names.sh) walks the devices with `SNMP_OPTIONS` on the `snmpwalk` command line, where every account on the host reads it out of `ps`.
-- **Community string** — set `SNMP_OPTIONS` empty and put `defCommunity` in `snmp.conf` instead.
-- **Reload** — `--web.enable-lifecycle` exposes an unauthenticated `/-/reload`, which re-reads the enrichment sources on request, so keep it on a controlled path or reload with a `SIGHUP`.
+- **Plain HTTP** — validation accepts an `http://` URL without a warning.
+- **Cleartext** — basic auth over it travels in the clear, so use `https://` off a trusted path.
+
+### Enrichment
+
+- **Local only** — every source reads a file on disk, and a lookup sends no address anywhere.
+- **Fetching** — the operator runs [`scripts/fetch-enrichment-data.sh`](scripts/fetch-enrichment-data.sh).
+- **SNMP** — this exporter speaks none, and [`scripts/fetch-device-names.sh`](scripts/fetch-device-names.sh) walks the devices.
+- **Community string** — `SNMP_OPTIONS` rides the `snmpwalk` command line, where `ps` shows it.
+- **Hiding it** — set `SNMP_OPTIONS` empty and put `defCommunity` in `snmp.conf` instead.
+
+### Reload
+
+- **Endpoint** — `--web.enable-lifecycle` exposes an unauthenticated `/-/reload`.
+- **Effect** — it re-reads the enrichment sources, so keep it on a controlled path.
+- **Signal** — a `SIGHUP` reloads the same sources without exposing anything.
 
 ## Out of Scope
 
