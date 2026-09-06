@@ -6,6 +6,8 @@ A minor release may rename or remove a metric, change a default, or drop a built
 
 ## [Unreleased]
 
+## [v0.9.1]
+
 - [#40](https://github.com/umatare5/xflow-exporter/pull/40) — Pin the counter, threat and interface guards nine surviving mutations found unheld
 - [#41](https://github.com/umatare5/xflow-exporter/pull/41) — Stop the SNMP walk writing a mapping file the exporter refuses
 - [#42](https://github.com/umatare5/xflow-exporter/pull/42) — Fail `--dry-run` on the enrichment files only a real startup opened
@@ -71,7 +73,8 @@ A minor release may rename or remove a metric, change a default, or drop a built
 - [#1](https://github.com/umatare5/xflow-exporter/pull/1) — Start the exporter with its flags, HTTP surface and UDP receiver
 - [#2](https://github.com/umatare5/xflow-exporter/pull/2) — Add the release workflow the tag and the artifacts come from
 
-[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.9.1...HEAD
+[v0.9.1]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.9.1
 [v0.9.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.9.0
 [v0.8.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.8.0
 [v0.7.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.7.0
