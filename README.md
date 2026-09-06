@@ -177,15 +177,15 @@ Add the job from [`examples/prometheus.yml`](./examples/prometheus.yml) to your 
 
 #### Recording Rules Configuration Example
 
-Add the rules from [`examples/prometheus_record_rules.yml`](./examples/prometheus_record_rules.yml) to your configuration. They collapse the pair- and tuple-keyed families onto one dimension, which is what makes a country, AS or port breakdown affordable to retain. See [Recording rules](docs/README.md#recording-rules) for what each group answers.
+Add the rules from [`examples/prometheus_record_rules.yml`](./examples/prometheus_record_rules.yml) to your Prometheus configuration.
 
 #### Alerting Rules Configuration Example
 
-Add the rules from [`examples/prometheus_alert_rules.yml`](./examples/prometheus_alert_rules.yml) to your configuration, and see [Exporter Health](docs/health.md#specifications) for the series each rule reads and what makes it fire.
+Add the rules from [`examples/prometheus_alert_rules.yml`](./examples/prometheus_alert_rules.yml) to your Prometheus configuration.
 
 ### Grafana Dashboard
 
-Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json), whose data source and devices are variables so one dashboard serves every deployment.
+Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json). Data source and devices are variables.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard_dark.png">
