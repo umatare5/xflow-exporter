@@ -38,14 +38,14 @@ builds:
 
 archives:
   - name_template: "{{ .ProjectName }}-v{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    # Only what a downloaded binary needs beside it: the licence notices its
+    # statically linked dependencies require on redistribution, and the one
+    # file the exporter itself parses. Everything else is a click away on the
+    # page the archive was downloaded from.
     files:
-      - "README.md"
-      - "CHANGELOG.md"
-      - "docs/*.md"
-      - "examples/*.yml"
       - "LICENSE"
       - "NOTICE"
-      - "SECURITY.md"
+      - "examples/mapping.yml"
     format_overrides:
       - goos: windows
         formats: ["zip"]
