@@ -95,7 +95,8 @@ Every collector is off by default and enabled by its own `--collector.<name>` fl
 - `--receiver.*`, `--parser.*` and `--aggregation.*` bound the receive path. See [Push and pull](docs/README.md#push-and-pull).
 - `--enrich.*` names the local files that fill labels. See [Enrichment](docs/enrichment.md).
 - `--remote-write.*` ships the registry to a Remote Write 2.0 endpoint. See [Remote write](docs/README.md#remote-write).
-- `--remote-write.username` and `--remote-write.password` also read `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD`, which keep the credential off the process table. See [Help](docs/help.md#notes).
+- `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD` fill the two auth flags.
+- Either variable keeps the credential off the process table. See [Help](docs/help.md#notes).
 
 ## Endpoints
 
@@ -119,13 +120,13 @@ Eleven collectors aggregate the flows, and the catalogues live in `docs/`:
 
 The series a dashboard usually starts from:
 
-| Collector       | Metric                          | Type             | Description                         |
-| :-------------- | :------------------------------ | :--------------- | :---------------------------------- |
-| `exporters`     | `xflow_exporter_bytes_total`    | Counter          | Sampling-corrected bytes per device |
-| `hosts`         | `xflow_host_pair_bytes_total`   | Counter          | Top talkers                         |
-| `services`      | `xflow_service_bytes_total`     | Counter          | Top conversations                   |
-| `applications`  | `xflow_application_bytes_total` | Counter          | Traffic by application              |
-| `distributions` | `xflow_flow_bytes`              | Native histogram | Flow size distribution              |
+| Collector       | Metric                          | Type      | Description            |
+| :-------------- | :------------------------------ | :-------- | :--------------------- |
+| `exporters`     | `xflow_exporter_bytes_total`    | Counter   | Traffic per device     |
+| `hosts`         | `xflow_host_pair_bytes_total`   | Counter   | Top talkers            |
+| `services`      | `xflow_service_bytes_total`     | Counter   | Top conversations      |
+| `applications`  | `xflow_application_bytes_total` | Counter   | Traffic by application |
+| `distributions` | `xflow_flow_bytes`              | Histogram | Flow size distribution |
 
 See [`docs/README.md`](docs/README.md) for the absence, folding and sampling rules every collector shares.
 
