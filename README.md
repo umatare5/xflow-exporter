@@ -71,7 +71,7 @@ NetFlow v5/v8/v9, IPFIX and sFlow v5, over plaintext UDP. See [Protocols](docs/p
 
 ## Collectors
 
-Every collector is off by default and enabled by its own `--collector.<name>` flag, so an exporter with none enabled receives and counts flows but publishes no traffic series.
+Each collector is off by default and enabled by its own `--collector.<name>` flag.
 
 | Collector                   | Publishes                                                     |
 | :-------------------------- | :------------------------------------------------------------ |
