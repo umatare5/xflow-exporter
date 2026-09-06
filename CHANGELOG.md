@@ -6,6 +6,8 @@ A minor release may rename or remove a metric, change a default, or drop a built
 
 ## [Unreleased]
 
+- [#49](https://github.com/umatare5/xflow-exporter/pull/49) — Ship only the licences and the parsed config beside the binary
+
 ## [v0.9.1]
 
 - [#40](https://github.com/umatare5/xflow-exporter/pull/40) — Pin the counter, threat and interface guards nine surviving mutations found unheld
