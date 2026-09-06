@@ -37,9 +37,10 @@ This exporter receives traffic flow records (NetFlow, IPFIX, sFlow) from network
 - **Parser input** — every received datagram is untrusted, and the parsers bound it.
 - **Permitted senders** — restrict the receiver port to your own devices at the filter.
 - **Metrics** — unauthenticated plain HTTP whose labels can carry monitored addresses.
+- **Container** — the image is built from `scratch`, runs as UID 65534 and carries one CA bundle, which the remote-write client alone uses.
 
 > [!IMPORTANT]
-> Keep the receiver reachable from the exporting devices alone, and the metrics endpoint on a controlled path. The parsers enforce hard limits on field counts, record sizes, observation domains per device and interned vendor strings — report a way around any of them as a vulnerability. State keyed by the source address grows with the number of distinct senders, and a push protocol cannot choose them, so a proxy is no substitute: it replaces the source address, which collapses every device into one and breaks the template scoping RFC 7011 requires.
+> Keep the receiver reachable from the exporting devices alone, and the metrics endpoint on a controlled path. The parsers enforce hard limits on field counts, datagram sizes, observation domains per device and interned vendor strings — report a way around any of them as a vulnerability. State keyed by the source address grows with the number of distinct senders, and a push protocol cannot choose them, so a proxy is no substitute. It replaces the source address, which collapses every device into one and breaks the template scoping RFC 7011 requires.
 
 Restricting the port looks like this with nftables.
 
@@ -52,7 +53,9 @@ nft add rule inet filter input udp dport 4739 drop
 
 Nothing, unless `--remote-write.url` is set. That flag enables the Remote Write 2.0 client, which gathers the registry every `--remote-write.interval` (default 60 seconds) and sends its counters and gauges to the configured endpoint. Label sets can carry monitored IP addresses, so a write carries what a scrape exposes — point it only at a store trusted with flow data.
 
-When remote write is enabled, the exporter holds that endpoint's credentials: `--remote-write.username` and `--remote-write.password` (or `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD`) send basic auth, and `--remote-write.header` attaches arbitrary request headers, which can carry a bearer token. Validation accepts a plain `http://` URL without a warning, and basic auth over it travels in cleartext, so use `https://` on any path that is not fully trusted.
+When remote write is enabled, the exporter holds that endpoint's credentials. `--remote-write.username` and `--remote-write.password`, or `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD`, send basic auth. `--remote-write.header` attaches arbitrary request headers, which can carry a bearer token.
+
+Validation accepts a plain `http://` URL without a warning, and basic auth over it travels in cleartext, so use `https://` on any path that is not fully trusted.
 
 Every enrichment source reads a file on local disk, and a lookup sends no address anywhere. Fetching the threat lists and the MaxMind-format databases is a separate job, run by the operator through [`scripts/fetch-enrichment-data.sh`](scripts/fetch-enrichment-data.sh) or any equivalent.
 
@@ -62,4 +65,4 @@ The same holds for the mapping file: this exporter speaks no SNMP, and [`scripts
 
 ### Out of scope
 
-A defect in a network device's own flow export implementation belongs to its vendor — report it there, not to this third-party exporter.
+A defect in a network device's own flow export implementation belongs to its vendor — report it there, not to this third-party exporter. A dependency advisory with no path reachable from `./cmd` is out of scope as well — show the path, or a `govulncheck` finding.

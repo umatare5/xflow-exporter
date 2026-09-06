@@ -59,8 +59,11 @@
           "match_case": true,
           "headings": [
             "# Contributing",
-            "## Commands", "*",
+            "## Development", "*",
             "## Build", "*",
+            "## Testing", "*",
+            "## Code style", "*",
+            "## Documentation", "*",
             "## Release", "*",
             "## Pull requests"
           ]

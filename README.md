@@ -207,7 +207,7 @@ Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xfl
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the `make` targets, the Docker build and the release process.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the development setup, the tests, the documentation conventions and the release process.
 
 ## License
 
