@@ -72,7 +72,7 @@ The counters of every collector accumulate from entry creation, and an entry evi
 
 - **Sources** — the v5 header interval, the v9/IPFIX options rates, sFlow's inline rate.
 - **Precedence** — the options pairs rank as [Protocols](protocols.md#options-templates) tabulates.
-- **Audit** — `xflow_sampling_rate` publishes the rate a v9 or IPFIX domain declared.
+- **Audit** — `xflow_sampling_rate` for v9 and IPFIX, the sampler counters in [Health](health.md#specifications) for sFlow.
 - **Unsampled** — a record carrying no rate multiplies by one, which is the unsampled reading.
 - **Overflow** — a product past `uint64` clamps there, because a wrapped counter reads as a reset.
 
@@ -93,8 +93,9 @@ Every map keyed by wire data carries a bound, a push protocol not choosing its s
 
 | Bounded                           | Limit                                        | Past it                                     |
 | :-------------------------------- | :------------------------------------------- | :------------------------------------------ |
-| Observation domains per device    | [256](../internal/decoder/templates.go#L26)  | Datagram discarded, counting `domain_limit` |
+| Observation domains per device    | [256](../internal/decoder/templates.go#L37)  | Datagram discarded, counting `domain_limit` |
 | Templates per domain              | [8192](../internal/decoder/templates.go#L18) | Expired go first, then `invalid_template`   |
+| Samplers per domain               | [4096](../internal/decoder/templates.go#L23) | Expired go first, then left untracked       |
 | Interned vendor strings           | [65536](../internal/decoder/apps.go#L143)    | Copied per occurrence, not refused          |
 | One vendor string                 | [255 B](../internal/decoder/apps.go#L150)    | Refused like invalid UTF-8, once per field  |
 | Announced applications per device | [16384](../internal/decoder/apps.go#L38)     | Stays numbered rather than named            |

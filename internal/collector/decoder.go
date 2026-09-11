@@ -8,11 +8,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/umatare5/xflow-exporter/internal/decoder"
+	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
 // DecoderSource is what this collector reads from the decode stage.
 type DecoderSource interface {
 	Stats() *decoder.Stats
+	SamplersRefused() uint64
 	Domains() []decoder.DomainSnapshot
 	DomainsRefused() uint64
 	VendorStringsRefused() uint64
@@ -32,6 +34,9 @@ type DecoderCollector struct {
 	lastDatagramDesc *prometheus.Desc
 
 	templatesDesc        *prometheus.Desc
+	samplePoolDesc       *prometheus.Desc
+	samplesDroppedDesc   *prometheus.Desc
+	samplersRefusedDesc  *prometheus.Desc
 	seqMissedDesc        *prometheus.Desc
 	samplingDesc         *prometheus.Desc
 	domainsRefusedDesc   *prometheus.Desc
@@ -68,6 +73,21 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 			"xflow_templates",
 			"Unexpired templates held per exporter, protocol, observation domain and kind",
 			[]string{labelExporter, labelVersion, labelODID, labelType}, nil,
+		),
+		samplePoolDesc: prometheus.NewDesc(
+			"xflow_sample_pool_packets_total",
+			"Packets the sFlow samplers of one domain could have sampled, absent for v9 and IPFIX",
+			[]string{labelExporter, labelVersion, labelODID}, nil,
+		),
+		samplesDroppedDesc: prometheus.NewDesc(
+			"xflow_samples_dropped_total",
+			"Flow samples the sFlow agent of one domain could not send, absent for v9 and IPFIX",
+			[]string{labelExporter, labelVersion, labelODID}, nil,
+		),
+		samplersRefusedDesc: prometheus.NewDesc(
+			"xflow_samplers_refused_total",
+			"Flow samples left untracked since process start, their domain being at its sampler budget",
+			nil, nil,
 		),
 		seqMissedDesc: prometheus.NewDesc(
 			"xflow_sequence_missed_total",
@@ -109,6 +129,9 @@ func (c *DecoderCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.lastFlowDesc
 	ch <- c.lastDatagramDesc
 	ch <- c.templatesDesc
+	ch <- c.samplePoolDesc
+	ch <- c.samplesDroppedDesc
+	ch <- c.samplersRefusedDesc
 	ch <- c.seqMissedDesc
 	ch <- c.samplingDesc
 	ch <- c.domainsRefusedDesc
@@ -164,6 +187,8 @@ func (c *DecoderCollector) Collect(ch chan<- prometheus.Metric) {
 		c.appsRefusedDesc, prometheus.CounterValue, float64(c.src.ApplicationsRefused()))
 	ch <- prometheus.MustNewConstMetric(
 		c.exportersRefusedDesc, prometheus.CounterValue, float64(c.src.ExportersRefused()))
+	ch <- prometheus.MustNewConstMetric(
+		c.samplersRefusedDesc, prometheus.CounterValue, float64(c.src.SamplersRefused()))
 }
 
 // The template kinds published in the type label.
@@ -179,12 +204,30 @@ func (c *DecoderCollector) collectDomains(ch chan<- prometheus.Metric) {
 		version := domain.Version.String()
 		odid := strconv.FormatUint(uint64(domain.ODID), 10)
 
-		ch <- prometheus.MustNewConstMetric(
-			c.templatesDesc, prometheus.GaugeValue,
-			float64(domain.Templates), exporter, version, odid, templateKindData)
-		ch <- prometheus.MustNewConstMetric(
-			c.templatesDesc, prometheus.GaugeValue,
-			float64(domain.OptionsTemplates), exporter, version, odid, templateKindOptions)
+		// sFlow holds no template and the other protocols carry no sampler, so
+		// one domain has the pair its own protocol can measure. Each counter
+		// appears once a difference was taken for it.
+		switch {
+		case domain.Version != flow.VersionSFlowV5:
+			ch <- prometheus.MustNewConstMetric(
+				c.templatesDesc, prometheus.GaugeValue,
+				float64(domain.Templates), exporter, version, odid, templateKindData)
+			ch <- prometheus.MustNewConstMetric(
+				c.templatesDesc, prometheus.GaugeValue,
+				float64(domain.OptionsTemplates), exporter, version, odid, templateKindOptions)
+		default:
+			if domain.PoolMeasured {
+				ch <- prometheus.MustNewConstMetric(
+					c.samplePoolDesc, prometheus.CounterValue,
+					float64(domain.SamplePool), exporter, version, odid)
+			}
+			if domain.DropsMeasured {
+				ch <- prometheus.MustNewConstMetric(
+					c.samplesDroppedDesc, prometheus.CounterValue,
+					float64(domain.SamplesDropped), exporter, version, odid)
+			}
+		}
+
 		ch <- prometheus.MustNewConstMetric(
 			c.seqMissedDesc, prometheus.CounterValue,
 			float64(domain.SequenceMissed), exporter, version, odid)
