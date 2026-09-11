@@ -2,6 +2,7 @@ package aggregator
 
 import (
 	"context"
+	"math"
 	"net/netip"
 	"testing"
 	"time"
@@ -576,5 +577,31 @@ func TestAggregator_InterfacesSplitOnlyTheConversationTables(t *testing.T) {
 		if tt.got != 1 {
 			t.Errorf("%s = %d entries, want 1: the interface pair must not key it", tt.name, tt.got)
 		}
+	}
+}
+
+// TestAggregator_IngestSaturatesAnUnrepresentableProduct pins the correction
+// to a clamp. A wrapped product would hand the counter a reading below the one
+// before it, which Prometheus reads as a reset rather than as a wrong number.
+func TestAggregator_IngestSaturatesAnUnrepresentableProduct(t *testing.T) {
+	t.Parallel()
+
+	r := testRecord()
+	r.Bytes = 1 << 63
+	r.Packets = 1 << 63
+	r.SamplingRate = 2
+
+	a := New(testConfig(), allModules())
+	a.Ingest([]flow.Record{r})
+
+	exporters, _ := a.Exporters()
+	if len(exporters) != 1 {
+		t.Fatalf("Exporters() = %d entries, want 1", len(exporters))
+	}
+	if exporters[0].Bytes != math.MaxUint64 {
+		t.Errorf("Exporters() bytes = %d, want %d", exporters[0].Bytes, uint64(math.MaxUint64))
+	}
+	if exporters[0].Packets != math.MaxUint64 {
+		t.Errorf("Exporters() packets = %d, want %d", exporters[0].Packets, uint64(math.MaxUint64))
 	}
 }

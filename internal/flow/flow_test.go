@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -77,6 +78,56 @@ func TestRecord_Duration(t *testing.T) {
 			}
 			if ok && got != tt.want {
 				t.Errorf("Duration() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRecord_Corrected(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		record      Record
+		wantBytes   uint64
+		wantPackets uint64
+	}{
+		{
+			name:        "no rate multiplies by one",
+			record:      Record{Bytes: 1500, Packets: 2},
+			wantBytes:   1500,
+			wantPackets: 2,
+		},
+		{
+			name:        "the rate in force scales both",
+			record:      Record{Bytes: 1500, Packets: 2, SamplingRate: 50},
+			wantBytes:   75000,
+			wantPackets: 100,
+		},
+		{
+			name:        "the largest product that fits",
+			record:      Record{Bytes: math.MaxUint64 / 4, Packets: 1, SamplingRate: 4},
+			wantBytes:   (math.MaxUint64 / 4) * 4,
+			wantPackets: 4,
+		},
+		{
+			name:        "a product past uint64 saturates",
+			record:      Record{Bytes: 1 << 63, Packets: 1 << 63, SamplingRate: 2},
+			wantBytes:   math.MaxUint64,
+			wantPackets: math.MaxUint64,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			bytes, packets := tt.record.Corrected()
+			if bytes != tt.wantBytes {
+				t.Errorf("Corrected() bytes = %d, want %d", bytes, tt.wantBytes)
+			}
+			if packets != tt.wantPackets {
+				t.Errorf("Corrected() packets = %d, want %d", packets, tt.wantPackets)
 			}
 		})
 	}

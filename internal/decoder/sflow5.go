@@ -32,6 +32,12 @@ const (
 	// Header protocols of the raw packet header record.
 	sflowHeaderEthernet = 1
 
+	// A pre-parsed record states the IP packet length, which its own protocol
+	// carries in sixteen bits: IPv4 counts the header with it, IPv6 counts
+	// the payload alone over a fixed forty. A jumbogram is past both.
+	maxSampledIPv4Bytes = math.MaxUint16
+	maxSampledIPv6Bytes = ipv6HdrLen + math.MaxUint16
+
 	// An interface is a format and a value. Only format 0 carries an
 	// ifIndex; 1 is a discard reason and 2 a destination count. The
 	// compact encoding packs the format into the top two bits, while the
@@ -285,7 +291,7 @@ func readSFlowSampledIPv4(record []byte, r *flow.Record) bool {
 	if !okSrc || !okDst || !ok {
 		return false
 	}
-	if !sampledFieldsFit(protocol, srcPort, dstPort, tcpFlags, tos) {
+	if length > maxSampledIPv4Bytes || !sampledFieldsFit(protocol, srcPort, dstPort, tcpFlags, tos) {
 		return false
 	}
 
@@ -317,7 +323,7 @@ func readSFlowSampledIPv6(record []byte, r *flow.Record) bool {
 	if !okSrc || !okDst || !ok {
 		return false
 	}
-	if !sampledFieldsFit(protocol, srcPort, dstPort, tcpFlags, priority) {
+	if length > maxSampledIPv6Bytes || !sampledFieldsFit(protocol, srcPort, dstPort, tcpFlags, priority) {
 		return false
 	}
 

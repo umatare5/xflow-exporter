@@ -74,6 +74,7 @@ The counters of every collector accumulate from entry creation, and an entry evi
 - **Precedence** — the options pairs rank as [Protocols](protocols.md#options-templates) tabulates.
 - **Audit** — `xflow_sampling_rate` publishes the rate a v9 or IPFIX domain declared.
 - **Unsampled** — a record carrying no rate multiplies by one, which is the unsampled reading.
+- **Overflow** — a product past `uint64` clamps there, because a wrapped counter reads as a reset.
 
 > [!NOTE]
 > The v5 header interval and sFlow's inline rate ride the records themselves, so a device exporting either corrects its counts with no rate series to audit them by.

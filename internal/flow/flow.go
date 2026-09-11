@@ -3,6 +3,8 @@
 package flow
 
 import (
+	"math"
+	"math/bits"
 	"net/netip"
 	"time"
 )
@@ -136,4 +138,23 @@ func (r *Record) Duration() (time.Duration, bool) {
 		return 0, false
 	}
 	return r.End.Sub(r.Start), true
+}
+
+// Corrected returns the counts times the rate in force, a record carrying no
+// rate multiplying by one. Both products saturate rather than wrap, because a
+// counter handed a reading below the one before it reads as a reset.
+func (r *Record) Corrected() (bytes, packets uint64) {
+	rate := uint64(r.SamplingRate)
+	if rate == 0 {
+		rate = 1
+	}
+	return saturatingProduct(r.Bytes, rate), saturatingProduct(r.Packets, rate)
+}
+
+func saturatingProduct(count, rate uint64) uint64 {
+	hi, lo := bits.Mul64(count, rate)
+	if hi != 0 {
+		return math.MaxUint64
+	}
+	return lo
 }

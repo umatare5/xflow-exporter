@@ -8,6 +8,7 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#48](https://github.com/umatare5/xflow-exporter/pull/48) — Gather the contributor conventions and cut them to reading length
 - [#49](https://github.com/umatare5/xflow-exporter/pull/49) — Ship only the licences and the parsed config beside the binary
 - [#50](https://github.com/umatare5/xflow-exporter/pull/50) — Point the contributor pages at the shared baseline
+- [#52](https://github.com/umatare5/xflow-exporter/pull/52) — Clamp the sampling correction and refuse an overlong sampled packet
 
 ## [v0.9.1]
 

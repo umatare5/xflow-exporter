@@ -2,6 +2,7 @@ package collector
 
 import (
 	"fmt"
+	"math"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -1041,5 +1042,35 @@ func TestFlowCollector_NamesAbsentWithoutAMappingFile(t *testing.T) {
 	if err := testutil.CollectAndCompare(c, strings.NewReader(""),
 		"xflow_device_info", "xflow_interface_info"); err != nil {
 		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// TestDistributions_ObserveSaturatesAnUnrepresentableProduct pins the size
+// histogram to the same clamp the tables take, so one record cannot leave the
+// two readings of the same correction disagreeing.
+func TestDistributions_ObserveSaturatesAnUnrepresentableProduct(t *testing.T) {
+	t.Parallel()
+
+	c := NewCollector(testConfig())
+	d := c.RegisterDistributions()
+
+	r := flowRecord("10.0.0.1", "10.0.0.2", 1<<63)
+	r.SamplingRate = 2
+	d.Observe([]flow.Record{r})
+
+	families, err := c.Registry().Gather()
+	if err != nil {
+		t.Fatalf("Gather() error = %v, want nil", err)
+	}
+
+	for _, family := range families {
+		if family.GetName() != "xflow_flow_bytes" {
+			continue
+		}
+		h := family.GetMetric()[0].GetHistogram()
+		if h.GetSampleSum() != float64(uint64(math.MaxUint64)) {
+			t.Errorf("flow bytes histogram sum = %v, want the clamped %v",
+				h.GetSampleSum(), float64(uint64(math.MaxUint64)))
+		}
 	}
 }

@@ -765,3 +765,66 @@ func TestDecodeSFlowV5_InterfaceFormats(t *testing.T) {
 		})
 	}
 }
+
+// TestDecodeSFlowV5_SampledRecordRefusesAnOverlongPacket pins the length to
+// the field its own protocol carries it in. A record claiming more describes
+// no packet that crossed a wire, and the count would reach a counter as bytes.
+func TestDecodeSFlowV5_SampledRecordRefusesAnOverlongPacket(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		kind   uint32
+		length uint32
+		wants  bool
+	}{
+		{name: "the largest IPv4 packet", kind: sflowSampledIPv4, length: maxSampledIPv4Bytes, wants: true},
+		{name: "past the IPv4 total length", kind: sflowSampledIPv4, length: maxSampledIPv4Bytes + 1},
+		{name: "the largest IPv6 packet", kind: sflowSampledIPv6, length: maxSampledIPv6Bytes, wants: true},
+		{name: "past the IPv6 payload length", kind: sflowSampledIPv6, length: maxSampledIPv6Bytes + 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			body := sampledIPv4Body(protocolUDP, 53000, 53, 0, 0x10)
+			if tt.kind == sflowSampledIPv6 {
+				body = sampledIPv6Body(protocolUDP, 53000, 53, 0, 0x10)
+			}
+			binary.BigEndian.PutUint32(body[0:4], tt.length)
+
+			d := newTestDecoder()
+			records, err := d.Decode(testExporter, sflowDatagram(1, sflowSample(sflowFlowSample,
+				sflowFlowSampleBody(100, 1, 2, sflowRecord(tt.kind, body)))), nil)
+			if err != nil {
+				t.Fatalf("Decode() error = %v, want nil", err)
+			}
+
+			want := 0
+			if tt.wants {
+				want = 1
+			}
+			if len(records) != want {
+				t.Fatalf("Decode() = %d records, want %d", len(records), want)
+			}
+			if tt.wants && records[0].Bytes != uint64(tt.length) {
+				t.Errorf("Bytes = %d, want the declared %d", records[0].Bytes, tt.length)
+			}
+
+			var malformed uint64
+			for _, e := range d.Stats().Snapshot()[0].Errors {
+				if e.Version == flow.VersionSFlowV5 && e.Reason == ReasonMalformed {
+					malformed = e.Count
+				}
+			}
+			wantMalformed := uint64(1)
+			if tt.wants {
+				wantMalformed = 0
+			}
+			if malformed != wantMalformed {
+				t.Errorf("malformed = %d, want %d so the refusal is visible", malformed, wantMalformed)
+			}
+		})
+	}
+}

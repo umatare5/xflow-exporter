@@ -213,14 +213,7 @@ func (a *Aggregator) Ingest(records []flow.Record) {
 
 	for i := range records {
 		r := &records[i]
-
-		rate := uint64(r.SamplingRate)
-		if rate == 0 {
-			rate = 1
-		}
-		bytes := r.Bytes * rate
-		packets := r.Packets * rate
-
+		bytes, packets := r.Corrected()
 		a.ingestOne(r, bytes, packets, now)
 	}
 }
