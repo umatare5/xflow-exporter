@@ -47,8 +47,8 @@ func TestDecoderCollector_Describe(t *testing.T) {
 	for range ch {
 		count++
 	}
-	if count != 10 {
-		t.Errorf("Describe() emitted %d descriptors, want 10", count)
+	if count != 11 {
+		t.Errorf("Describe() emitted %d descriptors, want 11", count)
 	}
 }
 
@@ -103,7 +103,7 @@ xflow_flows_total{exporter_address="192.0.2.10",version="netflow_v5"} 1
 		t.Errorf("CollectAndCompare() mismatch: %v", err)
 	}
 
-	// The freshness gauge exists exactly once a decode has succeeded.
+	// The freshness gauge exists exactly once a record has decoded.
 	if got := testutil.CollectAndCount(c, "xflow_last_flow_timestamp_seconds"); got != 1 {
 		t.Errorf("last flow timestamp series = %d, want 1", got)
 	}
@@ -346,5 +346,32 @@ func TestCollector_RegisterDecoderCollector(t *testing.T) {
 	// The registry accepts the collector; series appear with traffic.
 	if _, err := c.Registry().Gather(); err != nil {
 		t.Fatalf("Gather() error = %v, want nil", err)
+	}
+}
+
+// TestDecoderCollector_SeparatesFlowFromDatagram pins the two instants apart.
+// A datagram that decodes into no record still reaches the device, and an
+// sFlow agent polling counters alone sends those forever, so holding the flow
+// instant forward on one would leave a stopped sampler reading as fresh.
+func TestDecoderCollector_SeparatesFlowFromDatagram(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	exporter := netip.MustParseAddr("192.0.2.21")
+
+	records, err := d.Decode(exporter, buildV9TemplateOnly(), nil)
+	if err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("Decode() = %d records, want 0 from a template-only datagram", len(records))
+	}
+
+	c := NewDecoderCollector(d)
+	if got := testutil.CollectAndCount(c, "xflow_last_flow_timestamp_seconds"); got != 0 {
+		t.Errorf("last flow timestamp series = %d, want 0 until a record decodes", got)
+	}
+	if got := testutil.CollectAndCount(c, "xflow_last_datagram_timestamp_seconds"); got != 1 {
+		t.Errorf("last datagram timestamp series = %d, want 1", got)
 	}
 }

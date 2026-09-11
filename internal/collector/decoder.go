@@ -26,9 +26,10 @@ type DecoderSource interface {
 type DecoderCollector struct {
 	src DecoderSource
 
-	flowsDesc    *prometheus.Desc
-	errorsDesc   *prometheus.Desc
-	lastFlowDesc *prometheus.Desc
+	flowsDesc        *prometheus.Desc
+	errorsDesc       *prometheus.Desc
+	lastFlowDesc     *prometheus.Desc
+	lastDatagramDesc *prometheus.Desc
 
 	templatesDesc        *prometheus.Desc
 	seqMissedDesc        *prometheus.Desc
@@ -55,7 +56,12 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		),
 		lastFlowDesc: prometheus.NewDesc(
 			"xflow_last_flow_timestamp_seconds",
-			"Unix time the exporter's last datagram decoded, absent until one has",
+			"Unix time the exporter's last flow record decoded, absent until one has",
+			[]string{labelExporter}, nil,
+		),
+		lastDatagramDesc: prometheus.NewDesc(
+			"xflow_last_datagram_timestamp_seconds",
+			"Unix time the exporter's last datagram arrived, absent until one has",
 			[]string{labelExporter}, nil,
 		),
 		templatesDesc: prometheus.NewDesc(
@@ -101,6 +107,7 @@ func (c *DecoderCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.flowsDesc
 	ch <- c.errorsDesc
 	ch <- c.lastFlowDesc
+	ch <- c.lastDatagramDesc
 	ch <- c.templatesDesc
 	ch <- c.seqMissedDesc
 	ch <- c.samplingDesc
@@ -134,6 +141,14 @@ func (c *DecoderCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				c.lastFlowDesc, prometheus.GaugeValue,
 				float64(snap.LastFlowUnixNano)/nanosPerSecond, exporter)
+		}
+
+		// The two instants separate a device that stopped exporting flows
+		// from one that stopped sending at all.
+		if snap.LastSeenUnixNano > 0 {
+			ch <- prometheus.MustNewConstMetric(
+				c.lastDatagramDesc, prometheus.GaugeValue,
+				float64(snap.LastSeenUnixNano)/nanosPerSecond, exporter)
 		}
 	}
 

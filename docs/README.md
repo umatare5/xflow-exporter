@@ -18,7 +18,7 @@ The [README](../README.md) covers getting flows received and scraped; these page
 
 - **Scrapes never wait** — a scrape reads the tables as they stand, whatever is arriving.
 - **No target to probe** — nothing answers an `up`-style reachability check toward a sender.
-- **Liveness** — `xflow_last_flow_timestamp_seconds` is what silence is read from.
+- **Liveness** — two instants read silence: one for flow records, one for datagrams.
 - **Naming** — RFC 7011 calls the device the exporter, and `exporter_address` is where it lands.
 - **Tuning** — `--receiver.*`, `--parser.*` and `--aggregation.*` bound the receive path.
 - **Batching** — Linux read loops use `recvmmsg`, and elsewhere it is one per call.

@@ -17,7 +17,8 @@ This is the whole set of `xflow_` series the exporter publishes about itself. No
 | `receiver`     | `xflow_receiver_queue_capacity`                     | Gauge   | Bound of that queue       |
 | `decoder`      | `xflow_flows_total`                                 | Counter | Records per `version`     |
 | `decoder`      | `xflow_decode_errors_total`                         | Counter | Rejections per `reason`   |
-| `decoder`      | `xflow_last_flow_timestamp_seconds`                 | Gauge   | Unix time, last decode    |
+| `decoder`      | `xflow_last_flow_timestamp_seconds`                 | Gauge   | Unix time, last record    |
+| `decoder`      | `xflow_last_datagram_timestamp_seconds`             | Gauge   | Unix time, last datagram  |
 | `decoder`      | `xflow_templates`                                   | Gauge   | Templates per `type`      |
 | `decoder`      | `xflow_sequence_missed_total`                       | Counter | Packets or records lost   |
 | `decoder`      | `xflow_sampling_rate`                               | Gauge   | Declared sampling rate    |
@@ -103,11 +104,14 @@ its `reason` names one of two, both counted before any decoder reads the datagra
 
 neither carries a `listener`, the queue being one for every read loop, so the ratio between them is what says whether the decoders are keeping up with the receive path.
 
-**`xflow_flows_total`, `xflow_decode_errors_total` and `xflow_last_flow_timestamp_seconds`**
+**`xflow_flows_total`, `xflow_decode_errors_total` and the two instants**
 
-all three are keyed by the device, so a device refused at the exporter budget reaches none of them while its datagrams still decode and still feed every aggregation table.
+all four are keyed by the device, so a device refused at the exporter budget reaches none of them while its datagrams still decode and still feed every aggregation table.
 
-- Alert per device on `time() - xflow_last_flow_timestamp_seconds`: a device that stopped exporting freezes its instant along with every counter it feeds, and no other series separates that from a quiet link.
+- `xflow_last_flow_timestamp_seconds` moves on a decoded record and `xflow_last_datagram_timestamp_seconds` on any datagram, so the pair tells a stopped sampler from a stopped device.
+- Alert on `time() - xflow_last_flow_timestamp_seconds > 900 and time() - xflow_last_datagram_timestamp_seconds < 900` for a sampler that stopped, and on the first term alone for a device gone silent.
+- A sampled port carrying no traffic reaches the same threshold on its own, the flow instant ageing whenever `pps` falls below `N/900` at a 1-in-N rate.
+- Neither instant carries `version`, so a device exporting two protocols hides one of them stopping — `increase(xflow_flows_total{version=...}[15m])` reads them apart.
 
 **`xflow_decode_errors_total`**
 
