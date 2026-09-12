@@ -9,12 +9,12 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "xflow-exporter has heard nothing from {{ $labels.exporter_address }}"
+          summary: "xflow-exporter has decoded no flow from {{ $labels.exporter_address }}"
           description: >-
-            No datagram from this device has decoded for 15 minutes. Every
-            counter it feeds is frozen, which rate() reports as zero, so this
-            timestamp is the only signal separating a silent device from a
-            quiet network.
+            No flow record from this device has decoded for 15 minutes. Every
+            counter it feeds is frozen, which rate() reports as zero. Compare
+            xflow_last_datagram_timestamp_seconds to tell a device that stopped
+            sending from one whose sampler stopped.
 
       - alert: XflowReceiverIdle
         expr: increase(xflow_receiver_packets_total[15m]) == 0

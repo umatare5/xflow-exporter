@@ -47,8 +47,8 @@ func TestDecoderCollector_Describe(t *testing.T) {
 	for range ch {
 		count++
 	}
-	if count != 10 {
-		t.Errorf("Describe() emitted %d descriptors, want 10", count)
+	if count != 14 {
+		t.Errorf("Describe() emitted %d descriptors, want 14", count)
 	}
 }
 
@@ -60,7 +60,7 @@ func TestDecoderCollector_EmptyUntilTraffic(t *testing.T) {
 	// Only the refusal counters, which are seeded so a first refusal reads
 	// as a rise rather than as a new series. Nothing is published per
 	// exporter until a datagram names one.
-	if got := testutil.CollectAndCount(c); got != 4 {
+	if got := testutil.CollectAndCount(c); got != 5 {
 		t.Errorf("CollectAndCount() = %d series before any datagram, want only the seeded counters", got)
 	}
 	for _, name := range []string{
@@ -68,6 +68,7 @@ func TestDecoderCollector_EmptyUntilTraffic(t *testing.T) {
 		"xflow_vendor_strings_refused_total",
 		"xflow_applications_refused_total",
 		"xflow_exporters_refused_total",
+		"xflow_samplers_refused_total",
 	} {
 		if got := testutil.CollectAndCount(c, name); got != 1 {
 			t.Errorf("%s series = %d, want 1 seeded", name, got)
@@ -103,7 +104,7 @@ xflow_flows_total{exporter_address="192.0.2.10",version="netflow_v5"} 1
 		t.Errorf("CollectAndCompare() mismatch: %v", err)
 	}
 
-	// The freshness gauge exists exactly once a decode has succeeded.
+	// The freshness gauge exists exactly once a record has decoded.
 	if got := testutil.CollectAndCount(c, "xflow_last_flow_timestamp_seconds"); got != 1 {
 		t.Errorf("last flow timestamp series = %d, want 1", got)
 	}
@@ -296,7 +297,7 @@ xflow_applications_refused_total 0
 
 // stubDecoderSource reports a distinct count from each refusal accessor.
 type stubDecoderSource struct {
-	domains, strings, applications, exporters uint64
+	domains, strings, applications, exporters, samplers uint64
 }
 
 func (s stubDecoderSource) Stats() *decoder.Stats             { return &decoder.Stats{} }
@@ -305,6 +306,7 @@ func (s stubDecoderSource) DomainsRefused() uint64            { return s.domains
 func (s stubDecoderSource) VendorStringsRefused() uint64      { return s.strings }
 func (s stubDecoderSource) ApplicationsRefused() uint64       { return s.applications }
 func (s stubDecoderSource) ExportersRefused() uint64          { return s.exporters }
+func (s stubDecoderSource) SamplersRefused() uint64           { return s.samplers }
 
 // TestDecoderCollector_RefusalCountersDoNotCross pins each refusal counter to
 // its own accessor. The three publish lines are adjacent and alike, and the
@@ -314,7 +316,9 @@ func (s stubDecoderSource) ExportersRefused() uint64          { return s.exporte
 func TestDecoderCollector_RefusalCountersDoNotCross(t *testing.T) {
 	t.Parallel()
 
-	c := NewDecoderCollector(stubDecoderSource{domains: 3, strings: 5, applications: 7, exporters: 11})
+	c := NewDecoderCollector(stubDecoderSource{
+		domains: 3, strings: 5, applications: 7, exporters: 11, samplers: 13,
+	})
 
 	expected := `
 # HELP xflow_domains_refused_total Datagrams discarded since process start, the exporter being at its observation domain budget
@@ -329,10 +333,14 @@ xflow_applications_refused_total 7
 # HELP xflow_exporters_refused_total Datagrams left unattributed since process start, the process being at its exporter budget
 # TYPE xflow_exporters_refused_total counter
 xflow_exporters_refused_total 11
+# HELP xflow_samplers_refused_total Flow samples left untracked since process start, their domain being at its sampler budget
+# TYPE xflow_samplers_refused_total counter
+xflow_samplers_refused_total 13
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_domains_refused_total", "xflow_vendor_strings_refused_total",
-		"xflow_applications_refused_total", "xflow_exporters_refused_total"); err != nil {
+		"xflow_applications_refused_total", "xflow_exporters_refused_total",
+		"xflow_samplers_refused_total"); err != nil {
 		t.Errorf("CollectAndCompare() mismatch: %v", err)
 	}
 }
@@ -346,5 +354,140 @@ func TestCollector_RegisterDecoderCollector(t *testing.T) {
 	// The registry accepts the collector; series appear with traffic.
 	if _, err := c.Registry().Gather(); err != nil {
 		t.Fatalf("Gather() error = %v, want nil", err)
+	}
+}
+
+// TestDecoderCollector_SeparatesFlowFromDatagram pins the two instants apart.
+// A datagram that decodes into no record still reaches the device, and an
+// sFlow agent polling counters alone sends those forever, so holding the flow
+// instant forward on one would leave a stopped sampler reading as fresh.
+func TestDecoderCollector_SeparatesFlowFromDatagram(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	exporter := netip.MustParseAddr("192.0.2.21")
+
+	records, err := d.Decode(exporter, buildV9TemplateOnly(), nil)
+	if err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("Decode() = %d records, want 0 from a template-only datagram", len(records))
+	}
+
+	c := NewDecoderCollector(d)
+	if got := testutil.CollectAndCount(c, "xflow_last_flow_timestamp_seconds"); got != 0 {
+		t.Errorf("last flow timestamp series = %d, want 0 until a record decodes", got)
+	}
+	if got := testutil.CollectAndCount(c, "xflow_last_datagram_timestamp_seconds"); got != 1 {
+		t.Errorf("last datagram timestamp series = %d, want 1", got)
+	}
+}
+
+// buildSFlowFlowSample crafts an sFlow datagram carrying one flow sample with
+// no flow record, which is all the sampler counters need: they ride the sample
+// header rather than the records under it.
+func buildSFlowFlowSample(datagramSeq, sampleSeq, pool, drops uint32) []byte {
+	p := make([]byte, 0, 68)
+	word := func(v uint32) { p = binary.BigEndian.AppendUint32(p, v) }
+
+	word(5)                      // version
+	word(1)                      // agent address type IPv4
+	p = append(p, 192, 0, 2, 30) // agent address
+	word(0)                      // sub-agent id
+	word(datagramSeq)            // datagram sequence
+	word(1000)                   // uptime
+	word(1)                      // one sample
+
+	word(1)  // flow sample
+	word(32) // sample length
+	word(sampleSeq)
+	word(0x01_000003) // source id: type 1, index 3
+	word(50)          // sampling rate
+	word(pool)
+	word(drops)
+	word(3) // input interface
+	word(4) // output interface
+	word(0) // no flow records
+	return p
+}
+
+// TestDecoderCollector_SamplerCountersNeedTwoReadings pins the pair to a
+// measured difference. One reading is a base with nothing to subtract from,
+// and publishing its zero would divide a corrected packet count by nothing.
+func TestDecoderCollector_SamplerCountersNeedTwoReadings(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	exporter := netip.MustParseAddr("192.0.2.30")
+	c := NewDecoderCollector(d)
+
+	if _, err := d.Decode(exporter, buildSFlowFlowSample(1, 1, 5000, 7), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+	if got := testutil.CollectAndCount(c, "xflow_sample_pool_packets_total"); got != 0 {
+		t.Errorf("sample pool series = %d, want 0 after one reading", got)
+	}
+
+	if _, err := d.Decode(exporter, buildSFlowFlowSample(2, 2, 5500, 9), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+
+	expected := `
+# HELP xflow_sample_pool_packets_total Packets the sFlow samplers of one domain could have sampled, absent for v9 and IPFIX
+# TYPE xflow_sample_pool_packets_total counter
+xflow_sample_pool_packets_total{exporter_address="192.0.2.30",odid="0",version="sflow_v5"} 500
+# HELP xflow_samples_dropped_total Flow samples the sFlow agent of one domain could not send, absent for v9 and IPFIX
+# TYPE xflow_samples_dropped_total counter
+xflow_samples_dropped_total{exporter_address="192.0.2.30",odid="0",version="sflow_v5"} 2
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_sample_pool_packets_total", "xflow_samples_dropped_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+
+	// An sFlow domain holds no template, so the gauge that counts them is
+	// absent there rather than reporting a zero of something that cannot be.
+	if got := testutil.CollectAndCount(c, "xflow_templates"); got != 0 {
+		t.Errorf("templates series = %d, want 0 for an sFlow domain", got)
+	}
+}
+
+// TestDecoderCollector_ARefusedDifferenceLeavesItsCounterAbsent pins the pair
+// to one gate each. A drop count the domain refused as a restart leaves a
+// zero, and publishing it beside a measured pool would read as no loss.
+func TestDecoderCollector_ARefusedDifferenceLeavesItsCounterAbsent(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	exporter := netip.MustParseAddr("192.0.2.30")
+	c := NewDecoderCollector(d)
+
+	// The pool steps by 500 while the drop counter steps past the window the
+	// tracker reads as one agent's continuous run.
+	if _, err := d.Decode(exporter, buildSFlowFlowSample(1, 1, 5000, 0), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+	if _, err := d.Decode(exporter, buildSFlowFlowSample(2, 2, 5500, 1<<31), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+
+	if got := testutil.CollectAndCount(c, "xflow_sample_pool_packets_total"); got != 1 {
+		t.Errorf("sample pool series = %d, want 1 measured", got)
+	}
+	if got := testutil.CollectAndCount(c, "xflow_samples_dropped_total"); got != 0 {
+		t.Errorf("samples dropped series = %d, want 0 with its difference refused", got)
+	}
+
+	// The same pair the other way round, on a device of its own.
+	other := netip.MustParseAddr("192.0.2.31")
+	for _, pool := range []uint32{5000, 5000 + 1<<31} {
+		if _, err := d.Decode(other, buildSFlowFlowSample(1, 1, pool, 0), nil); err != nil {
+			t.Fatalf("Decode() error = %v, want nil", err)
+		}
+	}
+
+	if got := testutil.CollectAndCount(c, "xflow_sample_pool_packets_total"); got != 1 {
+		t.Errorf("sample pool series = %d, want 1 with the second device's difference refused", got)
 	}
 }

@@ -17,10 +17,14 @@ This is the whole set of `xflow_` series the exporter publishes about itself. No
 | `receiver`     | `xflow_receiver_queue_capacity`                     | Gauge   | Bound of that queue       |
 | `decoder`      | `xflow_flows_total`                                 | Counter | Records per `version`     |
 | `decoder`      | `xflow_decode_errors_total`                         | Counter | Rejections per `reason`   |
-| `decoder`      | `xflow_last_flow_timestamp_seconds`                 | Gauge   | Unix time, last decode    |
+| `decoder`      | `xflow_last_flow_timestamp_seconds`                 | Gauge   | Unix time, last record    |
+| `decoder`      | `xflow_last_datagram_timestamp_seconds`             | Gauge   | Unix time, last datagram  |
 | `decoder`      | `xflow_templates`                                   | Gauge   | Templates per `type`      |
 | `decoder`      | `xflow_sequence_missed_total`                       | Counter | Packets or records lost   |
 | `decoder`      | `xflow_sampling_rate`                               | Gauge   | Declared sampling rate    |
+| `decoder`      | `xflow_sample_pool_packets_total`                   | Counter | Packets the sampler saw   |
+| `decoder`      | `xflow_samples_dropped_total`                       | Counter | Samples the agent dropped |
+| `decoder`      | `xflow_samplers_refused_total`                      | Counter | Past the sampler budget   |
 | `decoder`      | `xflow_domains_refused_total`                       | Counter | Past the domain budget    |
 | `decoder`      | `xflow_vendor_strings_refused_total`                | Counter | Unrepresentable strings   |
 | `decoder`      | `xflow_applications_refused_total`                  | Counter | Past the app budget       |
@@ -103,11 +107,14 @@ its `reason` names one of two, both counted before any decoder reads the datagra
 
 neither carries a `listener`, the queue being one for every read loop, so the ratio between them is what says whether the decoders are keeping up with the receive path.
 
-**`xflow_flows_total`, `xflow_decode_errors_total` and `xflow_last_flow_timestamp_seconds`**
+**`xflow_flows_total`, `xflow_decode_errors_total` and the two instants**
 
-all three are keyed by the device, so a device refused at the exporter budget reaches none of them while its datagrams still decode and still feed every aggregation table.
+all four are keyed by the device, so a device refused at the exporter budget reaches none of them while its datagrams still decode and still feed every aggregation table.
 
-- Alert per device on `time() - xflow_last_flow_timestamp_seconds`: a device that stopped exporting freezes its instant along with every counter it feeds, and no other series separates that from a quiet link.
+- `xflow_last_flow_timestamp_seconds` moves on a decoded record and `xflow_last_datagram_timestamp_seconds` on any datagram, so the pair tells a stopped sampler from a stopped device.
+- Alert on `time() - xflow_last_flow_timestamp_seconds > 900 and time() - xflow_last_datagram_timestamp_seconds < 900` for a sampler that stopped, and on the first term alone for a device gone silent.
+- A sampled port carrying no traffic reaches the same threshold on its own, the flow instant ageing whenever `pps` falls below `N/900` at a 1-in-N rate.
+- Neither instant carries `version`, so a device exporting two protocols hides one of them stopping — `increase(xflow_flows_total{version=...}[15m])` reads them apart.
 
 **`xflow_decode_errors_total`**
 
@@ -128,13 +135,26 @@ its `reason` names what the decoder refused rather than where it stopped.
 all three carry `exporter_address`, `version` and `odid` together. A domain is that triple rather than the identifier alone. The three protocols number their domains independently, so one number from one device names as many domains as that device speaks protocols.
 
 - Dropping `version` from the triple would hand two domains one label set, and a registry refuses to gather a duplicate, so the whole scrape would fail rather than one domain's series.
-- `xflow_sampling_rate` reads a v9 or IPFIX options declaration alone, so a v5 or sFlow device corrects its counts with no rate series to audit them by — [Sampling correction](README.md#sampling-correction) carries the precedence.
+- `xflow_sampling_rate` reads a v9 or IPFIX options declaration alone. An sFlow device carries its rate on the samples themselves, and what its correction is worth reads from the pair below.
+- `xflow_templates` is absent on an sFlow domain, which holds no template, and the sampler counters are absent on the protocols that hold no sampler.
 - `xflow_sequence_missed_total` counts what each sequence number counts, packets on v9 and sFlow and data records on IPFIX, so one lost IPFIX message adds every record it carried.
 - A rise here is loss or reordering on the wire rather than a race between the decoders — [Push and pull](README.md#push-and-pull) carries why one worker holds each device.
 
-**the four `_refused_total` counters**
+**`xflow_sample_pool_packets_total` and `xflow_samples_dropped_total`**
 
-three of them name a budget the wire cannot raise and count attempts rather than the entities refused — [Bounded state](README.md#bounded-state) carries the budgets and what a refusal costs the records behind it. `xflow_vendor_strings_refused_total` counts a string the exporter cannot publish instead, longer than 255 bytes or not valid UTF-8, once per field rather than once per string.
+both carry the sFlow samplers' own counters, differenced between consecutive readings and summed over the domain, so each appears once a difference has been taken for it.
+
+- The agent reports what it never sent, which nothing else sees: the wire carries every sample it did send, and `xflow_sequence_missed_total` counts what was lost after that.
+- `rate(xflow_flows_total{version="sflow_v5"}[5m]) / (rate(xflow_flows_total{version="sflow_v5"}[5m]) + sum without (odid) (rate(xflow_samples_dropped_total[5m])))` is the share the agent delivered. No collector flag gates either series.
+- Loss arrives in bursts that a five-minute average dilutes, so read `rate(xflow_samples_dropped_total[4m])` on its own for the moment one happened.
+- The pool measures fidelity only where the agent counts it at the sampling point. A drop counter the agent keeps once for every sampler is multiplied by the domain sum, and the verified device does neither.
+- A base that moves across a restart or a long reorder spans the run before it once, which reads as a single step too large.
+- A counter that falls by more than three quarters of its range while the sequence keeps stepping reads as a wrap, and adds up to a quarter of that range once.
+- Two export instances sharing a sub-agent and a source id fabricate both, and neither counter rides a rate multiplication, so a sender past the [filter](../SECURITY.md) moves them alone.
+
+**the five `_refused_total` counters**
+
+four of them name a budget the wire cannot raise and count attempts rather than the entities refused — [Bounded state](README.md#bounded-state) carries the budgets and what a refusal costs the records behind it. `xflow_vendor_strings_refused_total` counts a string the exporter cannot publish instead, longer than 255 bytes or not valid UTF-8, once per field rather than once per string.
 
 **`xflow_enrichment_lookups_total`**
 

@@ -61,14 +61,11 @@ func (d *Distributions) Observe(records []flow.Record) {
 		r := &records[i]
 		exporter := r.Exporter.String()
 
-		rate := uint64(r.SamplingRate)
-		if rate == 0 {
-			rate = 1
-		}
 		// A record whose counters rode elements the decoder does not read has
 		// no byte count, and a zero would claim an empty flow nobody measured.
 		if r.BytesReported {
-			d.flowBytes.WithLabelValues(exporter).Observe(float64(r.Bytes * rate))
+			bytes, _ := r.Corrected()
+			d.flowBytes.WithLabelValues(exporter).Observe(float64(bytes))
 		}
 
 		// A record without both instants has no duration, and observing a

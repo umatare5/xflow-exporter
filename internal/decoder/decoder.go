@@ -145,6 +145,12 @@ func (d *Decoder) DomainsRefused() uint64 {
 	return d.templates.refused()
 }
 
+// SamplersRefused reports how many flow samples reached a domain already at
+// its sampler budget. The sample decodes; its own counters are what is lost.
+func (d *Decoder) SamplersRefused() uint64 {
+	return d.templates.refusedSamplers()
+}
+
 // VendorStringsRefused reports how many exported string fields the interner
 // refused as unrepresentable. The refusal precedes its map, so one such name
 // counts once per field carrying it rather than once. A refused application

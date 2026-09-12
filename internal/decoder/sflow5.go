@@ -32,6 +32,17 @@ const (
 	// Header protocols of the raw packet header record.
 	sflowHeaderEthernet = 1
 
+	// A pre-parsed record states the IP packet length, which its own protocol
+	// carries in sixteen bits: IPv4 counts the header with it, IPv6 counts
+	// the payload alone over a fixed forty. A jumbogram is past both.
+	maxSampledIPv4Bytes = math.MaxUint16
+	maxSampledIPv6Bytes = ipv6HdrLen + math.MaxUint16
+
+	// The compact form packs the source id into one word, eight bits of type
+	// over twenty-four of index, which the expanded form spells as two.
+	sflowSourceTypeShift = 24
+	sflowSourceIndexMask = 0x00FF_FFFF
+
 	// An interface is a format and a value. Only format 0 carries an
 	// ifIndex; 1 is a discard reason and 2 a destination count. The
 	// compact encoding packs the format into the top two bits, while the
@@ -86,6 +97,11 @@ func (d *Decoder) decodeSFlowV5(
 	}
 	domain.trackSequence(sequence)
 
+	// One hold for the datagram: the samples of a domain arrive on the worker
+	// its device is hashed to, and a scrape reads the totals as atomics.
+	domain.samplersMu.Lock()
+	defer domain.samplersMu.Unlock()
+
 	for range numSamples {
 		sampleType, okType := r.uint32()
 		sampleLen, okLen := r.uint32()
@@ -97,7 +113,7 @@ func (d *Decoder) decodeSFlowV5(
 			return dst, malformed("sflow sample of %d bytes runs past the datagram", sampleLen)
 		}
 
-		dst = d.decodeSFlowSample(exporter, sampleType, sample, dst, issue)
+		dst = d.decodeSFlowSample(exporter, domain, sampleType, sample, dst, issue)
 	}
 
 	return dst, nil
@@ -106,7 +122,8 @@ func (d *Decoder) decodeSFlowV5(
 // decodeSFlowSample routes one sample by its type. The enterprise bits are
 // the top 20 bits of the type word; only enterprise 0 is standard.
 func (d *Decoder) decodeSFlowSample(
-	exporter netip.Addr, sampleType uint32, sample []byte, dst []flow.Record, issue func(reason string),
+	exporter netip.Addr, domain *domainState, sampleType uint32, sample []byte,
+	dst []flow.Record, issue func(reason string),
 ) []flow.Record {
 	const formatMask = 0xFFF
 
@@ -117,9 +134,9 @@ func (d *Decoder) decodeSFlowSample(
 
 	switch sampleType & formatMask {
 	case sflowFlowSample:
-		return d.decodeSFlowFlowSample(exporter, sample, false, dst, issue)
+		return d.decodeSFlowFlowSample(exporter, domain, sample, false, dst, issue)
 	case sflowFlowSampleExpanded:
-		return d.decodeSFlowFlowSample(exporter, sample, true, dst, issue)
+		return d.decodeSFlowFlowSample(exporter, domain, sample, true, dst, issue)
 	case sflowCounterSample, sflowCounterExpanded:
 		// Interface counters, out of scope by design.
 		return dst
@@ -131,18 +148,24 @@ func (d *Decoder) decodeSFlowSample(
 // decodeSFlowFlowSample reads one flow sample and appends one record per
 // header record it can decode.
 func (d *Decoder) decodeSFlowFlowSample(
-	exporter netip.Addr, sample []byte, expanded bool, dst []flow.Record, issue func(reason string),
+	exporter netip.Addr, domain *domainState, sample []byte, expanded bool,
+	dst []flow.Record, issue func(reason string),
 ) []flow.Record {
 	r := newByteReader(sample)
 
-	r.skip(4) // sample sequence number
+	sequence, _ := r.uint32()
+	var source uint64
 	if expanded {
-		r.skip(8) // source id type + index
+		kind, _ := r.uint32()
+		index, _ := r.uint32()
+		source = uint64(kind)<<32 | uint64(index)
 	} else {
-		r.skip(4) // packed source id
+		packed, _ := r.uint32()
+		source = uint64(packed>>sflowSourceTypeShift)<<32 | uint64(packed&sflowSourceIndexMask)
 	}
 	samplingRate, _ := r.uint32()
-	r.skip(8) // sample pool, drops
+	pool, _ := r.uint32()
+	drops, _ := r.uint32()
 
 	var inputIf, outputIf uint32
 	if expanded {
@@ -164,6 +187,7 @@ func (d *Decoder) decodeSFlowFlowSample(
 		issue(ReasonMalformed)
 		return dst
 	}
+	d.templates.trackSamplerLocked(domain, source, sequence, samplingRate, pool, drops)
 
 	for range numRecords {
 		recordType, okType := r.uint32()
@@ -285,7 +309,7 @@ func readSFlowSampledIPv4(record []byte, r *flow.Record) bool {
 	if !okSrc || !okDst || !ok {
 		return false
 	}
-	if !sampledFieldsFit(protocol, srcPort, dstPort, tcpFlags, tos) {
+	if length > maxSampledIPv4Bytes || !sampledFieldsFit(protocol, srcPort, dstPort, tcpFlags, tos) {
 		return false
 	}
 
@@ -317,7 +341,7 @@ func readSFlowSampledIPv6(record []byte, r *flow.Record) bool {
 	if !okSrc || !okDst || !ok {
 		return false
 	}
-	if !sampledFieldsFit(protocol, srcPort, dstPort, tcpFlags, priority) {
+	if length > maxSampledIPv6Bytes || !sampledFieldsFit(protocol, srcPort, dstPort, tcpFlags, priority) {
 		return false
 	}
 

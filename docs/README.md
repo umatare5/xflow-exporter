@@ -18,7 +18,7 @@ The [README](../README.md) covers getting flows received and scraped; these page
 
 - **Scrapes never wait** — a scrape reads the tables as they stand, whatever is arriving.
 - **No target to probe** — nothing answers an `up`-style reachability check toward a sender.
-- **Liveness** — `xflow_last_flow_timestamp_seconds` is what silence is read from.
+- **Liveness** — two instants read silence: one for flow records, one for datagrams.
 - **Naming** — RFC 7011 calls the device the exporter, and `exporter_address` is where it lands.
 - **Tuning** — `--receiver.*`, `--parser.*` and `--aggregation.*` bound the receive path.
 - **Batching** — Linux read loops use `recvmmsg`, and elsewhere it is one per call.
@@ -72,8 +72,9 @@ The counters of every collector accumulate from entry creation, and an entry evi
 
 - **Sources** — the v5 header interval, the v9/IPFIX options rates, sFlow's inline rate.
 - **Precedence** — the options pairs rank as [Protocols](protocols.md#options-templates) tabulates.
-- **Audit** — `xflow_sampling_rate` publishes the rate a v9 or IPFIX domain declared.
+- **Audit** — `xflow_sampling_rate` for v9 and IPFIX, the sampler counters in [Health](health.md#specifications) for sFlow.
 - **Unsampled** — a record carrying no rate multiplies by one, which is the unsampled reading.
+- **Overflow** — a product past `uint64` clamps there, because a wrapped counter reads as a reset.
 
 > [!NOTE]
 > The v5 header interval and sFlow's inline rate ride the records themselves, so a device exporting either corrects its counts with no rate series to audit them by.
@@ -92,8 +93,9 @@ Every map keyed by wire data carries a bound, a push protocol not choosing its s
 
 | Bounded                           | Limit                                        | Past it                                     |
 | :-------------------------------- | :------------------------------------------- | :------------------------------------------ |
-| Observation domains per device    | [256](../internal/decoder/templates.go#L26)  | Datagram discarded, counting `domain_limit` |
+| Observation domains per device    | [256](../internal/decoder/templates.go#L37)  | Datagram discarded, counting `domain_limit` |
 | Templates per domain              | [8192](../internal/decoder/templates.go#L18) | Expired go first, then `invalid_template`   |
+| Samplers per domain               | [4096](../internal/decoder/templates.go#L23) | Expired go first, then left untracked       |
 | Interned vendor strings           | [65536](../internal/decoder/apps.go#L143)    | Copied per occurrence, not refused          |
 | One vendor string                 | [255 B](../internal/decoder/apps.go#L150)    | Refused like invalid UTF-8, once per field  |
 | Announced applications per device | [16384](../internal/decoder/apps.go#L38)     | Stays numbered rather than named            |

@@ -37,8 +37,10 @@ type ExporterStats struct {
 	// the inner map is built once per version on first use, under errorsMu.
 	errorsMu sync.Mutex
 	errors   [versionCount]map[string]*atomic.Uint64
-	// lastFlowUnixNano is when the last datagram decoded successfully, which
-	// is the freshness signal a silent device is detected by.
+	// lastFlowUnixNano is when the last flow record decoded, which is the
+	// freshness signal a device that stopped exporting is detected by. A
+	// datagram that decodes into no record leaves it where it stood: sFlow
+	// counter polling alone would otherwise hold a stopped sampler fresh.
 	lastFlowUnixNano atomic.Int64
 	// lastSeenUnixNano is when a datagram last named this device at all,
 	// which the idle sweep reads. It is not lastFlowUnixNano: a device whose
@@ -56,7 +58,9 @@ func (e *ExporterStats) countFlows(version flow.Version, records int, at time.Ti
 		return
 	}
 	e.flows[version].Add(uint64(records)) //nolint:gosec // A record count is never negative.
-	e.lastFlowUnixNano.Store(at.UnixNano())
+	if records > 0 {
+		e.lastFlowUnixNano.Store(at.UnixNano())
+	}
 }
 
 // countError accounts one rejected flowset, sample or datagram. A nil
@@ -192,8 +196,10 @@ type ExporterSnapshot struct {
 	Exporter netip.Addr
 	Flows    []FlowSnapshot
 	Errors   []ErrorSnapshot
-	// LastFlowUnixNano is zero until a datagram decodes successfully.
+	// LastFlowUnixNano is zero until a flow record decodes.
 	LastFlowUnixNano int64
+	// LastSeenUnixNano is zero until a datagram names the device at all.
+	LastSeenUnixNano int64
 }
 
 // Snapshot returns every known exporter's counters. Only versions and reasons
@@ -215,6 +221,7 @@ func snapshotExporter(addr netip.Addr, es *ExporterStats) ExporterSnapshot {
 	snap := ExporterSnapshot{
 		Exporter:         addr,
 		LastFlowUnixNano: es.lastFlowUnixNano.Load(),
+		LastSeenUnixNano: es.lastSeenUnixNano.Load(),
 	}
 
 	for v := range versionCount {
