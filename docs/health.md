@@ -147,7 +147,7 @@ all three carry `exporter_address`, `version` and `odid` together. A domain is t
 - `xflow_templates` is absent on an sFlow, v5 or v8 domain, none of which holds a template, and the sampler counters are absent on the protocols that hold no sampler.
 - `xflow_sequence_missed_total` counts what each sequence number counts, packets on v9 and sFlow and records on v5, v8 and IPFIX, so one lost record-numbered message adds every record it carried. A v5 or v8 domain exists to be tracked here.
 - A message overtaken in flight is counted when the one past it arrives, and the counter cannot refund it once the late one lands. A device exporting from more than one switching engine rebases instead, so its loss goes uncounted rather than fabricated.
-- A v5 or v8 datagram refused a domain still decodes, its records needing none, so only its sequence goes untracked. The protocols that reach their records through a template discard it instead.
+- A v5 or v8 datagram refused a domain still decodes, its records needing none, so only its sequence goes untracked. v9, IPFIX and sFlow discard it, their records reaching this decoder through the domain's own state.
 - A rise here is loss or reordering on the wire rather than a race between the decoders — [Push and pull](README.md#push-and-pull) carries why one worker holds each device.
 
 **`xflow_sampler_rate`**
