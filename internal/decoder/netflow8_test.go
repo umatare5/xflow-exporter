@@ -66,7 +66,7 @@ func baseV8Want() flow.Record {
 // decodeV8 reads one datagram through a decoder of its own, so a parse test
 // reads the record rather than the domain a shared decoder carries forward.
 func decodeV8(payload []byte) ([]flow.Record, *decodeError) {
-	return newTestDecoder().decodeNetFlowV8(testExporter, payload, nil, func(string) {})
+	return newTestDecoder().decodeNetFlowV8(testExporter, payload, nil)
 }
 
 func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
@@ -511,12 +511,11 @@ func BenchmarkDecodeNetFlowV8(b *testing.B) {
 	}
 	records := make([]flow.Record, 0, 51)
 	d := newTestDecoder()
-	noIssue := func(string) {}
 
 	b.ReportAllocs()
 	for b.Loop() {
 		var err *decodeError
-		records, err = d.decodeNetFlowV8(testExporter, payload, records[:0], noIssue)
+		records, err = d.decodeNetFlowV8(testExporter, payload, records[:0])
 		if err != nil {
 			b.Fatal(err)
 		}

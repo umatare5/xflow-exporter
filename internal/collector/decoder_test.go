@@ -301,7 +301,7 @@ func TestDecoderCollector_ReportsRefusedVendorStrings(t *testing.T) {
 	c := NewDecoderCollector(d)
 
 	expected := `
-# HELP xflow_domains_refused_total Datagrams discarded since process start, the exporter being at its observation domain budget
+# HELP xflow_domains_refused_total Datagrams refused an observation domain since process start, discarded where decoding needs one
 # TYPE xflow_domains_refused_total counter
 xflow_domains_refused_total 0
 # HELP xflow_vendor_strings_refused_total Vendor string fields refused since process start, counted per occurrence rather than per string
@@ -346,7 +346,7 @@ func TestDecoderCollector_RefusalCountersDoNotCross(t *testing.T) {
 	})
 
 	expected := `
-# HELP xflow_domains_refused_total Datagrams discarded since process start, the exporter being at its observation domain budget
+# HELP xflow_domains_refused_total Datagrams refused an observation domain since process start, discarded where decoding needs one
 # TYPE xflow_domains_refused_total counter
 xflow_domains_refused_total 3
 # HELP xflow_vendor_strings_refused_total Vendor string fields refused since process start, counted per occurrence rather than per string

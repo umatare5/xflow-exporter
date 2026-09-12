@@ -115,7 +115,7 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		),
 		domainsRefusedDesc: prometheus.NewDesc(
 			"xflow_domains_refused_total",
-			"Datagrams discarded since process start, the exporter being at its observation domain budget",
+			"Datagrams refused an observation domain since process start, discarded where decoding needs one",
 			nil, nil,
 		),
 		stringsRefusedDesc: prometheus.NewDesc(

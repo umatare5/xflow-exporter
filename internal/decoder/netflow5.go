@@ -29,7 +29,7 @@ const (
 // exporters pad the datagram, and the record count is the authoritative
 // length. A count the payload cannot hold is malformed, not padding.
 func (d *Decoder) decodeNetFlowV5(
-	exporter netip.Addr, payload []byte, dst []flow.Record, issue func(reason string),
+	exporter netip.Addr, payload []byte, dst []flow.Record,
 ) ([]flow.Record, *decodeError) {
 	if len(payload) < netflowV5HeaderLen {
 		return dst, malformed("v5 header needs %d bytes, datagram has %d", netflowV5HeaderLen, len(payload))
@@ -45,13 +45,12 @@ func (d *Decoder) decodeNetFlowV5(
 	}
 
 	// A v5 export carries no domain field, so the device is its own domain.
-	domain := d.templates.domain(domainKey{exporter: exporter, proto: flow.VersionNetFlowV5})
-	if domain == nil {
-		issue(ReasonDomainLimit)
-		return dst, nil
+	// The records parse without one, so a device at its domain budget loses
+	// the sequence rather than the traffic the datagram carries.
+	if domain := d.templates.domain(domainKey{exporter: exporter, proto: flow.VersionNetFlowV5}); domain != nil {
+		domain.trackRecordSequence(binary.BigEndian.Uint32(payload[16:20]), uint32(count),
+			binary.BigEndian.Uint16(payload[20:22]), true)
 	}
-	domain.trackRecordSequence(binary.BigEndian.Uint32(payload[16:20]), uint32(count),
-		binary.BigEndian.Uint16(payload[20:22]), true)
 
 	sysUptimeMs := binary.BigEndian.Uint32(payload[4:8])
 	exportSecs := binary.BigEndian.Uint32(payload[8:12])

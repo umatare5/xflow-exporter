@@ -55,7 +55,7 @@ var netflowV8Schemes = map[uint8]netflowV8Scheme{
 // decodeNetFlowV8 parses one v8 datagram and appends its records to dst.
 // Trailing bytes past the claimed records are tolerated as padding, like v5.
 func (d *Decoder) decodeNetFlowV8(
-	exporter netip.Addr, payload []byte, dst []flow.Record, issue func(reason string),
+	exporter netip.Addr, payload []byte, dst []flow.Record,
 ) ([]flow.Record, *decodeError) {
 	if len(payload) < netflowV8HeaderLen {
 		return dst, malformed("v8 header needs %d bytes, datagram has %d", netflowV8HeaderLen, len(payload))
@@ -84,16 +84,14 @@ func (d *Decoder) decodeNetFlowV8(
 	}
 
 	// Each aggregation cache numbers its own sequence, and the method is the
-	// domain this exporter keys those readings by.
-	domain := d.templates.domain(domainKey{
+	// domain this exporter keys those readings by. The records parse without
+	// one, so a device at its domain budget loses the sequence alone.
+	if domain := d.templates.domain(domainKey{
 		exporter: exporter, odid: uint32(aggregation), proto: flow.VersionNetFlowV8,
-	})
-	if domain == nil {
-		issue(ReasonDomainLimit)
-		return dst, nil
+	}); domain != nil {
+		domain.trackRecordSequence(binary.BigEndian.Uint32(payload[16:20]), uint32(count),
+			binary.BigEndian.Uint16(payload[20:22]), true)
 	}
-	domain.trackRecordSequence(binary.BigEndian.Uint32(payload[16:20]), uint32(count),
-		binary.BigEndian.Uint16(payload[20:22]), true)
 
 	sysUptimeMs := binary.BigEndian.Uint32(payload[4:8])
 	exportSecs := binary.BigEndian.Uint32(payload[8:12])
