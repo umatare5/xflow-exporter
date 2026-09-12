@@ -64,7 +64,7 @@ the observation domain inside one exporter and protocol.
 
 **`sampler`**
 
-the samplerId a device named in its options table, which its data records name to say which sampler measured them.
+the samplerId a device named in its options table, which its data records name to say which sampler measured them. The identifier is read as unique within the device, which is how IOS-XE assigns it and what the System scope implies.
 
 **`type`**
 
@@ -142,7 +142,7 @@ all three carry `exporter_address`, `version` and `odid` together. A domain is t
 
 - Dropping `version` from the triple would hand two domains one label set, and a registry refuses to gather a duplicate, so the whole scrape would fail rather than one domain's series.
 - `xflow_sampling_rate` reads a v9 or IPFIX options declaration alone. An sFlow device carries its rate on the samples themselves, and what its correction is worth reads from the pair below.
-- An options record scoped on the System describes the device, so a domain that declared none inherits the one rate the device agrees on. A device declaring several leaves every domain it did not itself reach absent rather than correcting by one of them.
+- An options record scoped on the System describes the device, so a sampler it names measures records in every domain rather than in the one that carried the announcement. A domain's own rate is the one it declared without naming a sampler, and a device declaring several leaves the rest absent rather than correcting by one of them.
 - `xflow_templates` is absent on an sFlow domain, which holds no template, and the sampler counters are absent on the protocols that hold no sampler.
 - `xflow_sequence_missed_total` counts what each sequence number counts, packets on v9 and sFlow and data records on IPFIX, so one lost IPFIX message adds every record it carried.
 - A rise here is loss or reordering on the wire rather than a race between the decoders — [Push and pull](README.md#push-and-pull) carries why one worker holds each device.
@@ -154,13 +154,14 @@ carries each rate a device declared against the samplerId its data records name,
 - A domain of several samplers has no single rate in force, so `xflow_sampling_rate` is absent there while the corrections still apply. Reading one family without the other reports a correction no series accounts for.
 - `count by (exporter_address, version) (count_values by (exporter_address, version) ("rate", (xflow_sampling_rate or xflow_sampler_rate))) > 1` is every device declaring more than one rate.
 - A record naming a sampler the device has not announced yet takes its domain's rate: options arrive on the device's own timer, so what is missing is the announcement rather than the rate.
+- A record naming none on a device declaring several carries no rate and is published uncorrected, which the expression below is what finds.
+- A declaration the device stops announcing is dropped on the template TTL, so a renumbered sampler stops reading as a second rate rather than holding the device at none.
 
 This returns every domain carrying data that no rate reached, on a device that samples:
 
 ```promql
 (xflow_templates{type="template"} > 0)
   unless on (exporter_address, version, odid) xflow_sampling_rate
-  unless on (exporter_address, version, odid) (xflow_templates{type="options_template"} > 0)
   and on (exporter_address, version) (
     count by (exporter_address, version) ((xflow_sampling_rate or xflow_sampler_rate)) > 0
   )

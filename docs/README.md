@@ -106,7 +106,7 @@ Every map keyed by wire data carries a bound, a push protocol not choosing its s
 - **Announced applications** — the bound is ten times the 1500 an NBAR2 pack names.
 - **Refusal counters** — the five `_refused_total` series count attempts, not entities.
 - **Fallback** — a refused vendor string leaves the record numbered, or with no name.
-- **Sweeps** — idle domains go on the template TTL, idle devices only at the budget.
+- **Sweeps** — idle domains and unannounced sampler declarations go on the template TTL, idle devices only at the budget.
 - **Source-address keyed** — the application tables and the histograms carry no budget, so who may reach the receiver port is their bound — [`SECURITY.md`](../SECURITY.md) carries the filter.
 
 > [!NOTE]

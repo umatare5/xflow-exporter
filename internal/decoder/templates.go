@@ -95,13 +95,22 @@ type samplerKey struct {
 	proto    flow.Version
 }
 
+// samplerEntry is one declaration and when it was last announced. A device
+// re-sends its options on its own timer, so an entry it stops announcing is
+// one whose sampler is gone: holding it would keep a device that renumbered
+// its samplers reading as one declaring two rates.
+type samplerEntry struct {
+	rate     uint32
+	lastSeen int64
+}
+
 // samplerTable holds one device's sampling declarations for one protocol.
 // rates is keyed by the samplerId (IE 48) a data record names; plain holds
 // the rate a domain declared without naming one, keyed by that domain.
 type samplerTable struct {
 	mu    sync.RWMutex
-	rates map[uint32]uint32
-	plain map[uint32]uint32
+	rates map[uint32]samplerEntry
+	plain map[uint32]samplerEntry
 	// inherited is the one rate every declaration on this device agrees on,
 	// and zero where they carry more than one. A record whose own domain
 	// declared nothing takes it rather than a rate the device never tied
@@ -112,7 +121,7 @@ type samplerTable struct {
 // declare records one announcement, reporting false where the device is at
 // its budget. A refusal leaves the table as it stood: evicting an entry the
 // records still name would correct them by another sampler's rate.
-func (t *samplerTable) declare(odid, samplerID uint32, named bool, rate uint32) bool {
+func (t *samplerTable) declare(odid, samplerID uint32, named bool, rate uint32, at int64) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -125,20 +134,26 @@ func (t *samplerTable) declare(odid, samplerID uint32, named bool, rate uint32) 
 			return false
 		}
 		if *target == nil {
-			*target = make(map[uint32]uint32)
+			*target = make(map[uint32]samplerEntry)
 		}
 	}
-	(*target)[key] = rate
+	(*target)[key] = samplerEntry{rate: rate, lastSeen: at}
 	t.inherited.Store(soleRate(t.rates, t.plain))
 	return true
 }
 
-// forget drops one domain's unnamed declaration as that domain is evicted.
-func (t *samplerTable) forget(odid uint32) {
+// expire drops every declaration the device stopped announcing before cutoff.
+func (t *samplerTable) expire(cutoff int64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	delete(t.plain, odid)
+	for _, set := range []map[uint32]samplerEntry{t.rates, t.plain} {
+		for key, entry := range set {
+			if entry.lastSeen < cutoff {
+				delete(set, key)
+			}
+		}
+	}
 	t.inherited.Store(soleRate(t.rates, t.plain))
 }
 
@@ -146,21 +161,29 @@ func (t *samplerTable) rateFor(samplerID uint32) (uint32, bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	rate, ok := t.rates[samplerID]
-	return rate, ok
+	entry, ok := t.rates[samplerID]
+	return entry.rate, ok
+}
+
+// plainRate returns what one domain declared without naming a sampler.
+func (t *samplerTable) plainRate(odid uint32) uint32 {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	return t.plain[odid].rate
 }
 
 // soleRate returns the one rate every declaration agrees on, and zero where
 // they carry none or more than one. Zero is never stored, so it doubles as
 // the absent value.
-func soleRate(sets ...map[uint32]uint32) uint32 {
+func soleRate(sets ...map[uint32]samplerEntry) uint32 {
 	var sole uint32
 	for _, set := range sets {
-		for _, rate := range set {
-			if sole != 0 && rate != sole {
+		for _, entry := range set {
+			if sole != 0 && entry.rate != sole {
 				return 0
 			}
-			sole = rate
+			sole = entry.rate
 		}
 	}
 	return sole
@@ -334,25 +357,30 @@ func (s *templateStore) sweepDomains(cutoff int64) int {
 		}
 
 		delete(s.domains, key)
-		d.declared.forget(key.odid)
 		s.perExporter[key.exporter]--
 		if s.perExporter[key.exporter] <= 0 {
 			delete(s.perExporter, key.exporter)
 		}
 		evicted++
 	}
-	if evicted > 0 {
-		s.sweepSamplerTablesLocked()
-	}
+	s.sweepSamplerTablesLocked(cutoff)
 	return evicted
 }
 
-// sweepSamplerTablesLocked drops every table no live domain still holds. The
-// store lock is held by the caller.
-func (s *templateStore) sweepSamplerTablesLocked() {
+// sweepSamplerTablesLocked drops every declaration the device stopped
+// announcing, then restates what each surviving domain declared for itself.
+// A table is freed only once no domain holds it: the domains share the
+// pointer, so freeing one still referenced would take later declarations
+// somewhere no scrape reads. The store lock is held by the caller.
+func (s *templateStore) sweepSamplerTablesLocked(cutoff int64) {
+	for _, table := range s.samplerTables {
+		table.expire(cutoff)
+	}
+
 	live := make(map[samplerKey]struct{}, len(s.domains))
-	for key := range s.domains {
+	for key, d := range s.domains {
 		live[samplerKey{exporter: key.exporter, proto: key.proto}] = struct{}{}
+		d.samplingRate.Store(d.declared.plainRate(key.odid))
 	}
 	for key := range s.samplerTables {
 		if _, held := live[key]; !held {
@@ -364,7 +392,7 @@ func (s *templateStore) sweepSamplerTablesLocked() {
 // declareSampler records one options announcement onto the device's table,
 // counting a refusal where the table is at its budget.
 func (s *templateStore) declareSampler(d *domainState, odid, samplerID uint32, named bool, rate uint32) {
-	if !d.declared.declare(odid, samplerID, named, rate) {
+	if !d.declared.declare(odid, samplerID, named, rate, d.lastSeen.Load()) {
 		s.declarationsRefused.Add(1)
 	}
 }
@@ -671,12 +699,12 @@ func (s *templateStore) samplerSnapshot() []SamplerSnapshot {
 	snapshots := make([]SamplerSnapshot, 0, len(s.samplerTables))
 	for key, table := range s.samplerTables {
 		table.mu.RLock()
-		for sampler, rate := range table.rates {
+		for sampler, entry := range table.rates {
 			snapshots = append(snapshots, SamplerSnapshot{
 				Exporter: key.exporter,
 				Version:  key.proto,
 				Sampler:  sampler,
-				Rate:     rate,
+				Rate:     entry.rate,
 			})
 		}
 		table.mu.RUnlock()

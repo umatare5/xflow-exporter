@@ -3,7 +3,9 @@ package decoder
 import (
 	"encoding/binary"
 	"testing"
+	"time"
 
+	"github.com/umatare5/xflow-exporter/internal/config"
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
@@ -246,5 +248,86 @@ func TestSamplingRate_RefusesADeclarationPastTheBudget(t *testing.T) {
 	}
 	if got := len(d.Samplers()); got != maxSamplersPerExporter {
 		t.Errorf("Samplers() = %d, want the budget", got)
+	}
+}
+
+// TestSamplingRate_DropsADeclarationTheDeviceStoppedAnnouncing pins the table
+// to what the device still announces. A sampler deleted and recreated carries
+// a new id, so holding the old entry leaves the device reading as one
+// declaring two rates: every record naming neither would go uncorrected for
+// as long as the process ran.
+func TestSamplingRate_DropsADeclarationTheDeviceStoppedAnnouncing(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	at := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+	d.now = func() time.Time { return at }
+	d.templates.now = func() time.Time { return at }
+
+	decodeSampling(t, d, samplingDeclaration(1, true, [2]uint32{1, 32}))
+	decodeSampling(t, d, v9Packet(2, samplingODID, samplingTemplate(false)))
+
+	read := func(sequence uint32) uint32 {
+		records := decodeSampling(t, d, v9Packet(sequence, samplingODID,
+			flowSet(samplingTemplateID, samplingRecord(0, false))))
+		return records[0].SamplingRate
+	}
+	if got := read(3); got != 32 {
+		t.Fatalf("SamplingRate = %d, want 32 from the only declaration", got)
+	}
+
+	// The device renumbers its sampler, and keeps announcing the new one.
+	at = at.Add(config.DefaultParserTemplateTTL + time.Minute)
+	decodeSampling(t, d, samplingDeclaration(1, true, [2]uint32{2, 64}))
+	decodeSampling(t, d, v9Packet(5, samplingODID, samplingTemplate(false)))
+	if got := read(6); got != 0 {
+		t.Errorf("SamplingRate = %d, want 0 while both declarations stand", got)
+	}
+
+	d.SweepDomains()
+	if got := read(7); got != 64 {
+		t.Errorf("SamplingRate = %d, want 64 once the abandoned entry went", got)
+	}
+	if got := domainRate(d, samplingODID); got != 64 {
+		t.Errorf("xflow_sampling_rate = %d, want 64", got)
+	}
+	if got := len(d.Samplers()); got != 1 {
+		t.Errorf("Samplers() = %d, want the one the device still announces", got)
+	}
+}
+
+// TestSamplingRate_ClearsARateTheDeviceStoppedDeclaring pins the same rule on
+// a declaration that named no sampler. The domain holds that rate for the
+// record path, so a device that stops announcing one would otherwise keep
+// correcting by it for as long as the process ran.
+func TestSamplingRate_ClearsARateTheDeviceStoppedDeclaring(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	at := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+	d.now = func() time.Time { return at }
+	d.templates.now = func() time.Time { return at }
+
+	decodeSampling(t, d, samplingDeclaration(1, false, [2]uint32{0, 128}))
+	decodeSampling(t, d, v9Packet(2, samplingODID, samplingTemplate(false)))
+
+	read := func(sequence uint32) uint32 {
+		records := decodeSampling(t, d, v9Packet(sequence, samplingODID,
+			flowSet(samplingTemplateID, samplingRecord(0, false))))
+		return records[0].SamplingRate
+	}
+	if got := read(3); got != 128 {
+		t.Fatalf("SamplingRate = %d, want 128 from the domain's own declaration", got)
+	}
+
+	at = at.Add(config.DefaultParserTemplateTTL + time.Minute)
+	decodeSampling(t, d, v9Packet(4, samplingODID, samplingTemplate(false)))
+	d.SweepDomains()
+
+	if got := read(5); got != 0 {
+		t.Errorf("SamplingRate = %d, want 0 once the declaration went", got)
+	}
+	if got := domainRate(d, samplingODID); got != 0 {
+		t.Errorf("xflow_sampling_rate = %d, want none", got)
 	}
 }
