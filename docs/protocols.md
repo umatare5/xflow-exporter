@@ -2,13 +2,13 @@
 
 Every listener accepts every protocol below, told apart per datagram, over plaintext UDP.
 
-| Protocol                                                | Status    | Verified on                               |
-| :------------------------------------------------------ | :-------- | :---------------------------------------- |
-| [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Cisco C891FJ-K9                           |
-| [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Cisco C891FJ-K9                           |
-| [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Cisco WS-C2960CX-8PC-L, Cisco C9800-CL-K9 |
-| [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Cisco C9800-CL-K9                         |
-| [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G                                |
+| Protocol                                                | Status    | Verified on                                                |
+| :------------------------------------------------------ | :-------- | :--------------------------------------------------------- |
+| [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Cisco C891FJ-K9                                            |
+| [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Cisco C891FJ-K9                                            |
+| [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Cisco WS-C2960CX-8PC-L, Cisco C891FJ-K9, Cisco C9800-CL-K9 |
+| [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Cisco C9800-CL-K9                                          |
+| [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G                                                 |
 
 - **Cisco WS-C2960CX-8PC-L** — a Catalyst 2960-CX on `C2960CX-UNIVERSALK9-M` 15.2(7)E3, the one device here declaring a sampler, exporting v9 under a custom record that parses a 5-tuple and an input `ifIndex`.
 - **Cisco C891FJ-K9** — an ISR 890 on IOS 15.9(3)M13, exporting its main cache as v5, ten aggregation caches as v8 and an eleventh as v9.
