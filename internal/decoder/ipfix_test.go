@@ -379,6 +379,7 @@ func TestDecodeIPFIX_TemplateThenData(t *testing.T) {
 	want := flow.Record{
 		Exporter:      testExporter,
 		Version:       flow.VersionIPFIX,
+		ODID:          fixtureIPFIXODID,
 		SrcAddr:       netip.MustParseAddr("2001:db8::1"),
 		DstAddr:       netip.MustParseAddr("2001:db8::2"),
 		SrcPort:       51234,

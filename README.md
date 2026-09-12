@@ -75,7 +75,7 @@ Each collector is off by default and enabled by its own `--collector.<name>` fla
 
 | Collector                   | Publishes                                                     |
 | :-------------------------- | :------------------------------------------------------------ |
-| `--collector.exporters`     | Per-device traffic by `exporter_address` and `version`        |
+| `--collector.exporters`     | Traffic per observation domain of a device                    |
 | `--collector.hosts`         | Traffic per source-destination address pair                   |
 | `--collector.services`      | Traffic per address pair, protocol and port                   |
 | `--collector.destinations`  | Traffic per destination address, protocol and port            |
@@ -124,7 +124,7 @@ The series a dashboard usually starts from:
 
 | Collector       | Metric                          | Type      | Description            |
 | :-------------- | :------------------------------ | :-------- | :--------------------- |
-| `exporters`     | `xflow_exporter_bytes_total`    | Counter   | Traffic per device     |
+| `exporters`     | `xflow_exporter_bytes_total`    | Counter   | Traffic per domain     |
 | `hosts`         | `xflow_host_pair_bytes_total`   | Counter   | Top talkers            |
 | `services`      | `xflow_service_bytes_total`     | Counter   | Top conversations      |
 | `applications`  | `xflow_application_bytes_total` | Counter   | Traffic by application |

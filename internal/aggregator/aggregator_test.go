@@ -113,11 +113,11 @@ func TestAggregator_AbsentDimensionsFeedNoTable(t *testing.T) {
 
 	a := New(testConfig(), allModules())
 
-	// A NetFlow v8 AS aggregate: counters and AS numbers, no addresses, no
-	// protocol, no application.
+	// A template collecting the AS pair and its counters alone: no addresses,
+	// no protocol, no application.
 	a.Ingest([]flow.Record{{
 		Exporter: testExporter,
-		Version:  flow.VersionNetFlowV8,
+		Version:  flow.VersionNetFlowV9,
 		Bytes:    500,
 		Packets:  5,
 		Flows:    3,
@@ -138,8 +138,62 @@ func TestAggregator_AbsentDimensionsFeedNoTable(t *testing.T) {
 		t.Errorf("ASNs() = %+v, want the one dimension the record carried", asns)
 	}
 	if exporters, _ := a.Exporters(); len(exporters) != 1 || exporters[0].Flows != 3 {
-		t.Errorf("Exporters() = %+v, want the aggregate flow count kept", exporters)
+		t.Errorf("Exporters() = %+v, want the flow count kept", exporters)
 	}
+}
+
+// TestAggregator_AnAggregateFeedsItsDomainAlone pins the v8 gate. A device
+// running ten aggregation caches hands the same traffic over ten times, so a
+// derived table fed from them counts one flow once per cache while the domain
+// they arrived in still separates the readings.
+func TestAggregator_AnAggregateFeedsItsDomainAlone(t *testing.T) {
+	t.Parallel()
+
+	// Every table, which allModules leaves short of: the aggregate carries a
+	// TOS byte and a TCP flag set as well as the dimensions above.
+	a := New(testConfig(), Modules{
+		Exporters: true, Hosts: true, Services: true, Destinations: true,
+		TCPFlags: true, DSCP: true, ASNs: true, Applications: true,
+		Countries: true, Threats: true,
+	})
+
+	a.Ingest([]flow.Record{{
+		Exporter:         testExporter,
+		Version:          flow.VersionNetFlowV8,
+		ODID:             5,
+		SrcAddr:          netip.MustParseAddr("10.0.0.0"),
+		DstAddr:          netip.MustParseAddr("10.0.1.0"),
+		Protocol:         6,
+		DstPort:          443,
+		TOSReported:      true,
+		TCPFlags:         2,
+		TCPFlagsReported: true,
+		SrcAS:            64500,
+		Bytes:            500,
+		Packets:          5,
+		Flows:            3,
+	}})
+
+	for name, entries := range map[string]int{
+		"hosts": lengthOf(a.Hosts()), "services": lengthOf(a.Services()),
+		"destinations": lengthOf(a.Destinations()), "dscp": lengthOf(a.DSCP()),
+		"asns": lengthOf(a.ASNs()), "tcp_flags": lengthOf(a.TCPFlags()),
+	} {
+		if entries != 0 {
+			t.Errorf("%s = %d entries, want none from an aggregate", name, entries)
+		}
+	}
+
+	exporters, _ := a.Exporters()
+	if len(exporters) != 1 || exporters[0].Key.ODID != 5 || exporters[0].Flows != 3 {
+		t.Errorf("Exporters() = %+v, want the aggregate kept under its own method", exporters)
+	}
+}
+
+// lengthOf drops the overflow totals a table snapshot returns beside its
+// entries, which these assertions do not read.
+func lengthOf[K comparable](entries []EntrySnapshot[K], _ Totals) int {
+	return len(entries)
 }
 
 func TestAggregator_NumberedApplicationFallback(t *testing.T) {

@@ -102,6 +102,10 @@ func (d *Decoder) decodeSFlowV5(
 	domain.samplersMu.Lock()
 	defer domain.samplersMu.Unlock()
 
+	// Every sample in the datagram names the one sub-agent its header did, so
+	// the domain is stamped once rather than threaded through each reader.
+	before := len(dst)
+
 	for range numSamples {
 		sampleType, okType := r.uint32()
 		sampleLen, okLen := r.uint32()
@@ -114,6 +118,10 @@ func (d *Decoder) decodeSFlowV5(
 		}
 
 		dst = d.decodeSFlowSample(exporter, domain, sampleType, sample, dst, issue)
+	}
+
+	for i := before; i < len(dst); i++ {
+		dst[i].ODID = subAgentID
 	}
 
 	return dst, nil

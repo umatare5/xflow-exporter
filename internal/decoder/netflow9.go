@@ -347,6 +347,7 @@ func (d *Decoder) appendV9Record(
 	dst = append(dst, flow.Record{
 		Exporter: key.exporter,
 		Version:  flow.VersionNetFlowV9,
+		ODID:     key.odid,
 		Flows:    1,
 	})
 	r := &dst[len(dst)-1]

@@ -93,7 +93,9 @@ func decodeNetFlowV8(exporter netip.Addr, payload []byte, dst []flow.Record) ([]
 		// The record is appended first and filled in place: filling a local
 		// and appending it would escape one allocation per record through the
 		// indirect scheme.read call.
-		dst = append(dst, flow.Record{Exporter: exporter, Version: flow.VersionNetFlowV8})
+		dst = append(dst, flow.Record{
+			Exporter: exporter, Version: flow.VersionNetFlowV8, ODID: uint32(aggregation),
+		})
 		normalized := &dst[len(dst)-1]
 		scheme.read(record, normalized)
 		anchorV8Times(record, normalized, bootTime, aggregation)

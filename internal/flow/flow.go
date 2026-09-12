@@ -53,6 +53,12 @@ type Record struct {
 	Exporter netip.Addr
 	// Version is the wire protocol that carried the record.
 	Version Version
+	// ODID is the observation domain the record arrived in: the Source ID on
+	// v9, the Observation Domain ID on IPFIX, the sub-agent id on sFlow and
+	// the aggregation method on v8, each keeping its own templates and
+	// sequence space. A v5 export runs one cache and reports zero, which is
+	// also what an sFlow agent numbering one sub-agent reports.
+	ODID uint32
 
 	SrcAddr netip.Addr
 	DstAddr netip.Addr
@@ -129,6 +135,14 @@ type Record struct {
 	// enabled and knew the address.
 	SrcCountry string
 	DstCountry string
+}
+
+// Aggregated reports a record the device folded from several flows before
+// exporting it. A NetFlow v8 cache re-reports what the main cache already
+// counted under one method's dimensions, so a device running ten of them
+// hands the same bytes over ten times.
+func (r *Record) Aggregated() bool {
+	return r.Version == VersionNetFlowV8
 }
 
 // Duration returns the flow duration, and false when the record did not carry

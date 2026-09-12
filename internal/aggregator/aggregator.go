@@ -36,10 +36,13 @@ func (m Modules) Any() bool {
 
 // Table keys. Label values are derived from these at scrape time.
 
-// ExporterKey keys the per-device aggregation.
+// ExporterKey keys the per-observation-domain aggregation. A device running
+// several caches reports the same traffic once per cache, so the domain is
+// what separates two readings from two flows.
 type ExporterKey struct {
 	Exporter netip.Addr
 	Version  flow.Version
+	ODID     uint32
 }
 
 // HostKey keys the address-pair aggregation. The interfaces the flow
@@ -223,8 +226,15 @@ func (a *Aggregator) Ingest(records []flow.Record) {
 // aggregation rather than keyed by fabricated zeros.
 func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64) {
 	if a.exporters != nil {
-		a.exporters.add(ExporterKey{Exporter: r.Exporter, Version: r.Version},
+		a.exporters.add(ExporterKey{Exporter: r.Exporter, Version: r.Version, ODID: r.ODID},
 			bytes, packets, r.Flows, now)
+	}
+
+	// An aggregate is the device's own re-reading of traffic its main cache
+	// already reported, so it counts once against the domain that carried it
+	// and reaches no table keyed by a dimension the method chose.
+	if r.Aggregated() {
+		return
 	}
 
 	if a.hosts != nil && r.SrcAddr.IsValid() && r.DstAddr.IsValid() {

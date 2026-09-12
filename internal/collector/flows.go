@@ -152,8 +152,8 @@ func NewFlowCollector(
 	}
 
 	if modules.Exporters {
-		c.exporters = newFamilyDescs("xflow_exporter", "exporter and version",
-			[]string{labelExporter, labelVersion})
+		c.exporters = newFamilyDescs("xflow_exporter", "observation domain",
+			[]string{labelExporter, labelVersion, labelODID})
 	}
 	if modules.Hosts {
 		c.hosts = newFamilyDescs("xflow_host_pair", "source-destination pair",
@@ -382,9 +382,10 @@ func (c *FlowCollector) collectNames(
 func (c *FlowCollector) collectExporters(ch chan<- prometheus.Metric) {
 	entries, overflow := c.src.Exporters()
 	for _, e := range entries {
-		c.exporters.emit(ch, e.Totals, e.Key.Exporter.String(), e.Key.Version.String())
+		c.exporters.emit(ch, e.Totals, e.Key.Exporter.String(), e.Key.Version.String(),
+			strconv.FormatUint(uint64(e.Key.ODID), 10))
 	}
-	c.exporters.emit(ch, overflow, otherLabel, otherLabel)
+	c.exporters.emit(ch, overflow, otherLabel, otherLabel, otherLabel)
 }
 
 // collectFamily publishes one folded table: the Top-K entries at or above the

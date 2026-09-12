@@ -15,13 +15,13 @@ tests:
   # ones.
   - interval: 1m
     input_series:
-      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9"}'
+      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",odid="1",version="netflow_v9"}'
         values: "0+60000x10"
-      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="ipfix"}'
+      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",odid="1",version="ipfix"}'
         values: "0+30000x10"
-      - series: 'xflow_exporter_packets_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9"}'
+      - series: 'xflow_exporter_packets_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",odid="1",version="netflow_v9"}'
         values: "0+60x10"
-      - series: 'xflow_exporter_packets_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="ipfix"}'
+      - series: 'xflow_exporter_packets_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",odid="1",version="ipfix"}'
         values: "0+30x10"
     promql_expr_test:
       - expr: exporter:xflow_exporter_bytes:rate5m
@@ -35,14 +35,32 @@ tests:
           - labels: 'exporter:xflow_exporter_bytes_per_packet:ratio5m{exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
             value: 1000
 
+  # A device running three aggregation caches reports the same traffic once
+  # per cache, so the baseline reads three times the truth. Folding odid is
+  # what keeps one series per device, not what makes the total right.
+  - interval: 1m
+    input_series:
+      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.2",odid="1",version="netflow_v8"}'
+        values: "0+60000x10"
+      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.2",odid="2",version="netflow_v8"}'
+        values: "0+60000x10"
+      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.2",odid="3",version="netflow_v8"}'
+        values: "0+60000x10"
+    promql_expr_test:
+      - expr: exporter:xflow_exporter_bytes:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'exporter:xflow_exporter_bytes:rate5m{exporter_address="192.0.2.2", instance="localhost:10053", job="xflow"}'
+            value: 3000
+
   # A device whose packet counter never moves has no mean packet size. The
   # rule withholds the sample rather than recording the NaN a plain division
   # would leave behind.
   - interval: 1m
     input_series:
-      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9"}'
+      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",odid="1",version="netflow_v9"}'
         values: "0+60000x10"
-      - series: 'xflow_exporter_packets_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9"}'
+      - series: 'xflow_exporter_packets_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",odid="1",version="netflow_v9"}'
         values: "0+0x10"
     promql_expr_test:
       - expr: exporter:xflow_exporter_bytes_per_packet:ratio5m
@@ -158,7 +176,7 @@ tests:
         values: "0+60x10"
       - series: 'xflow_destination_packets_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",dst="198.51.100.11",proto="udp",port="53"}'
         values: "0+30x10"
-      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",version="netflow_v9"}'
+      - series: 'xflow_exporter_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",odid="1",version="netflow_v9"}'
         values: "0+120000x10"
     promql_expr_test:
       - expr: exporter_proto_port:xflow_destination_bytes:rate5m

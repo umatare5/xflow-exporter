@@ -393,7 +393,9 @@ func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
 			if len(records) != 1 {
 				t.Fatalf("decodeNetFlowV8() returned %d records, want 1", len(records))
 			}
-			if got, want := records[0], tt.want(); got != want {
+			want := tt.want()
+			want.ODID = uint32(tt.aggregation)
+			if got := records[0]; got != want {
 				t.Errorf("decodeNetFlowV8() record =\n%+v\nwant\n%+v", got, want)
 			}
 		})

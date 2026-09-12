@@ -7,18 +7,20 @@
 # is not folded into other. The 5m windows assume the 60s scrape_interval
 # of prometheus.yml, and a derived rule reads only its own group.
 groups:
-  # The per-device family takes neither the Top-K nor the min-bytes cut, so
+  # The per-domain family takes neither the Top-K nor the min-bytes cut, so
   # these three are the one true total and the denominator the rest divide by.
+  # A device running several caches reports one flow once per cache, so these
+  # read high by the number of views it exports.
   - name: xflow-exporter.baseline
     rules:
       - record: exporter:xflow_exporter_bytes:rate5m
-        expr: sum without (version) (rate(xflow_exporter_bytes_total[5m]))
+        expr: sum without (version, odid) (rate(xflow_exporter_bytes_total[5m]))
 
       - record: exporter:xflow_exporter_packets:rate5m
-        expr: sum without (version) (rate(xflow_exporter_packets_total[5m]))
+        expr: sum without (version, odid) (rate(xflow_exporter_packets_total[5m]))
 
       - record: exporter:xflow_exporter_flows:rate5m
-        expr: sum without (version) (rate(xflow_exporter_flows_total[5m]))
+        expr: sum without (version, odid) (rate(xflow_exporter_flows_total[5m]))
 
       # The > 0 guard withholds the ratio where nothing was counted rather
       # than recording a NaN.
@@ -86,7 +88,7 @@ groups:
       - record: exporter:xflow_destination_bytes:ratio5m
         expr: >-
           sum without (proto, port) (exporter_proto_port:xflow_destination_bytes:rate5m)
-          / (sum without (version) (rate(xflow_exporter_bytes_total[5m])) > 0)
+          / (sum without (version, odid) (rate(xflow_exporter_bytes_total[5m])) > 0)
 
   - name: xflow-exporter.tcp-flags
     rules:

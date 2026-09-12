@@ -14,6 +14,7 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#55](https://github.com/umatare5/xflow-exporter/pull/55) — Record the sFlow device the decoder was read against
 - [#56](https://github.com/umatare5/xflow-exporter/pull/56) — Drop the device this decoder never read from the verified table
 - [#57](https://github.com/umatare5/xflow-exporter/pull/57) — Correct a sampled record by the sampler it names
+- [#58](https://github.com/umatare5/xflow-exporter/pull/58) — Key a device's traffic on the observation domain that reported it
 
 ## [v0.9.1]
 
