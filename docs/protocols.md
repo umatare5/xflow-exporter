@@ -2,13 +2,13 @@
 
 Every listener accepts every protocol below, told apart per datagram, over plaintext UDP.
 
-| Protocol                                                | Status    | Verified on                                 |
-| :------------------------------------------------------ | :-------- | :------------------------------------------ |
-| [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Cisco C891FJ-K9                             |
-| [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Cisco C891FJ-K9                             |
-| [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Cisco C9800-CL-K9, Cisco WS-C2960CX-8PC-L   |
-| [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Cisco C9800-CL-K9, Juniper SRX300 (Planned) |
-| [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G, Juniper EX2300-C-12T (Planned)  |
+| Protocol                                                | Status    | Verified on                               |
+| :------------------------------------------------------ | :-------- | :---------------------------------------- |
+| [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Cisco C891FJ-K9                           |
+| [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Cisco C891FJ-K9                           |
+| [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Cisco C9800-CL-K9, Cisco WS-C2960CX-8PC-L |
+| [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Cisco C9800-CL-K9                         |
+| [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G                                |
 
 - **Cisco WS-C2960CX-8PC-L** — a Catalyst 2960-CX on `C2960CX-UNIVERSALK9-M` 15.2(7)E3, the one device here declaring a sampler, exporting v9 under a custom record that parses a 5-tuple and an input `ifIndex`.
 - **Cisco C891FJ-K9** — an ISR 890 on IOS 15.9(3)M13, exporting its main cache as v5, ten aggregation caches as v8 and an eleventh as v9.
@@ -16,7 +16,7 @@ Every listener accepts every protocol below, told apart per datagram, over plain
 - **HP 2530-8G** — a J9777A on `YA.16.11.0030`, sampling one port at 1:50 into compact flow samples that carry up to 128 header bytes and the port's VLAN, and reporting the samples its agent drops.
 
 > [!NOTE]
-> **Verified on** names the vendor and model whose own export this decoder was read against, so synthetic datagrams and unit tests do not count. No verified device exports a section.
+> **Verified on** names the vendor and model whose own export this decoder was read against, so synthetic datagrams and unit tests do not count. Juniper SRX300 (IPFIX) and EX2300-C-12T (sFlow v5) are planned and join it once read. No verified device exports a section.
 
 > [!NOTE]
 > DTLS is unsupported: no network OS ships flows over it, and Go has no production 1.3 stack.

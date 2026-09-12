@@ -60,7 +60,7 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		),
 		errorsDesc: prometheus.NewDesc(
 			"xflow_decode_errors_total",
-			"Datagrams rejected per exporter, version and reason since process start",
+			"Decode rejections per exporter, version and reason since process start",
 			[]string{labelExporter, labelVersion, labelReason}, nil,
 		),
 		lastFlowDesc: prometheus.NewDesc(
@@ -80,12 +80,12 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		),
 		samplePoolDesc: prometheus.NewDesc(
 			"xflow_sample_pool_packets_total",
-			"Packets the sFlow samplers of one domain could have sampled, absent for v9 and IPFIX",
+			"Packets the sFlow samplers of one domain could have sampled, sFlow only",
 			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
 		samplesDroppedDesc: prometheus.NewDesc(
 			"xflow_samples_dropped_total",
-			"Flow samples the sFlow agent of one domain could not send, absent for v9 and IPFIX",
+			"Flow samples the sFlow agent of one domain could not send, sFlow only",
 			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
 		samplersRefusedDesc: prometheus.NewDesc(

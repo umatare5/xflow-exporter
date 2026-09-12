@@ -60,7 +60,7 @@ GLOBAL OPTIONS:
    * Parser Options
 
    --parser.max-fields-per-template int  Most fields one NetFlow v9 or IPFIX template may declare (default: 128)
-   --parser.template-ttl duration        How long an unrefreshed template stays usable (default: 30m0s)
+   --parser.template-ttl duration        How long an unrefreshed template, domain or sampler is held (default: 30m0s)
 
    * Receiver Options
 

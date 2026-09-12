@@ -192,4 +192,5 @@ the first observes only a record that reported a byte count and the second only 
 - Both are native histograms with a bucket factor of 1.1, which keeps a quantile within five percent, one series per `exporter_address` and no other label.
 - Prometheus v3.8+ with `scrape_native_histograms: true` receives them whole — [`examples/prometheus.yml`](../examples/prometheus.yml) sets it. Without the option the scrape negotiates the classic text exposition, which carries a `_count`, a `_sum` and one `+Inf` bucket.
 - sFlow samples and clock-less templates contribute size but no duration, and a record counting its bytes in elements this decoder skips contributes no size.
+- A v8 aggregate is observed by neither: it holds several flows, so its size is not a flow size and its span is not a flow duration.
 - They reach a scrape alone. Remote Write 2.0 sends a histogram as its own message, and reducing one to a single sample would be a value nobody measured — [Remote write](README.md#remote-write) carries what does ship.

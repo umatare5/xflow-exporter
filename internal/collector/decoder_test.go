@@ -93,7 +93,7 @@ func TestDecoderCollector_ReportsOutcomes(t *testing.T) {
 	c := NewDecoderCollector(d)
 
 	expected := `
-# HELP xflow_decode_errors_total Datagrams rejected per exporter, version and reason since process start
+# HELP xflow_decode_errors_total Decode rejections per exporter, version and reason since process start
 # TYPE xflow_decode_errors_total counter
 xflow_decode_errors_total{exporter_address="192.0.2.10",reason="unsupported_version",version="unknown"} 1
 # HELP xflow_flows_total Flow records decoded per exporter and version since process start
@@ -462,10 +462,10 @@ func TestDecoderCollector_SamplerCountersNeedTwoReadings(t *testing.T) {
 	}
 
 	expected := `
-# HELP xflow_sample_pool_packets_total Packets the sFlow samplers of one domain could have sampled, absent for v9 and IPFIX
+# HELP xflow_sample_pool_packets_total Packets the sFlow samplers of one domain could have sampled, sFlow only
 # TYPE xflow_sample_pool_packets_total counter
 xflow_sample_pool_packets_total{exporter_address="192.0.2.30",odid="0",version="sflow_v5"} 500
-# HELP xflow_samples_dropped_total Flow samples the sFlow agent of one domain could not send, absent for v9 and IPFIX
+# HELP xflow_samples_dropped_total Flow samples the sFlow agent of one domain could not send, sFlow only
 # TYPE xflow_samples_dropped_total counter
 xflow_samples_dropped_total{exporter_address="192.0.2.30",odid="0",version="sflow_v5"} 2
 `

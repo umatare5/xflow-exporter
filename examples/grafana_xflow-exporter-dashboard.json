@@ -1355,7 +1355,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "The named application mix as ranked bars rather than near-flat lines. Deliberately not a pie: the tail below the Top-K cut is withheld rather than folded, so a percentage would assert a whole this family does not have. This family carries no address, so attributing an application to a machine means going to the service five-tuple table. Sampled estimate.",
+      "description": "The named application mix as ranked bars rather than near-flat lines. Deliberately not a pie: the tail below the Top-K cut is withheld rather than folded, so a percentage would assert a whole this family does not have. This family carries no address, so attributing an application to a machine means going to the source-destination service table. Sampled estimate.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3359,7 +3359,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Five-tuples an inside host is using now and was not using over the preceding six hours: which machine changed behaviour, stated rather than inferred from a line chart. This is the only panel on the service five-tuple family, which is the single bridge from a host to an application or an AS, neither of which carries an address. Read as not seen recently rather than never seen -- an entry evicted at the entry TTL and recreated surfaces here on its own. Expect noise on a busy LAN.",
+          "description": "Services an inside host is using now and was not using over the preceding six hours: which machine changed behaviour, stated rather than inferred from a line chart. This is the only panel on the source-destination service family, which is the single bridge from a host to an application or an AS, neither of which carries an address. Read as not seen recently rather than never seen -- an entry evicted at the entry TTL and recreated surfaces here on its own. Expect noise on a busy LAN.",
           "fieldConfig": {
             "defaults": {
               "custom": {

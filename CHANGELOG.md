@@ -4,6 +4,8 @@ Notable changes to the metric surface, one section per release, listing the pull
 
 ## [Unreleased]
 
+- [#64](https://github.com/umatare5/xflow-exporter/pull/64) — Describe what each series counts and what the sampling audit returns
+
 ## [v0.10.0]
 
 - [#47](https://github.com/umatare5/xflow-exporter/pull/47) — Split the docs by owner, rename the collector, and fix the rendering

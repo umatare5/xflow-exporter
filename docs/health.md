@@ -157,10 +157,10 @@ carries each rate a device declared against the samplerId its data records name,
 - A domain of several samplers has no single rate in force, so `xflow_sampling_rate` is absent there while the corrections still apply. Reading one family without the other reports a correction no series accounts for.
 - `count by (exporter_address, version) (count_values by (exporter_address, version) ("rate", (xflow_sampling_rate or xflow_sampler_rate))) > 1` is every device declaring more than one rate.
 - A record naming a sampler the device has not announced yet takes its domain's rate: options arrive on the device's own timer, so what is missing is the announcement rather than the rate.
-- A record naming none on a device declaring several carries no rate and is published uncorrected, which the expression below is what finds.
+- A record naming none on a device declaring several carries no rate and is published uncorrected.
 - A declaration the device stops announcing is dropped on the template TTL, so a renumbered sampler stops reading as a second rate rather than holding the device at none.
 
-This returns every domain carrying data that no rate reached, on a device that samples:
+This returns every domain with a data template and no rate in force, on a device that samples, corrected or not:
 
 ```promql
 (xflow_templates{type="template"} > 0)
