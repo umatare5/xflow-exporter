@@ -225,9 +225,9 @@ func (d *Decoder) decodeVersion(
 ) ([]flow.Record, *decodeError) {
 	switch version {
 	case flow.VersionNetFlowV5:
-		return decodeNetFlowV5(exporter, payload, dst)
+		return d.decodeNetFlowV5(exporter, payload, dst)
 	case flow.VersionNetFlowV8:
-		return decodeNetFlowV8(exporter, payload, dst)
+		return d.decodeNetFlowV8(exporter, payload, dst)
 	case flow.VersionNetFlowV9:
 		issue := func(reason string) { es.countError(flow.VersionNetFlowV9, reason) }
 		return d.decodeNetFlowV9(exporter, payload, dst, issue)

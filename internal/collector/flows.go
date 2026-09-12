@@ -53,7 +53,8 @@ func newFamilyDescs(prefix, subject string, labels []string) familyDescs {
 		packets: prometheus.NewDesc(prefix+"_packets_total",
 			"Sampling-corrected packets per "+subject+", other carries the entry-bound fold", labels, nil),
 		flows: prometheus.NewDesc(prefix+"_flows_total",
-			"Flow records as exported per "+subject+", other carries the entry-bound fold", labels, nil),
+			"Flows per "+subject+", one per record except a v8 aggregate's own count, "+
+				"other carries the entry-bound fold", labels, nil),
 	}
 }
 

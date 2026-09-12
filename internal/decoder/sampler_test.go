@@ -223,3 +223,92 @@ func TestTrackSampler_AnAcceptedReadingEndsTheLateRun(t *testing.T) {
 		t.Errorf("sample pool = %d, want 100 measured from the base the late run left alone", got)
 	}
 }
+
+// TestTrackRecordSequence_AnAcceptedMessageEndsTheLateRun pins the reset that
+// keeps the guard working. The run bounds how long a base is held against
+// messages arriving before it, and a run that never restarts spends its bound
+// once and then rewinds on every later overtake.
+func TestTrackRecordSequence_AnAcceptedMessageEndsTheLateRun(t *testing.T) {
+	t.Parallel()
+
+	d := &domainState{}
+
+	// One datagram to take a position from, then rounds of three: one that
+	// skips ahead, the one it overtook arriving late, and one back in order.
+	// Each round names the skipped records once and nothing is ever lost.
+	const records, rounds = 2, maxLateRun + 2
+	base := uint32(100)
+	d.trackRecordSequence(base, records, 0, true)
+
+	for range rounds {
+		base += records
+		d.trackRecordSequence(base+records, records, 0, true) // skips ahead
+		d.trackRecordSequence(base, records, 0, true)         // the overtaken one
+		base += 2 * records
+		d.trackRecordSequence(base, records, 0, true) // back in order
+	}
+
+	if got := d.sequenceMissed.Load(); got != rounds*records {
+		t.Errorf("SequenceMissed = %d, want %d: the skip counted once per round",
+			got, rounds*records)
+	}
+}
+
+// TestTrackRecordSequence_ARebaseStartsTheLateRunOver pins the state a rebase
+// clears. The run belongs to the position it was held against, so carrying it
+// past a new engine's base spends the bound early and rebases a message the
+// guard should still have held.
+func TestTrackRecordSequence_ARebaseStartsTheLateRunOver(t *testing.T) {
+	t.Parallel()
+
+	d := &domainState{}
+
+	// One engine skips ahead and its overtaken messages fill the run, then
+	// another engine repeats the shape. Each skip names its records once.
+	for _, seq := range []uint32{0, 50, 10, 20, 30} {
+		d.trackRecordSequence(seq, 10, 0, true)
+	}
+	for _, seq := range []uint32{900, 880, 890, 910} {
+		d.trackRecordSequence(seq, 10, 1, true)
+	}
+
+	if got := d.sequenceMissed.Load(); got != 40 {
+		t.Errorf("SequenceMissed = %d, want the 40 the first skip named alone", got)
+	}
+}
+
+// TestTrackRecordSequence_TheWindowBoundsWhatReadsAsLate pins where reordering
+// stops and a restart begins. A step back inside the window is a message the
+// base already passed, and one beyond it is a device that resumed from a lower
+// number, which the counter cannot span.
+func TestTrackRecordSequence_TheWindowBoundsWhatReadsAsLate(t *testing.T) {
+	t.Parallel()
+
+	const records, base = 10, 10_000
+
+	// A step past the window rebases onto the late message, so the next in
+	// order reads the step back less the records that message carried.
+	tests := []struct {
+		name string
+		back uint32
+		want uint64
+	}{
+		{name: "the last position inside the window", back: 1024, want: 0},
+		{name: "one past it", back: 1025, want: 1025 - records},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := &domainState{}
+			d.trackRecordSequence(base, records, 0, true)
+			d.trackRecordSequence(base+records-tt.back, records, 0, true)
+			d.trackRecordSequence(base+records, records, 0, true)
+
+			if got := d.sequenceMissed.Load(); got != tt.want {
+				t.Errorf("SequenceMissed = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

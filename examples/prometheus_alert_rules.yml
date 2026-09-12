@@ -73,11 +73,11 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "xflow-exporter is missing export packets from {{ $labels.exporter_address }}"
+          summary: "xflow-exporter is missing exports from {{ $labels.exporter_address }}"
           description: >-
-            The export sequence numbers say packets were lost between the
-            device and this exporter. The flows they carried are missing
-            from every series.
+            The export sequence numbers say packets or records were lost
+            between the device and this exporter. The flows they carried are
+            missing from every series.
 
       - alert: XflowAggregationOverflow
         expr: increase(xflow_aggregation_overflow_records_total[15m]) > 0

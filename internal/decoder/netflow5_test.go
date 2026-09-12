@@ -69,10 +69,16 @@ func buildV5Packet(n int) []byte {
 	return payload
 }
 
+// decodeV5 reads one datagram through a decoder of its own, so a parse test
+// reads the record rather than the domain a shared decoder carries forward.
+func decodeV5(payload []byte) ([]flow.Record, *decodeError) {
+	return newTestDecoder().decodeNetFlowV5(testExporter, payload, nil)
+}
+
 func TestDecodeNetFlowV5_ReadsEveryField(t *testing.T) {
 	t.Parallel()
 
-	records, decErr := decodeNetFlowV5(testExporter, buildV5Packet(1), nil)
+	records, decErr := decodeV5(buildV5Packet(1))
 	if decErr != nil {
 		t.Fatalf("decodeNetFlowV5() error = %v, want nil", decErr)
 	}
@@ -124,7 +130,7 @@ func TestDecodeNetFlowV5_ReadsEveryField(t *testing.T) {
 func TestDecodeNetFlowV5_ReadsEveryClaimedRecord(t *testing.T) {
 	t.Parallel()
 
-	records, decErr := decodeNetFlowV5(testExporter, buildV5Packet(netflowV5MaxCount), nil)
+	records, decErr := decodeV5(buildV5Packet(netflowV5MaxCount))
 	if decErr != nil {
 		t.Fatalf("decodeNetFlowV5() error = %v, want nil", decErr)
 	}
@@ -138,7 +144,7 @@ func TestDecodeNetFlowV5_ToleratesTrailingPadding(t *testing.T) {
 
 	payload := append(buildV5Packet(2), 0, 0, 0, 0)
 
-	records, decErr := decodeNetFlowV5(testExporter, payload, nil)
+	records, decErr := decodeV5(payload)
 	if decErr != nil {
 		t.Fatalf("decodeNetFlowV5() error = %v, want padding tolerated", decErr)
 	}
@@ -154,7 +160,7 @@ func TestDecodeNetFlowV5_SamplingModeBitsAreMasked(t *testing.T) {
 	// Set the two mode bits above a 14-bit interval of 512.
 	binary.BigEndian.PutUint16(payload[22:24], 0x8000|512)
 
-	records, decErr := decodeNetFlowV5(testExporter, payload, nil)
+	records, decErr := decodeV5(payload)
 	if decErr != nil {
 		t.Fatalf("decodeNetFlowV5() error = %v, want nil", decErr)
 	}
@@ -196,7 +202,7 @@ func TestDecodeNetFlowV5_RejectsMalformedDatagrams(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			records, decErr := decodeNetFlowV5(testExporter, tt.payload, nil)
+			records, decErr := decodeV5(tt.payload)
 			if decErr == nil {
 				t.Fatal("decodeNetFlowV5() error = nil, want a malformed rejection")
 			}
@@ -211,15 +217,107 @@ func TestDecodeNetFlowV5_RejectsMalformedDatagrams(t *testing.T) {
 }
 
 func BenchmarkDecodeNetFlowV5(b *testing.B) {
+	d := newTestDecoder()
 	payload := buildV5Packet(netflowV5MaxCount)
 	records := make([]flow.Record, 0, netflowV5MaxCount)
 
 	b.ReportAllocs()
 	for b.Loop() {
 		var err *decodeError
-		records, err = decodeNetFlowV5(testExporter, payload, records[:0])
+		records, err = d.decodeNetFlowV5(testExporter, payload, records[:0])
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// v5Sequence stamps a datagram's sequence and switching engine, the two header
+// fields the export sequence is numbered within.
+func v5Sequence(payload []byte, seq uint32, engine uint16) []byte {
+	binary.BigEndian.PutUint32(payload[16:20], seq)
+	binary.BigEndian.PutUint16(payload[20:22], engine)
+	return payload
+}
+
+// TestDecodeNetFlowV5_SequenceCountsRecords pins the unit the v5 sequence
+// counts. The number is a running record count, so reading it as the packet
+// count v9 carries turns every datagram of more than one record into loss.
+func TestDecodeNetFlowV5_SequenceCountsRecords(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	// Ten records over two datagrams of five, so the next is expected at 20.
+	// A third claiming 25 says the five from 20 never arrived.
+	for _, seq := range []uint32{10, 15} {
+		if _, err := d.Decode(testExporter, v5Sequence(buildV5Packet(5), seq, 0), nil); err != nil {
+			t.Fatalf("Decode() error = %v, want nil", err)
+		}
+	}
+	if got := d.Domains()[0].SequenceMissed; got != 0 {
+		t.Fatalf("SequenceMissed = %d after an unbroken run of five-record datagrams, want 0", got)
+	}
+
+	if _, err := d.Decode(testExporter, v5Sequence(buildV5Packet(5), 25, 0), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+	if got := d.Domains()[0].SequenceMissed; got != 5 {
+		t.Errorf("SequenceMissed = %d, want the 5 records the gap names", got)
+	}
+}
+
+// TestDecodeNetFlowV5_SequencePerSwitchingEngine pins what a device with more
+// than one switching engine reads as. Each engine numbers its own sequence and
+// the v5 header carries no domain to key them apart, so the arrivals interleave
+// and counting their steps would report loss on a device losing nothing.
+func TestDecodeNetFlowV5_SequencePerSwitchingEngine(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	for _, step := range []struct {
+		seq    uint32
+		engine uint16
+	}{{100, 0x0000}, {7000, 0x0001}, {105, 0x0000}, {7005, 0x0001}} {
+		if _, err := d.Decode(testExporter, v5Sequence(buildV5Packet(5), step.seq, step.engine), nil); err != nil {
+			t.Fatalf("Decode() error = %v, want nil", err)
+		}
+	}
+
+	if got := d.Domains()[0].SequenceMissed; got != 0 {
+		t.Errorf("SequenceMissed = %d from two engines taking turns, want 0", got)
+	}
+}
+
+// TestDecodeNetFlowV5_BudgetCostsTheSequenceNotTheTraffic pins what a device
+// at its observation domain budget loses. A v5 record parses without a domain,
+// so refusing one must leave the traffic decoded: the budget bounds the state
+// the sequence needs, and another protocol filling it from the same address
+// must not take this device's counters down with it. v8 carries the same
+// property under its own test.
+func TestDecodeNetFlowV5_BudgetCostsTheSequenceNotTheTraffic(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	// Fill the exporter's budget with v9 domains, which share it.
+	for i := range maxDomainsPerExporter {
+		header := make([]byte, 20)
+		binary.BigEndian.PutUint16(header[0:2], 9)
+		binary.BigEndian.PutUint32(header[16:20], uint32(i))
+		if _, err := d.Decode(testExporter, header, nil); err != nil {
+			t.Fatalf("v9 domain %d: %v", i, err)
+		}
+	}
+
+	records, err := d.Decode(testExporter, buildV5Packet(3), nil)
+	if err != nil {
+		t.Fatalf("Decode() error = %v, want the records decoded anyway", err)
+	}
+	if len(records) != 3 {
+		t.Errorf("Decode() returned %d records, want 3 past the domain budget", len(records))
+	}
+	if got := d.DomainsRefused(); got != 1 {
+		t.Errorf("DomainsRefused() = %d, want the one refusal counted", got)
 	}
 }

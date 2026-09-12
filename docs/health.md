@@ -121,6 +121,7 @@ all four are keyed by the device, so a device refused at the exporter budget rea
 - Alert on `time() - xflow_last_flow_timestamp_seconds > 900 and time() - xflow_last_datagram_timestamp_seconds < 900` for a sampler that stopped, and on the first term alone for a device gone silent.
 - A sampled port carrying no traffic reaches the same threshold on its own, the flow instant ageing whenever `pps` falls below `N/900` at a 1-in-N rate.
 - Neither instant carries `version`, so a device exporting two protocols hides one of them stopping — `increase(xflow_flows_total{version=...}[15m])` reads them apart.
+- `xflow_flows_total` counts the records decoded, where `xflow_exporter_flows_total` counts the flows those records reported. The two part on a v8 aggregate, whose one record carries the count of the flows its cache folded.
 
 **`xflow_decode_errors_total`**
 
@@ -143,8 +144,10 @@ all three carry `exporter_address`, `version` and `odid` together. A domain is t
 - Dropping `version` from the triple would hand two domains one label set, and a registry refuses to gather a duplicate, so the whole scrape would fail rather than one domain's series.
 - `xflow_sampling_rate` reads a v9 or IPFIX options declaration alone. An sFlow device carries its rate on the samples themselves, and what its correction is worth reads from the pair below.
 - An options record scoped on the System describes the device, so a sampler it names measures records in every domain rather than in the one that carried the announcement. A domain's own rate is the one it declared without naming a sampler, and a device declaring several leaves the rest absent rather than correcting by one of them.
-- `xflow_templates` is absent on an sFlow domain, which holds no template, and the sampler counters are absent on the protocols that hold no sampler.
-- `xflow_sequence_missed_total` counts what each sequence number counts, packets on v9 and sFlow and data records on IPFIX, so one lost IPFIX message adds every record it carried.
+- `xflow_templates` is absent on an sFlow, v5 or v8 domain, none of which holds a template, and the sampler counters are absent on the protocols that hold no sampler.
+- `xflow_sequence_missed_total` counts what each sequence number counts, packets on v9 and sFlow and records on v5, v8 and IPFIX, so one lost record-numbered message adds every record it carried. A v5 or v8 domain exists to be tracked here.
+- A message overtaken in flight is counted when the one past it arrives, and the counter cannot refund it once the late one lands. A device exporting from more than one switching engine rebases instead, so its loss goes uncounted rather than fabricated.
+- A v5 or v8 datagram refused a domain still decodes, its records needing none, so only its sequence goes untracked. v9, IPFIX and sFlow discard it, their records reaching this decoder through the domain's own state.
 - A rise here is loss or reordering on the wire rather than a race between the decoders — [Push and pull](README.md#push-and-pull) carries why one worker holds each device.
 
 **`xflow_sampler_rate`**

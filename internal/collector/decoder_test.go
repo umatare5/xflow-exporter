@@ -128,6 +128,28 @@ func buildV9TemplateOnly() []byte {
 	}
 }
 
+// TestDecoderCollector_LeavesATemplatelessDomainUncounted pins the absence a
+// v5 or v8 domain keeps. Both open a domain so their export sequence is
+// tracked, and neither protocol has a template to hold, so a zero here would
+// read as a device that announced none rather than one that cannot.
+func TestDecoderCollector_LeavesATemplatelessDomainUncounted(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	if _, err := d.Decode(netip.MustParseAddr("192.0.2.30"), buildV5(), nil); err != nil {
+		t.Fatalf("Decode() error = %v, want nil", err)
+	}
+
+	c := NewDecoderCollector(d)
+
+	if got := testutil.CollectAndCount(c, "xflow_templates"); got != 0 {
+		t.Errorf("template series = %d, want none for a protocol without templates", got)
+	}
+	if got := testutil.CollectAndCount(c, "xflow_sequence_missed_total"); got != 1 {
+		t.Errorf("sequence series = %d, want the one v5 domain's", got)
+	}
+}
+
 func TestDecoderCollector_ReportsDomainState(t *testing.T) {
 	t.Parallel()
 
@@ -141,7 +163,7 @@ func TestDecoderCollector_ReportsDomainState(t *testing.T) {
 	c := NewDecoderCollector(d)
 
 	expected := `
-# HELP xflow_sequence_missed_total Packets on v9 and sFlow, or data records on IPFIX, the sequence numbers say were lost, per domain
+# HELP xflow_sequence_missed_total Packets on v9 and sFlow, or records on v5, v8 and IPFIX, the sequence numbers say were lost, per domain
 # TYPE xflow_sequence_missed_total counter
 xflow_sequence_missed_total{exporter_address="192.0.2.20",odid="256",version="netflow_v9"} 0
 # HELP xflow_templates Unexpired templates held per exporter, protocol, observation domain and kind
@@ -279,7 +301,7 @@ func TestDecoderCollector_ReportsRefusedVendorStrings(t *testing.T) {
 	c := NewDecoderCollector(d)
 
 	expected := `
-# HELP xflow_domains_refused_total Datagrams discarded since process start, the exporter being at its observation domain budget
+# HELP xflow_domains_refused_total Datagrams refused an observation domain since process start, discarded where decoding needs one
 # TYPE xflow_domains_refused_total counter
 xflow_domains_refused_total 0
 # HELP xflow_vendor_strings_refused_total Vendor string fields refused since process start, counted per occurrence rather than per string
@@ -324,7 +346,7 @@ func TestDecoderCollector_RefusalCountersDoNotCross(t *testing.T) {
 	})
 
 	expected := `
-# HELP xflow_domains_refused_total Datagrams discarded since process start, the exporter being at its observation domain budget
+# HELP xflow_domains_refused_total Datagrams refused an observation domain since process start, discarded where decoding needs one
 # TYPE xflow_domains_refused_total counter
 xflow_domains_refused_total 3
 # HELP xflow_vendor_strings_refused_total Vendor string fields refused since process start, counted per occurrence rather than per string

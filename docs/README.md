@@ -93,7 +93,7 @@ Every map keyed by wire data carries a bound, a push protocol not choosing its s
 
 | Bounded                           | Limit                                        | Past it                                     |
 | :-------------------------------- | :------------------------------------------- | :------------------------------------------ |
-| Observation domains per device    | [256](../internal/decoder/templates.go#L37)  | Datagram discarded, counting `domain_limit` |
+| Observation domains per device    | [256](../internal/decoder/templates.go#L37)  | Discarded, or v5 and v8 lose the sequence   |
 | Templates per domain              | [8192](../internal/decoder/templates.go#L18) | Expired go first, then `invalid_template`   |
 | Samplers per domain               | [4096](../internal/decoder/templates.go#L23) | Expired go first, then left untracked       |
 | Sampler declarations per device   | [256](../internal/decoder/templates.go#L42)  | Refused, records take the device's own rate |

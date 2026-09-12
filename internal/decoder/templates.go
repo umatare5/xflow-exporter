@@ -199,9 +199,16 @@ type domainState struct {
 	// sweep reads to free the exporter's budget again.
 	lastSeen atomic.Int64
 
-	// sequence gap tracking. seqInit and lastSeq move under mu.
+	// sequence gap tracking. seqInit, lastSeq, seqEngine and seqLateRun move
+	// under mu, which is not the lock the sampler run below is held by.
 	seqInit bool
 	lastSeq uint32
+	// seqEngine is the switching engine the tracked position belongs to. A v5
+	// or v8 device numbers a sequence per engine, and the odid a domain is
+	// keyed by does not carry which one, so a change rebases.
+	seqEngine uint16
+	// seqLateRun counts the messages read as late one after another.
+	seqLateRun int
 	// SequenceMissed counts export packets the sequence numbers say were
 	// lost. Reordering and device restarts reset the base instead.
 	sequenceMissed atomic.Uint64
@@ -617,26 +624,46 @@ func (d *domainState) pruneIdleSamplersLocked(now int64, ttl time.Duration) {
 	d.recentOne = nil
 }
 
-// trackRecordSequence advances the IPFIX sequence, which counts data records
-// rather than packets. When a message's own record count is unknown the
-// tracking resets instead of guessing.
-func (d *domainState) trackRecordSequence(seq, records uint32, complete bool) {
-	const forwardWindow = 1 << 30
+// trackRecordSequence advances a sequence that counts records rather than
+// packets, which v5, v8 and IPFIX all number that way. When a message's own
+// record count is unknown the tracking resets instead of guessing, and a
+// message from another engine rebases because its sequence is its own.
+//
+// A message overtaken in flight is held rather than rewinding the base: the
+// records it carries were counted missing when it was skipped, and rewinding
+// counts them a second time on the next one to arrive. A run longer than
+// reordering reaches is a restart, which rebases without counting.
+func (d *domainState) trackRecordSequence(seq, records uint32, engine uint16, complete bool) {
+	const (
+		forwardWindow = 1 << 30
+		reorderWindow = 1024
+	)
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if !d.seqInit {
+	if !d.seqInit || engine != d.seqEngine {
 		d.seqInit = complete
+		d.seqEngine = engine
 		d.lastSeq = seq + records
+		d.seqLateRun = 0
 		return
 	}
 
 	// lastSeq holds the sequence expected on the next message.
-	if diff := seq - d.lastSeq; diff > 0 && diff < forwardWindow {
+	switch diff := seq - d.lastSeq; {
+	case diff == 0:
+		// In order; only the base advances.
+	case diff > ^uint32(0)-reorderWindow && d.seqLateRun < maxLateRun:
+		d.seqLateRun++
+		return
+	case diff < forwardWindow:
 		d.sequenceMissed.Add(uint64(diff))
+	default:
+		// A restart, which the counter does not span.
 	}
 
+	d.seqLateRun = 0
 	d.seqInit = complete
 	d.lastSeq = seq + records
 }
