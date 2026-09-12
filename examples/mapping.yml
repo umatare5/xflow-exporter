@@ -24,6 +24,8 @@ devices:
     vlans: &site-vlans
       # 1..4094, the two 802.1Q reserves excluded. An address no prefix
       # covers reads 0, and the nearer prefix wins where two cover one.
+      # A device exporting a flow after NAT reports the translated address,
+      # which the prefixes behind it do not cover.
       800:
         # Optional. Without it the VLAN carries no xflow_vlan_info row.
         name: internal

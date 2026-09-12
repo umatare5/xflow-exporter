@@ -349,7 +349,8 @@ func addVLANPrefixes(table *vlanTable, exporter netip.Addr, id uint16, written [
 			return fmt.Errorf("device %s VLAN %d: %w", exporter, id, err)
 		}
 		if !table.add(prefix, id) {
-			return fmt.Errorf("device %s puts %s on two VLANs", exporter, prefix)
+			return fmt.Errorf("device %s carries %s twice, leaving the VLAN it sits on to map order",
+				exporter, prefix)
 		}
 	}
 	return nil

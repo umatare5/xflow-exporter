@@ -64,16 +64,31 @@ An `--enrich.*` source supplies what the device did not: a dimension of the reco
 - **YAML acts first** — the library drops a `~` key before any check and refuses `%YAML 1.2`.
 - **Fetching** — [`scripts/fetch-device-names.sh`](../scripts/fetch-device-names.sh) walks the devices over SNMP and writes the file whole, so hand-written `services:` and `vlans:` blocks live elsewhere. It refuses a device answering no usable name rather than writing it out unnamed — [`SECURITY.md`](../SECURITY.md) carries where the community string ends up.
 
-A device's `vlans:` block puts each flow address on a segment, which is what `--collector.vlans` breaks traffic down by. It is prefixes rather than a wire reading: the VLAN a device reports is the one its own observation point sat in, and no verified device exports one at all — [Protocols](protocols.md) carries what each does export.
+A device's `vlans:` block puts each flow address on a segment, which is what `--collector.vlans` breaks traffic down by. It is prefixes rather than a wire reading. A device reporting a VLAN of its own reports the tag on the frame it sampled or the VLAN of the interface it observed, which no decoder here lifts — [Protocols](protocols.md#sflow-v5) carries which devices carry one.
 
 - **Per device** — one prefix may be a different VLAN behind each, so a device with no block resolves nothing rather than borrowing its neighbour's numbering.
 - **Longest match** — `10.0.0.0/8` and `10.1.0.0/16` may both be listed, and an address in both takes the second.
-- **`1..4094`** — 802.1Q reserves `0` and `4095`, and the `0` is what an address no prefix covers reads as.
+- **`1..4094`** — 802.1Q reserves `0` and `4095`, and the `0` is what an address no prefix covers reads as. The key is plain decimal, so `0800` is refused rather than read as `800`.
 - **`prefixes` is required** — a VLAN listing none matches nothing, where `name` is optional and only its info row depends on it.
-- **Refused rather than corrected** — a prefix carrying host bits, one written IPv4-mapped, one prefix on two VLANs of a device, and `0.0.0.0/0`, which would put every foreign address on a local segment.
+- **Refused rather than corrected** — a prefix carrying host bits, one written IPv4-mapped, and one a device carries twice. A default route of either family goes with them, putting every foreign address on a local segment.
+- **Post-translation addresses** — a device exporting a flow after NAT reports the translated address, which the prefixes of the segment behind it do not cover.
 - **Shared with an anchor** — one L2 domain reaching several devices is written once as `&name` and referred to as `*name`.
 
-Joining a VLAN name onto the pair counters follows the shape the interface join below takes, through `label_replace` from `vlan` onto `src_vlan` or `dst_vlan` and with the same `on()` rule.
+> [!IMPORTANT]
+> A private VLAN shares one subnet between its primary and its secondaries, so a device carrying one has no spelling here and the primary is what to map. The same holds for a device reusing one subnet across VRFs.
+
+This names the VLAN each source sits on, `dst_vlan` taking the same shape:
+
+```promql
+sum by (exporter_address, vlan_name) (
+  rate(xflow_vlan_pair_bytes_total[5m])
+  * on (job, instance, exporter_address, src_vlan) group_left (vlan_name)
+    label_replace(xflow_vlan_info, "src_vlan", "$1", "vlan", "(.+)")
+)
+```
+
+> [!NOTE]
+> This keeps the named rows alone. A `src_vlan` of `0` and the `other` fold row match no name and fall out, which measured a third of one lab's traffic, and the interface query below carries the `or` branch that keeps them. Summing the two directions instead double-counts a flow that stayed inside one VLAN, which both of them carry.
 
 This joins a name onto the per-interface traffic of one device, keeping rows no name reaches:
 

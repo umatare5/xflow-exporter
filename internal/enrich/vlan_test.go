@@ -172,9 +172,11 @@ func TestVLAN_AnUnnamedVLANStillResolves(t *testing.T) {
 	}
 }
 
-// TestVLAN_SharesOneTableThroughAnAnchor pins the form a flat network is
-// written in. One L2 domain reaches several devices, and repeating its
-// prefixes per device is where the copies drift apart.
+// TestVLAN_SharesOneTableThroughAnAnchor pins the spelling the file format
+// documents rather than the lookup: one L2 domain reaches several devices,
+// and repeating its prefixes per device is where the copies drift apart. The
+// alias is the yaml library's to expand, so what this holds is that the form
+// the examples teach keeps reaching every device that refers to it.
 func TestVLAN_SharesOneTableThroughAnAnchor(t *testing.T) {
 	t.Parallel()
 
@@ -231,6 +233,10 @@ func TestVLAN_RefusesAnUnusableDocument(t *testing.T) {
 			document: "devices:\n  192.0.2.1:\n    vlans:\n      10:\n        prefixes: [0.0.0.0/0]\n",
 		},
 		{
+			name:     "the IPv6 default route",
+			document: "devices:\n  192.0.2.1:\n    vlans:\n      10:\n        prefixes: [\"::/0\"]\n",
+		},
+		{
 			name:     "an IPv4-mapped prefix",
 			document: "devices:\n  192.0.2.1:\n    vlans:\n      10:\n        prefixes: [\"::ffff:10.0.0.0/104\"]\n",
 		},
@@ -249,8 +255,12 @@ func TestVLAN_RefusesAnUnusableDocument(t *testing.T) {
 			document: "devices:\n  192.0.2.1:\n    vlans:\n      10:\n        name: \"  \"\n        prefixes: [10.0.0.0/8]\n",
 		},
 		{
-			name:     "an unknown key beside the VLANs",
-			document: "devices:\n  192.0.2.1:\n    vlans:\n      10:\n        subnet: [10.0.0.0/8]\n",
+			// The prefixes are usable, so only the strict decode can refuse
+			// this: without one the entry fails for naming no prefix and the
+			// case would pass whether unknown keys were refused or not.
+			name: "an unknown key beside the VLANs",
+			document: "devices:\n  192.0.2.1:\n    vlans:\n      10:\n" +
+				"        prefixes: [10.0.0.0/8]\n        subnet: [10.0.0.0/8]\n",
 		},
 		{"a device whose VLANs are empty", "devices:\n  192.0.2.1:\n    vlans: {}\n"},
 	}

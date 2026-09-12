@@ -86,8 +86,8 @@ which source a lookup went through — `asn`, `country`, `mapping`, `services`, 
 - A port only `services` names was already counted `unknown` by the earlier `mapping` lookup, which cannot know that a later source will name the same port.
 - A mapping file carrying `devices:` alone names no port, so `mapping` reads `unknown` on every record whose service the device did not itself supply. The file's device and interface names ride the naming series rather than a lookup.
 - `vlan` reads the same file and so appears with it, whether or not it holds a `vlans:` block, and one that does not leaves every record `unknown`. Nothing is ever `skipped` there, no protocol exporting the dimension it fills.
-- A flow between two foreign addresses is `unknown` on `vlan` by design. The file names the local segments and nothing beyond them, so the split reads as how much traffic stayed inside the mapped network.
-- Three kinds of traffic read `unknown` whatever the network is: a dual-stack segment whose file lists one family alone, link-local addresses, and multicast destinations, none of which a unicast prefix places.
+- A flow between two foreign addresses is `unknown` on `vlan` by design. The file names the local segments and nothing beyond them, so the split reads as how much traffic the file could place rather than as a failure.
+- Three kinds of traffic read `unknown` until the file says otherwise: a dual-stack segment listed under one family, link-local addresses, and multicast destinations. A unicast prefix places none of them.
 
 ## Specifications
 

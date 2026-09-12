@@ -466,6 +466,11 @@ xflow_vlan_info{exporter_address="192.0.2.1",vlan="801",vlan_name="wireless"} 1
 // absent rather than empty where either half is missing: the numbers come
 // from the family and the names from the file, and a row carrying one without
 // the other names nothing a counter uses.
+//
+// Describe is what the halves are read against, not Collect. A scrape of a
+// collector holding no file publishes nothing either way, the collect path
+// returning early on the same nil, so only the descriptor says whether the
+// family was declared at all.
 func TestFlowCollector_VLANNamesNeedBothHalves(t *testing.T) {
 	t.Parallel()
 
@@ -492,8 +497,28 @@ func TestFlowCollector_VLANNamesNeedBothHalves(t *testing.T) {
 			if got := testutil.CollectAndCount(c, "xflow_vlan_info"); got != 0 {
 				t.Errorf("xflow_vlan_info published %d series, want the family absent", got)
 			}
+			if got := describedVLANInfo(c); got != 0 {
+				t.Errorf("Describe announced xflow_vlan_info %d times, want it undeclared", got)
+			}
 		})
 	}
+}
+
+// describedVLANInfo counts the VLAN naming descriptors one collector declares.
+func describedVLANInfo(c *FlowCollector) int {
+	descs := make(chan *prometheus.Desc, 64)
+	go func() {
+		defer close(descs)
+		c.Describe(descs)
+	}()
+
+	found := 0
+	for d := range descs {
+		if strings.Contains(d.String(), "xflow_vlan_info") {
+			found++
+		}
+	}
+	return found
 }
 
 // TestFlowCollector_DestinationLabels pins the label set and its order. The

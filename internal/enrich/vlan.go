@@ -14,8 +14,9 @@ import (
 // assigns its prefix.
 //
 // What it fills is where an address lives, which no flow protocol exports.
-// The VLAN a device can report is the one its own observation point sat in,
-// so the two are different readings and neither stands in for the other.
+// The VLAN a device can report is the tag on the frame it sampled or the
+// VLAN of the interface it observed, so the two coincide only where the
+// observation point sits on the address's own segment.
 //
 // The file is owned by Mapping, so this source re-reads nothing: it consults
 // the snapshot in force through the same atomic pointer a scrape reads, and a
@@ -98,8 +99,8 @@ type vlanTable struct {
 	// lengths4 and lengths6 are kept apart so every rounding is in range for
 	// the address it rounds. A length past the address width yields an
 	// invalid prefix, which would merely miss this map, so the split is what
-	// keeps each probe meaningful rather than what makes the answer right. It
-	// is also the shorter walk of the two.
+	// keeps each probe meaningful rather than what makes the answer right.
+	// Splitting also shortens the walk a combined list would take.
 	lengths4 []int
 	lengths6 []int
 	prefixes map[netip.Prefix]uint16
