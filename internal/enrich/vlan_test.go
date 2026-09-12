@@ -278,15 +278,16 @@ func TestVLAN_RefusesAnUnusableDocument(t *testing.T) {
 
 // TestVLAN_AcceptsOneVLANAsTheWholeDeviceEntry pins that a device may carry
 // VLANs without a hostname or an interface, the three being independent
-// things one file happens to hold.
+// things one file happens to hold. The key is the top of the range, which a
+// bound off by one refuses.
 func TestVLAN_AcceptsOneVLANAsTheWholeDeviceEntry(t *testing.T) {
 	t.Parallel()
 
-	const document = "devices:\n  192.0.2.1:\n    vlans:\n      10:\n        prefixes: [10.0.0.0/8]\n"
+	const document = "devices:\n  192.0.2.1:\n    vlans:\n      4094:\n        prefixes: [10.0.0.0/8]\n"
 
 	v := NewVLAN(loadMapping(t, document))
-	if got := enrichBetween(v, "192.0.2.1", "10.0.0.7", "203.0.113.7"); got.SrcVLAN != 10 {
-		t.Errorf("SrcVLAN = %d, want 10", got.SrcVLAN)
+	if got := enrichBetween(v, "192.0.2.1", "10.0.0.7", "203.0.113.7"); got.SrcVLAN != vlanIDMax {
+		t.Errorf("SrcVLAN = %d, want %d", got.SrcVLAN, vlanIDMax)
 	}
 }
 

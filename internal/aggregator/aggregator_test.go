@@ -204,6 +204,7 @@ func TestAggregator_AnAggregateFeedsItsDomainAlone(t *testing.T) {
 		TCPFlags:         2,
 		TCPFlagsReported: true,
 		SrcAS:            64500,
+		SrcVLAN:          800,
 		Bytes:            500,
 		Packets:          5,
 		Flows:            3,
@@ -213,6 +214,7 @@ func TestAggregator_AnAggregateFeedsItsDomainAlone(t *testing.T) {
 		"hosts": lengthOf(a.Hosts()), "services": lengthOf(a.Services()),
 		"destinations": lengthOf(a.Destinations()), "dscp": lengthOf(a.DSCP()),
 		"asns": lengthOf(a.ASNs()), "tcp_flags": lengthOf(a.TCPFlags()),
+		"vlans": lengthOf(a.VLANs()),
 	} {
 		if entries != 0 {
 			t.Errorf("%s = %d entries, want none from an aggregate", name, entries)

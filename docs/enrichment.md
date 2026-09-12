@@ -57,14 +57,14 @@ An `--enrich.*` source supplies what the device did not: a dimension of the reco
 `--enrich.mapping-file` names devices, their interfaces and their VLANs, none of which a flow protocol carries, and may name transport ports the built-in table does not cover. [`examples/mapping.yml`](../examples/mapping.yml) carries the layout.
 
 - **Three info series** — `xflow_device_info`, `xflow_interface_info` and `xflow_vlan_info` carry the names.
-- **The rules both follow** — [Collectors](collectors.md#specifications) carries them.
+- **The rules all follow** — [Collectors](collectors.md#specifications) carries them.
 - **Strict** — an unusable key or name, or one address spelled twice, fails the whole load.
 - **Exactly one document** — an empty file and a trailing `---` are both refused.
 - **`devices: {}` loads** — emptying the file on purpose is how a reload takes names away.
 - **YAML acts first** — the library drops a `~` key before any check and refuses `%YAML 1.2`.
 - **Fetching** — [`scripts/fetch-device-names.sh`](../scripts/fetch-device-names.sh) walks the devices over SNMP and writes the file whole, so hand-written `services:` and `vlans:` blocks live elsewhere. It refuses a device answering no usable name rather than writing it out unnamed — [`SECURITY.md`](../SECURITY.md) carries where the community string ends up.
 
-A device's `vlans:` block puts each flow address on a segment, which is what `--collector.vlans` breaks traffic down by. It is prefixes rather than a wire reading. A device reporting a VLAN of its own reports the tag on the frame it sampled or the VLAN of the interface it observed, which no decoder here lifts — [Protocols](protocols.md#sflow-v5) carries which devices carry one.
+A device's `vlans:` block puts each flow address on a segment, which is what `--collector.vlans` breaks traffic down by. It is prefixes rather than a wire reading. A device reporting a VLAN of its own reports the tag on the frame it sampled or the VLAN of the interface it observed, which no decoder here lifts — [Protocols](protocols.md) carries which devices carry one.
 
 - **Per device** — one prefix may be a different VLAN behind each, so a device with no block resolves nothing rather than borrowing its neighbour's numbering.
 - **Longest match** — `10.0.0.0/8` and `10.1.0.0/16` may both be listed, and an address in both takes the second.
@@ -73,6 +73,7 @@ A device's `vlans:` block puts each flow address on a segment, which is what `--
 - **Refused rather than corrected** — a prefix carrying host bits, one written IPv4-mapped, and one a device carries twice. A default route of either family goes with them, putting every foreign address on a local segment.
 - **Post-translation addresses** — a device exporting a flow after NAT reports the translated address, which the prefixes of the segment behind it do not cover.
 - **Shared with an anchor** — one L2 domain reaching several devices is written once as `&name` and referred to as `*name`.
+- **No `<<:`** — a merge key loses the device's own entry for a key the anchor carries, and says nothing, so a device differing by one lists them all. `interfaces:` shares the behaviour.
 
 > [!IMPORTANT]
 > A private VLAN shares one subnet between its primary and its secondaries, so a device carrying one has no spelling here and the primary is what to map. The same holds for a device reusing one subnet across VRFs.
