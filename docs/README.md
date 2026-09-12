@@ -77,7 +77,7 @@ The counters of every collector accumulate from entry creation, and an entry evi
 - **Overflow** — a product past `uint64` clamps there, because a wrapped counter reads as a reset.
 
 > [!NOTE]
-> The v5 header interval and sFlow's inline rate ride the records themselves, so a device exporting either corrects its counts with no rate series to audit them by.
+> The v5 header interval and sFlow's inline rate ride the records themselves, so a device exporting either corrects its counts with no rate series to audit them by. A v5 device that samples without filling that interval is corrected by nothing — see [NetFlow v5](protocols.md#netflow-v5).
 
 ### Enrichment
 
