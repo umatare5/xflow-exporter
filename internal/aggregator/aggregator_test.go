@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"net/netip"
+	"reflect"
 	"testing"
 	"time"
 
@@ -30,7 +31,7 @@ func allModules() Modules {
 	return Modules{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
 		TCPFlags: true, DSCP: true, ASNs: true, Applications: true,
-		Countries: true, Threats: true,
+		Countries: true, Threats: true, VLANs: true,
 	}
 }
 
@@ -140,6 +141,45 @@ func TestAggregator_AbsentDimensionsFeedNoTable(t *testing.T) {
 	}
 	if exporters, _ := a.Exporters(); len(exporters) != 1 || exporters[0].Flows != 3 {
 		t.Errorf("Exporters() = %+v, want the flow count kept", exporters)
+	}
+}
+
+// TestAggregator_VLANsAdmitASideAtATime pins what opens a VLAN entry. Traffic
+// between a mapped segment and the internet resolves on one side only and is
+// the case the table exists for, where a record the file placed on neither
+// side is absence rather than a pair of segments numbered zero.
+func TestAggregator_VLANsAdmitASideAtATime(t *testing.T) {
+	t.Parallel()
+
+	both := testRecord()
+	both.SrcVLAN, both.DstVLAN = 800, 801
+
+	srcOnly := testRecord()
+	srcOnly.SrcVLAN = 800
+
+	dstOnly := testRecord()
+	dstOnly.DstVLAN = 801
+
+	a := New(testConfig(), allModules())
+	a.Ingest([]flow.Record{both, srcOnly, dstOnly, testRecord()})
+
+	vlans, _ := a.VLANs()
+	keys := make(map[VLANKey]struct{}, len(vlans))
+	for _, e := range vlans {
+		keys[e.Key] = struct{}{}
+	}
+
+	for _, want := range []VLANKey{
+		{Exporter: testExporter, Src: 800, Dst: 801},
+		{Exporter: testExporter, Src: 800},
+		{Exporter: testExporter, Dst: 801},
+	} {
+		if _, held := keys[want]; !held {
+			t.Errorf("VLANs() holds no entry for %+v", want)
+		}
+	}
+	if len(vlans) != len(keys) || len(keys) != 3 {
+		t.Errorf("VLANs() = %d entries, want 3: the unmapped record must open none", len(vlans))
 	}
 }
 
@@ -312,6 +352,26 @@ func TestAggregator_DisabledModulesReturnNothing(t *testing.T) {
 	}
 	if !allModules().Any() {
 		t.Error("Any() = false with modules enabled, want true")
+	}
+}
+
+// TestAggregator_AnyReportsEveryModuleOnItsOwn pins what Any decides: the
+// tables and the collector over them are built only where it reports true, so
+// a module missing from it accepts its flag, enables nothing and publishes no
+// series at all. No other test sees that, each of them turning several
+// modules on at once. The fields are walked rather than listed so a module
+// added later cannot be left out of the walk itself.
+func TestAggregator_AnyReportsEveryModuleOnItsOwn(t *testing.T) {
+	t.Parallel()
+
+	fields := reflect.TypeOf(Modules{})
+	for i := range fields.NumField() {
+		one := Modules{}
+		reflect.ValueOf(&one).Elem().Field(i).SetBool(true)
+
+		if !one.Any() {
+			t.Errorf("Any() = false with %s alone, want true", fields.Field(i).Name)
+		}
 	}
 }
 
@@ -566,6 +626,8 @@ func TestAggregator_InterfacesSplitOnlyTheConversationTables(t *testing.T) {
 	base.DstCountry = "US"
 	base.SrcFlagged = true
 	base.DstFlagged = true
+	base.SrcVLAN = 800
+	base.DstVLAN = 801
 	base.InputIf = 3
 	base.OutputIf = 4
 
@@ -575,12 +637,7 @@ func TestAggregator_InterfacesSplitOnlyTheConversationTables(t *testing.T) {
 	byInput := base
 	byInput.InputIf = 6
 
-	modules := Modules{
-		Exporters: true, Hosts: true, Services: true, Destinations: true,
-		TCPFlags: true, DSCP: true, ASNs: true, Applications: true,
-		Countries: true, Threats: true,
-	}
-	a := New(testConfig(), modules)
+	a := New(testConfig(), allModules())
 	a.Ingest([]flow.Record{base, byOutput, byInput})
 
 	hosts, _ := a.Hosts()
@@ -593,6 +650,7 @@ func TestAggregator_InterfacesSplitOnlyTheConversationTables(t *testing.T) {
 	asns, _ := a.ASNs()
 	apps, _ := a.Applications()
 	countries, _ := a.Countries()
+	vlans, _ := a.VLANs()
 
 	// Both sides are flagged, so the threat table keys two entries per record.
 	const threatsPerRecord = 2
@@ -622,6 +680,7 @@ func TestAggregator_InterfacesSplitOnlyTheConversationTables(t *testing.T) {
 		{"asns", len(asns)},
 		{"applications", len(apps)},
 		{"countries", len(countries)},
+		{"vlans", len(vlans)},
 	} {
 		if tt.got != 1 {
 			t.Errorf("%s = %d entries, want 1: the interface pair must not key it", tt.name, tt.got)

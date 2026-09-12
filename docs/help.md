@@ -36,12 +36,13 @@ GLOBAL OPTIONS:
    --collector.services       Enable address pair with protocol and port metrics
    --collector.tcp-flags      Enable TCP control-bit profile metrics
    --collector.threats        Enable flagged address metrics, which need --enrich.threat-file
+   --collector.vlans          Enable VLAN pair metrics, which need vlans in --enrich.mapping-file
 
    # Enrichment Options
 
    --enrich.asn-database string                                 Path to a MaxMind-format ASN database, filling the AS numbers a device omits
    --enrich.country-database string                             Path to a MaxMind-format country database, filling the ISO codes for --collector.countries
-   --enrich.mapping-file string                                 Path to a YAML file naming devices, their interfaces and extra transport ports
+   --enrich.mapping-file string                                 Path to a YAML file naming devices, their interfaces, VLANs and extra transport ports
    --enrich.services                                            Name the application from the transport port where the device named none
    --enrich.threat-file string [ --enrich.threat-file string ]  Path to a file of flagged addresses, one per line (repeatable)
 

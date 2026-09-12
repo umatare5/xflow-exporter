@@ -4,13 +4,13 @@ An `--enrich.*` source supplies what the device did not: a dimension of the reco
 
 ## Sources
 
-| Flag                        | Fills                                    | Feeds                             |
-| :-------------------------- | :--------------------------------------- | :-------------------------------- |
-| `--enrich.services`         | The application, from the transport port | `applications`                    |
-| `--enrich.asn-database`     | The AS numbers, from a MaxMind-format DB | `asns`                            |
-| `--enrich.country-database` | The ISO country codes, from the same     | `countries`                       |
-| `--enrich.threat-file`      | A flag on addresses a list file names    | `threats`                         |
-| `--enrich.mapping-file`     | Device, interface and port names         | The naming series, `applications` |
+| Flag                        | Fills                                    | Feeds                                      |
+| :-------------------------- | :--------------------------------------- | :----------------------------------------- |
+| `--enrich.services`         | The application, from the transport port | `applications`                             |
+| `--enrich.asn-database`     | The AS numbers, from a MaxMind-format DB | `asns`                                     |
+| `--enrich.country-database` | The ISO country codes, from the same     | `countries`                                |
+| `--enrich.threat-file`      | A flag on addresses a list file names    | `threats`                                  |
+| `--enrich.mapping-file`     | Device, interface, VLAN and port names   | The naming series, `applications`, `vlans` |
 
 - **Lookups are local** — nothing is fetched and no credential is held, so no round trip is taken.
 - **A path that cannot be opened fails startup** — and `--dry-run` opens every source the same way, binding nothing — [Help](help.md#notes) carries what else it checks.
@@ -54,15 +54,26 @@ An `--enrich.*` source supplies what the device did not: a dimension of the reco
 
 ## Mapping File
 
-`--enrich.mapping-file` names devices and their interfaces, which no flow protocol carries, and may name transport ports the built-in table does not cover. [`examples/mapping.yml`](../examples/mapping.yml) carries the layout.
+`--enrich.mapping-file` names devices, their interfaces and their VLANs, none of which a flow protocol carries, and may name transport ports the built-in table does not cover. [`examples/mapping.yml`](../examples/mapping.yml) carries the layout.
 
-- **Two info series** — `xflow_device_info` and `xflow_interface_info` carry the names.
+- **Three info series** — `xflow_device_info`, `xflow_interface_info` and `xflow_vlan_info` carry the names.
 - **The rules both follow** — [Collectors](collectors.md#specifications) carries them.
 - **Strict** — an unusable key or name, or one address spelled twice, fails the whole load.
 - **Exactly one document** — an empty file and a trailing `---` are both refused.
 - **`devices: {}` loads** — emptying the file on purpose is how a reload takes names away.
 - **YAML acts first** — the library drops a `~` key before any check and refuses `%YAML 1.2`.
-- **Fetching** — [`scripts/fetch-device-names.sh`](../scripts/fetch-device-names.sh) walks the devices over SNMP and writes the file whole, so a hand-written `services:` block lives elsewhere. It refuses a device answering no usable name rather than writing it out unnamed — [`SECURITY.md`](../SECURITY.md) carries where the community string ends up.
+- **Fetching** — [`scripts/fetch-device-names.sh`](../scripts/fetch-device-names.sh) walks the devices over SNMP and writes the file whole, so hand-written `services:` and `vlans:` blocks live elsewhere. It refuses a device answering no usable name rather than writing it out unnamed — [`SECURITY.md`](../SECURITY.md) carries where the community string ends up.
+
+A device's `vlans:` block puts each flow address on a segment, which is what `--collector.vlans` breaks traffic down by. It is prefixes rather than a wire reading: the VLAN a device reports is the one its own observation point sat in, and no verified device exports one at all — [Protocols](protocols.md) carries what each does export.
+
+- **Per device** — one prefix may be a different VLAN behind each, so a device with no block resolves nothing rather than borrowing its neighbour's numbering.
+- **Longest match** — `10.0.0.0/8` and `10.1.0.0/16` may both be listed, and an address in both takes the second.
+- **`1..4094`** — 802.1Q reserves `0` and `4095`, and the `0` is what an address no prefix covers reads as.
+- **`prefixes` is required** — a VLAN listing none matches nothing, where `name` is optional and only its info row depends on it.
+- **Refused rather than corrected** — a prefix carrying host bits, one written IPv4-mapped, one prefix on two VLANs of a device, and `0.0.0.0/0`, which would put every foreign address on a local segment.
+- **Shared with an anchor** — one L2 domain reaching several devices is written once as `&name` and referred to as `*name`.
+
+Joining a VLAN name onto the pair counters follows the shape the interface join below takes, through `label_replace` from `vlan` onto `src_vlan` or `dst_vlan` and with the same `on()` rule.
 
 This joins a name onto the per-interface traffic of one device, keeping rows no name reaches:
 

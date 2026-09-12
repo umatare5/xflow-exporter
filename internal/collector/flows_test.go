@@ -387,6 +387,115 @@ xflow_country_pair_bytes_total{dst_country="other",exporter_address="other",src_
 	}
 }
 
+// TestFlowCollector_VLANPairs pins the label set and its order, and the
+// spelling of a side the mapping file could not place. The two labels are
+// otherwise interchangeable, so a rendering that read the wrong end would
+// report every segment's traffic as its peer's.
+func TestFlowCollector_VLANPairs(t *testing.T) {
+	t.Parallel()
+
+	modules := config.Collectors{VLANs: true}
+	agg := aggregator.New(aggConfig(), aggregator.Modules{VLANs: true})
+
+	placed := flowRecord("10.0.0.1", "10.0.0.2", 700)
+	placed.SrcVLAN, placed.DstVLAN = 800, 801
+
+	// A flow leaving a mapped segment for the internet: one side is placed.
+	partial := flowRecord("10.0.0.3", "203.0.113.7", 300)
+	partial.SrcVLAN = 800
+
+	// Neither side placed: this one must feed no series at all.
+	unplaced := flowRecord("203.0.113.8", "203.0.113.9", 900)
+
+	agg.Ingest([]flow.Record{placed, partial, unplaced})
+
+	c := NewFlowCollector(agg, modules, aggConfig(), nil, nil)
+
+	expected := `
+# HELP xflow_vlan_pair_bytes_total Sampling-corrected bytes per VLAN pair, other carries the entry-bound fold
+# TYPE xflow_vlan_pair_bytes_total counter
+xflow_vlan_pair_bytes_total{dst_vlan="0",exporter_address="192.0.2.1",src_vlan="800"} 300
+xflow_vlan_pair_bytes_total{dst_vlan="801",exporter_address="192.0.2.1",src_vlan="800"} 700
+xflow_vlan_pair_bytes_total{dst_vlan="other",exporter_address="other",src_vlan="other"} 0
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
+		"xflow_vlan_pair_bytes_total"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// TestFlowCollector_VLANNamesRideTheirOwnSeries pins the bound on the VLAN
+// naming series, which is the file rather than the traffic: a VLAN the file
+// names keeps its row whether or not a flow was placed on it, where one the
+// file leaves unnamed produces no row for a join to find.
+func TestFlowCollector_VLANNamesRideTheirOwnSeries(t *testing.T) {
+	t.Parallel()
+
+	agg := aggregator.New(aggConfig(), aggregator.Modules{VLANs: true})
+	placed := flowRecord("10.0.0.1", "10.0.0.2", 700)
+	placed.SrcVLAN = 800
+	agg.Ingest([]flow.Record{placed})
+
+	// 801 is named but carries no traffic, and 802 is mapped without a name.
+	names := mappingNames(t, `devices:
+  192.0.2.1:
+    vlans:
+      800:
+        name: internal
+        prefixes: [10.0.0.0/24]
+      801:
+        name: wireless
+        prefixes: [10.0.1.0/24]
+      802:
+        prefixes: [10.0.2.0/24]
+`)
+	c := NewFlowCollector(agg, config.Collectors{VLANs: true}, aggConfig(), nil, names)
+
+	expected := `
+# HELP xflow_vlan_info Always 1, carrying what the mapping file calls each VLAN it names
+# TYPE xflow_vlan_info gauge
+xflow_vlan_info{exporter_address="192.0.2.1",vlan="800",vlan_name="internal"} 1
+xflow_vlan_info{exporter_address="192.0.2.1",vlan="801",vlan_name="wireless"} 1
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "xflow_vlan_info"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+}
+
+// TestFlowCollector_VLANNamesNeedBothHalves pins that the naming series is
+// absent rather than empty where either half is missing: the numbers come
+// from the family and the names from the file, and a row carrying one without
+// the other names nothing a counter uses.
+func TestFlowCollector_VLANNamesNeedBothHalves(t *testing.T) {
+	t.Parallel()
+
+	const document = "devices:\n  192.0.2.1:\n    vlans:\n      800:\n        name: internal\n" +
+		"        prefixes: [10.0.0.0/24]\n"
+
+	for _, tt := range []struct {
+		name    string
+		modules config.Collectors
+		names   func() *enrich.NameSet
+	}{
+		{"no mapping file", config.Collectors{VLANs: true}, nil},
+		{"no VLAN family", config.Collectors{Hosts: true}, mappingNames(t, document)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			agg := aggregator.New(aggConfig(), aggregator.Modules{VLANs: true, Hosts: true})
+			placed := flowRecord("10.0.0.1", "10.0.0.2", 700)
+			placed.SrcVLAN = 800
+			agg.Ingest([]flow.Record{placed})
+
+			c := NewFlowCollector(agg, tt.modules, aggConfig(), nil, tt.names)
+			if got := testutil.CollectAndCount(c, "xflow_vlan_info"); got != 0 {
+				t.Errorf("xflow_vlan_info published %d series, want the family absent", got)
+			}
+		})
+	}
+}
+
 // TestFlowCollector_DestinationLabels pins the label set and its order. The
 // family carries no source: that separates it from the source-destination
 // service, and a source arriving here would make the two indistinguishable.
@@ -818,6 +927,10 @@ func (m *movingASNs) Countries() ([]aggregator.EntrySnapshot[aggregator.CountryK
 }
 
 func (m *movingASNs) Threats() ([]aggregator.EntrySnapshot[aggregator.ThreatKey], aggregator.Totals) {
+	return nil, aggregator.Totals{}
+}
+
+func (m *movingASNs) VLANs() ([]aggregator.EntrySnapshot[aggregator.VLANKey], aggregator.Totals) {
 	return nil, aggregator.Totals{}
 }
 

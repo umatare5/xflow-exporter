@@ -5,6 +5,7 @@ Notable changes to the metric surface, one section per release, listing the pull
 ## [Unreleased]
 
 - [#64](https://github.com/umatare5/xflow-exporter/pull/64) — Describe what each series counts and what the sampling audit returns
+- [#65](https://github.com/umatare5/xflow-exporter/pull/65) — Break traffic down by the VLAN a mapping file puts each address on
 
 ## [v0.10.0]
 

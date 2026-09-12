@@ -145,6 +145,7 @@ type Collectors struct {
 	Applications  bool `json:"applications"`
 	Countries     bool `json:"countries"`
 	Threats       bool `json:"threats"`
+	VLANs         bool `json:"vlans"`
 	Distributions bool `json:"distributions"`
 }
 
@@ -233,6 +234,7 @@ func Parse(cmd *cli.Command) (*Config, error) {
 			Applications:  cmd.Bool("collector.applications"),
 			Countries:     cmd.Bool("collector.countries"),
 			Threats:       cmd.Bool("collector.threats"),
+			VLANs:         cmd.Bool("collector.vlans"),
 			Distributions: cmd.Bool("collector.distributions"),
 		},
 		RemoteWrite: RemoteWrite{

@@ -106,7 +106,7 @@ func gatherFamilies(t *testing.T, appName string) []*dto.MetricFamily {
 	cfg.Collectors = config.Collectors{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
 		TCPFlags: true, DSCP: true,
-		ASNs: true, Applications: true, Countries: true, Threats: true,
+		ASNs: true, Applications: true, Countries: true, Threats: true, VLANs: true,
 	}
 	cfg.Aggregation = config.Aggregation{
 		EntryTTL:   config.DefaultAggregationEntryTTL,
@@ -121,7 +121,7 @@ func gatherFamilies(t *testing.T, appName string) []*dto.MetricFamily {
 	agg := aggregator.New(cfg.Aggregation, aggregator.Modules{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
 		TCPFlags: true, DSCP: true,
-		ASNs: true, Applications: true, Countries: true, Threats: true,
+		ASNs: true, Applications: true, Countries: true, Threats: true, VLANs: true,
 	})
 	// The families past the application one in Collect order are what an
 	// ordering-only containment loses, so they must be filled here.
@@ -130,6 +130,7 @@ func gatherFamilies(t *testing.T, appName string) []*dto.MetricFamily {
 	r.AppName = appName
 	r.SrcCountry, r.DstCountry = "JP", "US"
 	r.SrcFlagged, r.DstFlagged = true, true
+	r.SrcVLAN, r.DstVLAN = 800, 801
 
 	// Fewer bytes, so the entry under test sorts ahead of it and a
 	// containment that abandons the table after a failure abandons this.
@@ -137,6 +138,7 @@ func gatherFamilies(t *testing.T, appName string) []*dto.MetricFamily {
 	neighbor.SrcAS, neighbor.DstAS = r.SrcAS, r.DstAS
 	neighbor.SrcCountry, neighbor.DstCountry = r.SrcCountry, r.DstCountry
 	neighbor.SrcFlagged, neighbor.DstFlagged = r.SrcFlagged, r.DstFlagged
+	neighbor.SrcVLAN, neighbor.DstVLAN = r.SrcVLAN, r.DstVLAN
 	neighbor.AppName = neighborApplication
 	neighbor.DstPort = 22
 	agg.Ingest([]flow.Record{r, neighbor})
@@ -164,7 +166,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	cfg.Collectors = config.Collectors{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
 		TCPFlags: true, DSCP: true,
-		ASNs: true, Applications: true, Countries: true, Threats: true,
+		ASNs: true, Applications: true, Countries: true, Threats: true, VLANs: true,
 		Distributions: true,
 	}
 	cfg.Aggregation = config.Aggregation{
@@ -210,7 +212,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	agg := aggregator.New(cfg.Aggregation, aggregator.Modules{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
 		TCPFlags: true, DSCP: true,
-		ASNs: true, Applications: true, Countries: true, Threats: true,
+		ASNs: true, Applications: true, Countries: true, Threats: true, VLANs: true,
 	})
 	// Every dimension filled, so no module lints on an empty table.
 	r := flowRecord("10.0.0.1", "10.0.0.2", 1000)
@@ -218,17 +220,20 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	r.AppName = "https"
 	r.SrcCountry, r.DstCountry = "JP", "US"
 	r.SrcFlagged, r.DstFlagged = true, true
+	r.SrcVLAN, r.DstVLAN = 800, 801
 	// Both instants, so the duration histogram is observed rather than
 	// skipped and its name reaches the lint below.
 	r.Start = time.Unix(1_756_300_000, 0)
 	r.End = r.Start.Add(15 * time.Second)
 	agg.Ingest([]flow.Record{r})
-	// A naming function and a mapping file, so the three naming families are
+	// A naming function and a mapping file, so the four naming families are
 	// gathered rather than absent and their label values reach the lint
 	// below. A family with no row is not gathered at all, so the file has to
-	// name the device and one interface the fixture record crossed.
-	names := mappingNames(t,
-		"devices:\n  192.0.2.1:\n    hostname: sw1.example.net\n    interfaces:\n      3: Gi0/3\n")
+	// name the device, one interface the fixture record crossed and one VLAN
+	// it was placed on.
+	names := mappingNames(t, "devices:\n  192.0.2.1:\n    hostname: sw1.example.net\n"+
+		"    interfaces:\n      3: Gi0/3\n"+
+		"    vlans:\n      800:\n        name: internal\n        prefixes: [10.0.0.0/24]\n")
 	c.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation,
 		func(uint32) (string, bool) { return "Example Networks", true }, names)
 
@@ -254,7 +259,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	// remote write instant needs a client that has written, whose counters
 	// the package keeps unexported. Changing the surface is meant to change
 	// this number.
-	const wantFamilies = 67
+	const wantFamilies = 71
 	if len(families) != wantFamilies {
 		t.Fatalf("gathered %d families, want %d: the lint below covers only what is registered",
 			len(families), wantFamilies)

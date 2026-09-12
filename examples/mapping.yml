@@ -1,8 +1,8 @@
 # Example mapping file for xflow-exporter's --enrich.mapping-file.
 #
 # scripts/fetch-device-names.sh writes the devices half from SNMP and
-# overwrites this file wholesale, so keep a hand-maintained services block
-# somewhere the script does not write to.
+# overwrites this file wholesale, so keep hand-maintained services and vlans
+# blocks somewhere the script does not write to.
 devices:
   # The address the device exports from, which is the exporter_address label.
   # An ifIndex the device renumbers is a port this file then misnames, and
@@ -17,11 +17,28 @@ devices:
       1: Vl1
       10102: Gi0/2
       10110: Gi0/10
+    # Where the flow addresses live, which --collector.vlans breaks traffic
+    # down by. This is not the VLAN a device reports: that one is whichever
+    # its own observation point sat in. The anchor shares one L2 domain's
+    # table with every device that reaches it, so the copies cannot drift.
+    vlans: &site-vlans
+      # 1..4094, the two 802.1Q reserves excluded. An address no prefix
+      # covers reads 0, and the nearer prefix wins where two cover one.
+      800:
+        # Optional. Without it the VLAN carries no xflow_vlan_info row.
+        name: internal
+        prefixes:
+          - 192.0.2.0/24
+          - 2001:db8:800::/64
+      801:
+        name: wireless
+        prefixes: [198.51.100.0/24]
 
   # A device may name its ports without naming itself.
   192.0.2.2:
     interfaces:
       1: Vl1
+    vlans: *site-vlans
 
 # port/proto to an application name, consulted ahead of the built-in table and
 # only where the device named no application itself.

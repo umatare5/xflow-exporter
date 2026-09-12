@@ -1,5 +1,6 @@
-// This file names devices and their interfaces from a file the operator
-// maintains, and names an application from a port the built-in table misses.
+// This file reads the file the operator maintains: it names devices, their
+// interfaces and their VLANs, and names an application from a port the
+// built-in table misses.
 
 package enrich
 
@@ -32,6 +33,11 @@ const mappingLabelMax = 255
 // defines as a positive Integer32.
 const ifIndexMax = 2_147_483_647
 
+// vlanIDMax is the highest VLAN a network numbers. 802.1Q gives the 12-bit
+// identifier two reserved values, 0 for the null VLAN and 4095, and the zero
+// is what an address no prefix covers reads as.
+const vlanIDMax = 4094
+
 // mappingNumber is the spelling a numeric key must take. ParseUint reads a
 // leading zero as decimal, so 010 and 10 would name one interface under two
 // keys that yaml itself does not see as a duplicate.
@@ -43,6 +49,13 @@ type interfaceKey struct {
 	ifIndex  uint32
 }
 
+// VLANRef names one VLAN of one device, which is the pair the naming series
+// carries: two devices may number one VLAN differently.
+type VLANRef struct {
+	Exporter netip.Addr
+	ID       uint16
+}
+
 // NameSet is one immutable snapshot of the mapping file. It is replaced
 // wholesale on reload rather than mutated, so a lookup never sees a
 // half-loaded set and never takes a lock.
@@ -50,6 +63,11 @@ type NameSet struct {
 	devices    map[netip.Addr]string
 	interfaces map[interfaceKey]string
 	services   map[servicePort]string
+	// vlans resolves an address to a VLAN, per device. vlanNames holds what
+	// those VLANs were called, which is the smaller set: a VLAN carries
+	// prefixes to be useful and a name only to be readable.
+	vlans     map[netip.Addr]*vlanTable
+	vlanNames map[VLANRef]string
 }
 
 // Devices reports every device the file names. The naming series built from
@@ -64,8 +82,14 @@ func (s *NameSet) Interface(exporter netip.Addr, ifIndex uint32) (string, bool) 
 	return name, ok
 }
 
-// Mapping names devices, their interfaces and transport ports from one file
-// this exporter reads from disk.
+// VLANs reports every VLAN the file names. The naming series built from it
+// takes no cut, for the reason Devices does.
+func (s *NameSet) VLANs() iter.Seq2[VLANRef, string] {
+	return maps.All(s.vlanNames)
+}
+
+// Mapping names devices, their interfaces, their VLANs and transport ports
+// from one file this exporter reads from disk.
 //
 // Nothing is queried and nothing is sent. The file is written by whatever
 // walks the devices, scripts/fetch-device-names.sh being one such, and a
@@ -158,11 +182,20 @@ type mappingFile struct {
 	Services map[string]string        `yaml:"services"`
 }
 
-// mappingDevice is one device's entry. A device carrying neither field names
-// nothing, which is a typo rather than an intention.
+// mappingDevice is one device's entry. A device carrying no field at all
+// names nothing, which is a typo rather than an intention.
 type mappingDevice struct {
-	Hostname   string            `yaml:"hostname"`
-	Interfaces map[string]string `yaml:"interfaces"`
+	Hostname   string                 `yaml:"hostname"`
+	Interfaces map[string]string      `yaml:"interfaces"`
+	VLANs      map[string]mappingVLAN `yaml:"vlans"`
+}
+
+// mappingVLAN is one VLAN's entry. The prefixes are what an address is
+// matched against, and the name is optional: an unnamed VLAN keys its
+// counters by number and reaches no naming series.
+type mappingVLAN struct {
+	Name     string   `yaml:"name"`
+	Prefixes []string `yaml:"prefixes"`
 }
 
 // readMappingFile parses one file into a snapshot.
@@ -209,6 +242,8 @@ func buildNameSet(doc *mappingFile) (*NameSet, error) {
 		devices:    make(map[netip.Addr]string, len(doc.Devices)),
 		interfaces: make(map[interfaceKey]string),
 		services:   make(map[servicePort]string, len(doc.Services)),
+		vlans:      make(map[netip.Addr]*vlanTable),
+		vlanNames:  make(map[VLANRef]string),
 	}
 
 	// Two spellings of one address are the one duplicate yaml cannot see:
@@ -244,10 +279,10 @@ func buildNameSet(doc *mappingFile) (*NameSet, error) {
 	return set, nil
 }
 
-// addDevice records one device's hostname and interface names.
+// addDevice records one device's hostname, interface names and VLANs.
 func addDevice(set *NameSet, exporter netip.Addr, device mappingDevice) error {
-	if device.Hostname == "" && len(device.Interfaces) == 0 {
-		return fmt.Errorf("device %s names neither a hostname nor an interface", exporter)
+	if device.Hostname == "" && len(device.Interfaces) == 0 && len(device.VLANs) == 0 {
+		return fmt.Errorf("device %s names no hostname, interface or VLAN", exporter)
 	}
 
 	if device.Hostname != "" {
@@ -266,6 +301,56 @@ func addDevice(set *NameSet, exporter netip.Addr, device mappingDevice) error {
 			return fmt.Errorf("the name of %s interface %d %w", exporter, ifIndex, err)
 		}
 		set.interfaces[interfaceKey{exporter, ifIndex}] = ifName
+	}
+
+	return addVLANs(set, exporter, device.VLANs)
+}
+
+// addVLANs records one device's prefix-to-VLAN table and the names it gave
+// those VLANs.
+func addVLANs(set *NameSet, exporter netip.Addr, vlans map[string]mappingVLAN) error {
+	if len(vlans) == 0 {
+		return nil
+	}
+
+	table := &vlanTable{prefixes: make(map[netip.Prefix]uint16)}
+	for spelling, vlan := range vlans {
+		id, err := mappingVLANID(spelling)
+		if err != nil {
+			return fmt.Errorf("device %s: %w", exporter, err)
+		}
+		if err := addVLANPrefixes(table, exporter, id, vlan.Prefixes); err != nil {
+			return err
+		}
+
+		if vlan.Name == "" {
+			continue
+		}
+		if err := mappingValue(vlan.Name); err != nil {
+			return fmt.Errorf("the name of %s VLAN %d %w", exporter, id, err)
+		}
+		set.vlanNames[VLANRef{exporter, id}] = vlan.Name
+	}
+
+	set.vlans[exporter] = table
+	return nil
+}
+
+// addVLANPrefixes records what one VLAN covers. A VLAN listing none matches
+// nothing and is a half-written entry rather than an intention.
+func addVLANPrefixes(table *vlanTable, exporter netip.Addr, id uint16, written []string) error {
+	if len(written) == 0 {
+		return fmt.Errorf("VLAN %d of %s names no prefix", id, exporter)
+	}
+
+	for _, spelling := range written {
+		prefix, err := mappingPrefix(spelling)
+		if err != nil {
+			return fmt.Errorf("device %s VLAN %d: %w", exporter, id, err)
+		}
+		if !table.add(prefix, id) {
+			return fmt.Errorf("device %s puts %s on two VLANs", exporter, prefix)
+		}
 	}
 	return nil
 }
@@ -293,6 +378,44 @@ func mappingIfIndex(spelling string) (uint32, error) {
 		return 0, fmt.Errorf("interface %q is outside 1..%d", spelling, ifIndexMax)
 	}
 	return uint32(ifIndex), nil
+}
+
+// mappingVLANID reads one vlans key.
+func mappingVLANID(spelling string) (uint16, error) {
+	if !mappingNumber.MatchString(spelling) {
+		return 0, fmt.Errorf("VLAN %q is not a decimal number without a leading zero", spelling)
+	}
+	id, err := strconv.ParseUint(spelling, 10, 16)
+	if err != nil || id > vlanIDMax {
+		return 0, fmt.Errorf("VLAN %q is outside 1..%d", spelling, vlanIDMax)
+	}
+	return uint16(id), nil
+}
+
+// mappingPrefix reads one prefixes entry.
+//
+// Three spellings are refused rather than read through, each having a form
+// the operator meant and this one not being it. A prefix carrying host bits
+// says the mask and the address disagree. An IPv4-mapped prefix cannot match
+// a record, the receiver and the decoders unmapping every address they hold.
+// The default route would put every foreign address on a local VLAN, which
+// is the fabricated dimension this source exists to avoid.
+func mappingPrefix(spelling string) (netip.Prefix, error) {
+	prefix, err := netip.ParsePrefix(spelling)
+	if err != nil {
+		return netip.Prefix{}, fmt.Errorf("prefix %q is not one: %w", spelling, err)
+	}
+
+	switch {
+	case prefix.Addr().Is4In6():
+		return netip.Prefix{}, fmt.Errorf(
+			"prefix %q is IPv4-mapped; write it in IPv4 notation, which is what a record carries", spelling)
+	case prefix != prefix.Masked():
+		return netip.Prefix{}, fmt.Errorf("prefix %q carries host bits; write it as %s", spelling, prefix.Masked())
+	case prefix.Bits() == 0:
+		return netip.Prefix{}, fmt.Errorf("prefix %q covers every address, which no VLAN does", spelling)
+	}
+	return prefix, nil
 }
 
 // mappingService reads one services key, a port and a transport spelled

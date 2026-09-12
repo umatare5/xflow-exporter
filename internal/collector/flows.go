@@ -35,6 +35,7 @@ type FlowSource interface {
 	Applications() ([]aggregator.EntrySnapshot[aggregator.AppKey], aggregator.Totals)
 	Countries() ([]aggregator.EntrySnapshot[aggregator.CountryKey], aggregator.Totals)
 	Threats() ([]aggregator.EntrySnapshot[aggregator.ThreatKey], aggregator.Totals)
+	VLANs() ([]aggregator.EntrySnapshot[aggregator.VLANKey], aggregator.Totals)
 	Health() []aggregator.TableHealth
 }
 
@@ -107,12 +108,14 @@ type FlowCollector struct {
 	applications familyDescs
 	countries    familyDescs
 	threats      familyDescs
+	vlans        familyDescs
 
 	// names reads the mapping file's snapshot, nil where no mapping file is
 	// configured.
 	names             func() *enrich.NameSet
 	deviceInfoDesc    *prometheus.Desc
 	interfaceInfoDesc *prometheus.Desc
+	vlanInfoDesc      *prometheus.Desc
 
 	entriesDesc   *prometheus.Desc
 	evictionsDesc *prometheus.Desc
@@ -196,6 +199,20 @@ func NewFlowCollector(
 		c.threats = newFamilyDescs("xflow_threat", "flagged address",
 			[]string{labelExporter, labelAddress, labelDirection, labelInputIf, labelOutputIf})
 	}
+	if modules.VLANs {
+		c.vlans = newFamilyDescs("xflow_vlan_pair", "VLAN pair",
+			[]string{labelExporter, labelSrcVLAN, labelDstVLAN})
+	}
+	// The naming series needs both the family that carries the numbers and
+	// the file that carries the names, so without either it is absent rather
+	// than empty.
+	if modules.VLANs && names != nil {
+		c.vlanInfoDesc = prometheus.NewDesc(
+			"xflow_vlan_info",
+			"Always 1, carrying what the mapping file calls each VLAN it names",
+			[]string{labelExporter, labelVLAN, labelVLANName}, nil,
+		)
+	}
 	if names != nil {
 		c.deviceInfoDesc = prometheus.NewDesc(
 			"xflow_device_info",
@@ -246,6 +263,12 @@ func (c *FlowCollector) Describe(ch chan<- *prometheus.Desc) {
 	}
 	if c.modules.Threats {
 		c.threats.describe(ch)
+	}
+	if c.modules.VLANs {
+		c.vlans.describe(ch)
+	}
+	if c.vlanInfoDesc != nil {
+		ch <- c.vlanInfoDesc
 	}
 	if c.deviceInfoDesc != nil {
 		ch <- c.deviceInfoDesc
@@ -309,6 +332,9 @@ func (c *FlowCollector) Collect(ch chan<- prometheus.Metric) {
 			noteInterfaces(crossed, e.Key.Exporter, e.Key.InputIf, e.Key.OutputIf)
 		}
 	}
+	if c.modules.VLANs {
+		collectFamily(c, ch, &c.vlans, c.src.VLANs, vlanLabels)
+	}
 
 	c.collectNames(ch, names, crossed)
 }
@@ -369,6 +395,21 @@ func (c *FlowCollector) collectNames(
 		}
 		m, err := prometheus.NewConstMetric(c.interfaceInfoDesc, prometheus.GaugeValue, 1,
 			ref.exporter.String(), ifIndexLabel(ref.ifIndex), ifName)
+		if err != nil {
+			continue
+		}
+		ch <- m
+	}
+
+	if c.vlanInfoDesc == nil {
+		return
+	}
+	// The VLAN rows take no cut for the reason the device rows do not: the
+	// file's own VLAN count bounds them, which is what the operator wrote
+	// rather than what the traffic did.
+	for ref, vlanName := range names.VLANs() {
+		m, err := prometheus.NewConstMetric(c.vlanInfoDesc, prometheus.GaugeValue, 1,
+			ref.Exporter.String(), vlanLabel(ref.ID), vlanName)
 		if err != nil {
 			continue
 		}
@@ -586,6 +627,17 @@ func threatLabels(k aggregator.ThreatKey) []string {
 // label never set, and one Remote Write 2.0 refuses to carry.
 func ifIndexLabel(ifIndex uint32) string {
 	return strconv.FormatUint(uint64(ifIndex), 10)
+}
+
+// vlanLabels renders a VLAN pair. A side no prefix covered reads 0, which
+// 802.1Q reserves as the null VLAN ID and no network numbers.
+func vlanLabels(k aggregator.VLANKey) []string {
+	return []string{k.Exporter.String(), vlanLabel(k.Src), vlanLabel(k.Dst)}
+}
+
+// vlanLabel spells one VLAN.
+func vlanLabel(id uint16) string {
+	return strconv.Itoa(int(id))
 }
 
 // countryLabel spells one side of a pair.

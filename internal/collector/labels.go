@@ -31,11 +31,15 @@ const (
 	labelDstCountry  = "dst_country"    // ISO country code of the destination address
 	labelInputIf     = "input_ifindex"  // ifIndex the flow entered the device on
 	labelOutputIf    = "output_ifindex" // ifIndex the flow left the device on
+	labelSrcVLAN     = "src_vlan"       // VLAN the mapping file puts the source address on
+	labelDstVLAN     = "dst_vlan"       // VLAN the mapping file puts the destination address on
 
 	// Naming labels, on the info series that carry the mapping file's strings.
 	labelExporterName = "exporter_name" // What the file calls that device
 	labelIfIndex      = "ifindex"       // One ifIndex, on the series naming it
 	labelIfName       = "ifname"        // What the file calls that interface
+	labelVLAN         = "vlan"          // One VLAN, on the series naming it
+	labelVLANName     = "vlan_name"     // What the file calls that VLAN
 
 	// Enrichment labels.
 	labelEnricher = "enricher" // Enrichment source a lookup went through

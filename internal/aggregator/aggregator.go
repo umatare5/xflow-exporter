@@ -25,13 +25,14 @@ type Modules struct {
 	Applications bool
 	Countries    bool
 	Threats      bool
+	VLANs        bool
 }
 
 // Any reports whether any aggregation is enabled.
 func (m Modules) Any() bool {
 	return m.Exporters || m.Hosts || m.Services || m.Destinations ||
 		m.TCPFlags || m.DSCP ||
-		m.ASNs || m.Applications || m.Countries || m.Threats
+		m.ASNs || m.Applications || m.Countries || m.Threats || m.VLANs
 }
 
 // Table keys. Label values are derived from these at scrape time.
@@ -138,6 +139,15 @@ const (
 	DirectionDst = "dst"
 )
 
+// VLANKey keys the VLAN-pair aggregation. The identifiers are what a mapping
+// file puts each address on, so the table needs that file to hold anything,
+// and a side no prefix covered reads zero.
+type VLANKey struct {
+	Exporter netip.Addr
+	Src      uint16
+	Dst      uint16
+}
+
 // AppKey keys the application aggregation. Name is the resolved or inline
 // application name, or the numbered identifier where no name is known.
 type AppKey struct {
@@ -163,6 +173,7 @@ type Aggregator struct {
 	apps         *table[AppKey]
 	countries    *table[CountryKey]
 	threats      *table[ThreatKey]
+	vlans        *table[VLANKey]
 
 	// now is pinned by tests.
 	now func() time.Time
@@ -204,6 +215,9 @@ func New(cfg config.Aggregation, modules Modules) *Aggregator {
 	}
 	if modules.Threats {
 		a.threats = newTable[ThreatKey](cfg.MaxEntries)
+	}
+	if modules.VLANs {
+		a.vlans = newTable[VLANKey](cfg.MaxEntries)
 	}
 	return a
 }
@@ -301,6 +315,13 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 	// a pair of empty codes is absence rather than a place.
 	if a.countries != nil && (r.SrcCountry != "" || r.DstCountry != "") {
 		a.countries.add(CountryKey{Exporter: r.Exporter, Src: r.SrcCountry, Dst: r.DstCountry},
+			bytes, packets, r.Flows, now)
+	}
+
+	// A record neither side of which sits on a mapped prefix feeds nothing:
+	// a pair of zeros is absence rather than a segment.
+	if a.vlans != nil && (r.SrcVLAN != 0 || r.DstVLAN != 0) {
+		a.vlans.add(VLANKey{Exporter: r.Exporter, Src: r.SrcVLAN, Dst: r.DstVLAN},
 			bytes, packets, r.Flows, now)
 	}
 
@@ -402,7 +423,7 @@ func (t *table[K]) stats() (idle, folds uint64) {
 }
 
 // tableCount is how many aggregations exist, sizing the walk below.
-const tableCount = 10
+const tableCount = 11
 
 // tables returns the enabled tables keyed by their aggregation label value.
 func (a *Aggregator) tables() map[string]sweepable {
@@ -436,6 +457,9 @@ func (a *Aggregator) tables() map[string]sweepable {
 	}
 	if a.threats != nil {
 		tables["threats"] = a.threats
+	}
+	if a.vlans != nil {
+		tables["vlans"] = a.vlans
 	}
 	return tables
 }
@@ -545,4 +569,12 @@ func (a *Aggregator) Threats() ([]EntrySnapshot[ThreatKey], Totals) {
 		return nil, Totals{}
 	}
 	return a.threats.snapshot()
+}
+
+// VLANs reads the VLAN-pair table.
+func (a *Aggregator) VLANs() ([]EntrySnapshot[VLANKey], Totals) {
+	if a.vlans == nil {
+		return nil, Totals{}
+	}
+	return a.vlans.snapshot()
 }
