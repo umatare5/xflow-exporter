@@ -293,7 +293,8 @@ func TestDecodeNetFlowV5_SequencePerSwitchingEngine(t *testing.T) {
 // at its observation domain budget loses. A v5 record parses without a domain,
 // so refusing one must leave the traffic decoded: the budget bounds the state
 // the sequence needs, and another protocol filling it from the same address
-// must not take this device's counters down with it.
+// must not take this device's counters down with it. v8 carries the same
+// property under its own test.
 func TestDecodeNetFlowV5_BudgetCostsTheSequenceNotTheTraffic(t *testing.T) {
 	t.Parallel()
 

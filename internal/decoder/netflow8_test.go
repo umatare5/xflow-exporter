@@ -586,3 +586,30 @@ func TestDecodeNetFlowV8_SequenceCountsTheGapOnce(t *testing.T) {
 		t.Errorf("SequenceMissed = %d, want the 2 records the overtake named once", got)
 	}
 }
+
+// TestDecodeNetFlowV8_BudgetCostsTheSequenceNotTheTraffic pins the same
+// property the v5 test does. A v8 record parses from its method's fixed
+// layout without a domain, so a device whose budget another protocol filled
+// keeps its traffic and loses only the sequence.
+func TestDecodeNetFlowV8_BudgetCostsTheSequenceNotTheTraffic(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	for i := range maxDomainsPerExporter {
+		header := make([]byte, 20)
+		binary.BigEndian.PutUint16(header[0:2], 9)
+		binary.BigEndian.PutUint32(header[16:20], uint32(i))
+		if _, err := d.Decode(testExporter, header, nil); err != nil {
+			t.Fatalf("v9 domain %d: %v", i, err)
+		}
+	}
+
+	records, err := d.Decode(testExporter, v8Datagram(1, 2, 500), nil)
+	if err != nil {
+		t.Fatalf("Decode() error = %v, want the records decoded anyway", err)
+	}
+	if len(records) != 2 {
+		t.Errorf("Decode() returned %d records, want 2 past the domain budget", len(records))
+	}
+}
