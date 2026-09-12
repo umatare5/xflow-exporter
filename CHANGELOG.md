@@ -11,6 +11,7 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#52](https://github.com/umatare5/xflow-exporter/pull/52) — Clamp the sampling correction and refuse an overlong sampled packet
 - [#53](https://github.com/umatare5/xflow-exporter/pull/53) — Stamp the freshness instant on a record and publish the datagram instant
 - [#54](https://github.com/umatare5/xflow-exporter/pull/54) — Publish what an sFlow agent sampled and could not send
+- [#55](https://github.com/umatare5/xflow-exporter/pull/55) — Record the sFlow device the decoder was read against
 
 ## [v0.9.1]
 

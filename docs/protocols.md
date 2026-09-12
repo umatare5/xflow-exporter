@@ -8,13 +8,14 @@ Every listener accepts every protocol below, told apart per datagram, over plain
 | [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Cisco C891FJ (planned)                    |
 | [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Cisco WS-C2960CX-8PC-L, Cisco C9800-CL-K9 |
 | [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Cisco C9800-CL-K9                         |
-| [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G (planned)                      |
+| [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G                                |
 
 - **Cisco WS-C2960CX-8PC-L** — a Catalyst 2960-CX on `C2960CX-UNIVERSALK9-M` 15.2(7)E3, the one device here declaring a sampler, exporting v9 under a custom record that parses a 5-tuple and an input `ifIndex`.
 - **Cisco C9800-CL-K9** — a Catalyst 9800-CL on `C9800-CL-K9_IOSXE` 17.15.6, exporting IPFIX and NetFlow v9 at once from `record wireless avc basic`, which keys a wireless client rather than a switched port.
+- **HP 2530-8G** — a J9777A on `YA.16.11.0030`, sampling one port at 1:50 into compact flow samples that carry up to 128 header bytes and the port's VLAN, and reporting the samples its agent drops.
 
 > [!NOTE]
-> **Verified on** names the vendor and model whose own export this decoder was read against, so synthetic datagrams and unit tests do not count. A row reading `(planned)` names hardware awaiting measurement, leaving that protocol implemented and covered by fixtures but never read off a wire. Neither verified device exports a section.
+> **Verified on** names the vendor and model whose own export this decoder was read against, so synthetic datagrams and unit tests do not count. A row reading `(planned)` names hardware awaiting measurement, leaving that protocol implemented and covered by fixtures but never read off a wire. No verified device exports a section.
 
 > [!NOTE]
 > DTLS is unsupported: no network OS ships flows over it, and Go has no production 1.3 stack.
@@ -575,7 +576,9 @@ The records follow, each a type, a length and its body, framed exactly as the sa
 | 4      | Sampled IPv6      | Decoded, pre-parsed              |
 | ≥ 1001 | Extended data     | Skipped, it annotates the sample |
 
-A raw packet header record is a header protocol, the original frame length, the stripped byte count, the header length, and then the header itself. Only protocol `1`, Ethernet, is read — any other header protocol is refused and counted `malformed` — and the frame length rather than the captured length is what the byte counter takes.
+A pre-parsed record states the IP packet length rather than the frame's, so the byte counter of a record read from format 3 or 4 excludes the encapsulation the one read from format 1 counts. An extended record annotates the sample: format 1001 carries the VLAN, 1002 the next hop and the prefix lengths, and 1003 the AS path, none of which reaches a series.
+
+A raw packet header record is a header protocol, the original frame length, the stripped byte count, the header length, and then the header itself. Only protocol `1`, Ethernet, is read — any other header protocol is refused and counted `malformed` — and the frame length rather than the captured length is what the byte counter takes. That length counts the frame on the wire, FCS included.
 
 ```text
  0                   1                   2                   3
@@ -594,6 +597,8 @@ A raw packet header record is a header protocol, the original frame length, the 
 |                                                               |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
+
+The declared header length is the smaller of the configured maximum and the frame rounded up to a multiple of four, so a short frame arrives with its own length rather than a padded one. The drop counter a flow sample carries is the sampler's own on the measured device, which reports a different value for each of two samplers in one datagram.
 
 ## Options Templates
 
