@@ -70,6 +70,12 @@ type fieldState struct {
 	// the pairs together, not of any one element.
 	v4, v6 addrPair
 
+	// samplerID is the sampler the record named, which the device's table
+	// resolves into the rate that measured it. Zero is a legal identifier,
+	// so the flag is what says one was read.
+	samplerID    uint32
+	hasSamplerID bool
+
 	// A sampled packet section, kept for resolution after every field is
 	// read so the device's own parsed fields can take precedence.
 	frameSection []byte
@@ -107,8 +113,23 @@ func finishRecord(r *flow.Record, state *fieldState, bootTime time.Time, domain 
 	}
 
 	if r.SamplingRate == 0 {
-		r.SamplingRate = domain.samplingRate.Load()
+		r.SamplingRate = rateInForce(state, domain)
 	}
+}
+
+// rateInForce resolves the rate that measured one record. A record naming a
+// sampler takes that sampler's declaration; one naming none, or naming one
+// the device has not announced yet, falls back to its domain and then to the
+// single rate the whole device agrees on. Where the device declared several,
+// the rate stays zero: correcting by one of them is a wrong reading rather
+// than a missing one.
+func rateInForce(state *fieldState, domain *domainState) uint32 {
+	if state.hasSamplerID {
+		if rate, ok := domain.declared.rateFor(state.samplerID); ok {
+			return rate
+		}
+	}
+	return domain.rateInForce()
 }
 
 // resolveAddrs settles which address family the device actually measured.
@@ -293,6 +314,8 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 		if v, ok := beUint32(value); ok {
 			r.AppID = v
 		}
+	case fieldSamplerID:
+		state.samplerID, state.hasSamplerID = beUint32(value)
 	default:
 		applyRareField(r, state, fieldType, value)
 	}

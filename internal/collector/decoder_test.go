@@ -37,7 +37,7 @@ func TestDecoderCollector_Describe(t *testing.T) {
 
 	c := NewDecoderCollector(newTestDecoder())
 
-	ch := make(chan *prometheus.Desc, 16)
+	ch := make(chan *prometheus.Desc, 20)
 	go func() {
 		defer close(ch)
 		c.Describe(ch)
@@ -47,8 +47,8 @@ func TestDecoderCollector_Describe(t *testing.T) {
 	for range ch {
 		count++
 	}
-	if count != 14 {
-		t.Errorf("Describe() emitted %d descriptors, want 14", count)
+	if count != 16 {
+		t.Errorf("Describe() emitted %d descriptors, want 16", count)
 	}
 }
 
@@ -60,7 +60,7 @@ func TestDecoderCollector_EmptyUntilTraffic(t *testing.T) {
 	// Only the refusal counters, which are seeded so a first refusal reads
 	// as a rise rather than as a new series. Nothing is published per
 	// exporter until a datagram names one.
-	if got := testutil.CollectAndCount(c); got != 5 {
+	if got := testutil.CollectAndCount(c); got != 6 {
 		t.Errorf("CollectAndCount() = %d series before any datagram, want only the seeded counters", got)
 	}
 	for _, name := range []string{
@@ -68,6 +68,7 @@ func TestDecoderCollector_EmptyUntilTraffic(t *testing.T) {
 		"xflow_vendor_strings_refused_total",
 		"xflow_applications_refused_total",
 		"xflow_exporters_refused_total",
+		"xflow_sampling_declarations_refused_total",
 		"xflow_samplers_refused_total",
 	} {
 		if got := testutil.CollectAndCount(c, name); got != 1 {
@@ -297,16 +298,18 @@ xflow_applications_refused_total 0
 
 // stubDecoderSource reports a distinct count from each refusal accessor.
 type stubDecoderSource struct {
-	domains, strings, applications, exporters, samplers uint64
+	domains, strings, applications, exporters, samplers, declarations uint64
 }
 
-func (s stubDecoderSource) Stats() *decoder.Stats             { return &decoder.Stats{} }
-func (s stubDecoderSource) Domains() []decoder.DomainSnapshot { return nil }
-func (s stubDecoderSource) DomainsRefused() uint64            { return s.domains }
-func (s stubDecoderSource) VendorStringsRefused() uint64      { return s.strings }
-func (s stubDecoderSource) ApplicationsRefused() uint64       { return s.applications }
-func (s stubDecoderSource) ExportersRefused() uint64          { return s.exporters }
-func (s stubDecoderSource) SamplersRefused() uint64           { return s.samplers }
+func (s stubDecoderSource) Stats() *decoder.Stats               { return &decoder.Stats{} }
+func (s stubDecoderSource) Domains() []decoder.DomainSnapshot   { return nil }
+func (s stubDecoderSource) DomainsRefused() uint64              { return s.domains }
+func (s stubDecoderSource) VendorStringsRefused() uint64        { return s.strings }
+func (s stubDecoderSource) ApplicationsRefused() uint64         { return s.applications }
+func (s stubDecoderSource) ExportersRefused() uint64            { return s.exporters }
+func (s stubDecoderSource) SamplersRefused() uint64             { return s.samplers }
+func (s stubDecoderSource) Samplers() []decoder.SamplerSnapshot { return nil }
+func (s stubDecoderSource) DeclarationsRefused() uint64         { return s.declarations }
 
 // TestDecoderCollector_RefusalCountersDoNotCross pins each refusal counter to
 // its own accessor. The three publish lines are adjacent and alike, and the
@@ -317,7 +320,7 @@ func TestDecoderCollector_RefusalCountersDoNotCross(t *testing.T) {
 	t.Parallel()
 
 	c := NewDecoderCollector(stubDecoderSource{
-		domains: 3, strings: 5, applications: 7, exporters: 11, samplers: 13,
+		domains: 3, strings: 5, applications: 7, exporters: 11, samplers: 13, declarations: 17,
 	})
 
 	expected := `
@@ -336,11 +339,14 @@ xflow_exporters_refused_total 11
 # HELP xflow_samplers_refused_total Flow samples left untracked since process start, their domain being at its sampler budget
 # TYPE xflow_samplers_refused_total counter
 xflow_samplers_refused_total 13
+# HELP xflow_sampling_declarations_refused_total Sampling declarations discarded since process start, the exporter being at its sampler budget
+# TYPE xflow_sampling_declarations_refused_total counter
+xflow_sampling_declarations_refused_total 17
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_domains_refused_total", "xflow_vendor_strings_refused_total",
 		"xflow_applications_refused_total", "xflow_exporters_refused_total",
-		"xflow_samplers_refused_total"); err != nil {
+		"xflow_samplers_refused_total", "xflow_sampling_declarations_refused_total"); err != nil {
 		t.Errorf("CollectAndCompare() mismatch: %v", err)
 	}
 }
@@ -489,5 +495,58 @@ func TestDecoderCollector_ARefusedDifferenceLeavesItsCounterAbsent(t *testing.T)
 
 	if got := testutil.CollectAndCount(c, "xflow_sample_pool_packets_total"); got != 1 {
 		t.Errorf("sample pool series = %d, want 1 with the second device's difference refused", got)
+	}
+}
+
+// buildV9SamplerTable crafts a v9 datagram announcing a system-scoped sampler
+// table and one entry in it, which is the shape a Catalyst exports.
+func buildV9SamplerTable(sequence, samplerID, rate byte) []byte {
+	return []byte{
+		0x00, 0x09, 0x00, 0x02, // version 9, count 2
+		0x00, 0x00, 0x00, 0x00, // sysUptime
+		0x68, 0x00, 0x00, 0x00, // unix_secs
+		0x00, 0x00, 0x00, sequence,
+		0x00, 0x00, 0x01, 0x00, // source id 256
+		// options template flowset: id 1, length 22, template 500
+		0x00, 0x01, 0x00, 0x16,
+		0x01, 0xF4, 0x00, 0x04, 0x00, 0x08, // id 500, scope 4 bytes, options 8
+		0x00, 0x01, 0x00, 0x04, // scope: system(4)
+		0x00, 0x30, 0x00, 0x04, // samplerId(4)
+		0x00, 0x32, 0x00, 0x04, // samplerRandomInterval(4)
+		// data flowset for template 500, length 16
+		0x01, 0xF4, 0x00, 0x10,
+		0x00, 0x00, 0x00, 0x09, // scope value
+		0x00, 0x00, 0x00, samplerID,
+		0x00, 0x00, 0x00, rate,
+	}
+}
+
+// TestDecoderCollector_ADomainOfSeveralSamplersAuditsThemIndividually pins the
+// two rate families apart. A domain declaring several has no single rate in
+// force, so its own series is absent -- and the corrections still applied
+// would have nothing to read them by without the per-sampler one.
+func TestDecoderCollector_ADomainOfSeveralSamplersAuditsThemIndividually(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	exporter := netip.MustParseAddr("192.0.2.21")
+	for i, entry := range [][2]byte{{1, 32}, {2, 64}} {
+		if _, err := d.Decode(exporter, buildV9SamplerTable(byte(i+1), entry[0], entry[1]), nil); err != nil {
+			t.Fatalf("Decode() error = %v, want nil", err)
+		}
+	}
+
+	c := NewDecoderCollector(d)
+	expected := `
+# HELP xflow_sampler_rate Packet sampling rate a device declared for one named sampler
+# TYPE xflow_sampler_rate gauge
+xflow_sampler_rate{exporter_address="192.0.2.21",sampler="1",version="netflow_v9"} 32
+xflow_sampler_rate{exporter_address="192.0.2.21",sampler="2",version="netflow_v9"} 64
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "xflow_sampler_rate"); err != nil {
+		t.Errorf("CollectAndCompare() mismatch: %v", err)
+	}
+	if got := testutil.CollectAndCount(c, "xflow_sampling_rate"); got != 0 {
+		t.Errorf("xflow_sampling_rate = %d series, want none with no single rate in force", got)
 	}
 }

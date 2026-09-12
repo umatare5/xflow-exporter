@@ -168,6 +168,18 @@ func (d *Decoder) ApplicationsRefused() uint64 {
 	return d.apps.refusedCount()
 }
 
+// Samplers returns the rates each device declared for a named sampler.
+func (d *Decoder) Samplers() []SamplerSnapshot {
+	return d.templates.samplerSnapshot()
+}
+
+// DeclarationsRefused reports how many sampling declarations a device's table
+// budget turned away. Records naming a refused sampler take the device's own
+// rate rather than another sampler's.
+func (d *Decoder) DeclarationsRefused() uint64 {
+	return d.templates.refusedDeclarations()
+}
+
 // Domains returns the per-observation-domain state for the metrics collector.
 func (d *Decoder) Domains() []DomainSnapshot {
 	return d.templates.snapshot()

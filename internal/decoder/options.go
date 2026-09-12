@@ -3,10 +3,6 @@
 
 package decoder
 
-import (
-	"net/netip"
-)
-
 // IPFIX PSAMP sampling elements, alongside the legacy v9 pair declared with
 // the field constants.
 const (
@@ -24,6 +20,9 @@ const fieldApplicationName = 96
 // optionsState accumulates one options record's values, committed once the
 // record is fully read.
 type optionsState struct {
+	samplerID    uint32
+	hasSamplerID bool
+
 	plainInterval  uint32
 	randomInterval uint32
 	packetInterval uint32
@@ -54,6 +53,8 @@ func (o *optionsState) apply(fieldType uint16, enterprise uint32, value []byte) 
 	}
 
 	switch fieldType {
+	case fieldSamplerID:
+		o.samplerID, o.hasSamplerID = beUint32(value)
 	case fieldSamplingInterval:
 		o.plainInterval, _ = beUint32(value)
 	case fieldSamplerRandomInterval:
@@ -75,18 +76,23 @@ func (o *optionsState) apply(fieldType uint16, enterprise uint32, value []byte) 
 }
 
 // commit publishes what the record declared: the sampling rate onto the
-// domain, and the application strings into the exporter's table.
-func (o *optionsState) commit(d *Decoder, exporter netip.Addr, domain *domainState) {
+// device's sampler table, and the application strings into its application
+// table. A declaration naming no sampler also lands on the domain, which is
+// the only scope its announcement can claim.
+func (o *optionsState) commit(d *Decoder, key domainKey, domain *domainState) {
 	if rate := o.samplingRate(); rate > 0 {
-		domain.samplingRate.Store(rate)
+		if !o.hasSamplerID {
+			domain.samplingRate.Store(rate)
+		}
+		d.templates.declareSampler(domain, key.odid, o.samplerID, o.hasSamplerID, rate)
 	}
 
 	if o.appID != 0 {
 		if len(o.appName) > 0 {
-			d.apps.setName(exporter, o.appID, o.appName)
+			d.apps.setName(key.exporter, o.appID, o.appName)
 		}
 		if len(o.appCategory) > 0 {
-			d.apps.setCategory(exporter, o.appID, o.appCategory)
+			d.apps.setCategory(key.exporter, o.appID, o.appCategory)
 		}
 	}
 }

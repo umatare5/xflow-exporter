@@ -60,8 +60,10 @@ const (
 	// TOS byte where the record matched on DSCP rather than on TOS.
 	fieldDSCP = 195
 
-	// Options fields carrying the packet sampling configuration.
+	// Options fields carrying the packet sampling configuration. A data
+	// record names its sampler with the same identifier the table scopes on.
 	fieldSamplingInterval      = 34
+	fieldSamplerID             = 48
 	fieldSamplerRandomInterval = 50
 )
 
@@ -314,7 +316,7 @@ func (d *Decoder) decodeV9DataSet(
 	for i := range count {
 		record := set[i*tpl.recordLen : (i+1)*tpl.recordLen]
 		if tpl.options {
-			d.readV9OptionsRecord(key.exporter, domain, tpl, record)
+			d.readV9OptionsRecord(key, domain, tpl, record)
 			continue
 		}
 		dst = d.appendV9Record(key, tpl, record, bootTime, domain, dst)
@@ -324,7 +326,7 @@ func (d *Decoder) decodeV9DataSet(
 
 // readV9OptionsRecord walks one fixed-length options record and feeds the
 // shared options consumer.
-func (d *Decoder) readV9OptionsRecord(exporter netip.Addr, domain *domainState, tpl *template, record []byte) {
+func (d *Decoder) readV9OptionsRecord(key domainKey, domain *domainState, tpl *template, record []byte) {
 	var opts optionsState
 
 	offset := 0
@@ -334,7 +336,7 @@ func (d *Decoder) readV9OptionsRecord(exporter netip.Addr, domain *domainState, 
 		opts.apply(f.fieldType, f.enterprise, value)
 	}
 
-	opts.commit(d, exporter, domain)
+	opts.commit(d, key, domain)
 }
 
 // appendV9Record decodes one data record in place at the end of dst.

@@ -94,7 +94,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Every byte and packet figure on this dashboard has been multiplied by this rate, so it is the frame the volume numbers are read in. Flow counts are not multiplied. A domain that has declared no rate publishes no series, and its records were corrected by one.",
+      "description": "Every byte and packet figure on this dashboard has been multiplied by this rate, so it is the frame the volume numbers are read in. Flow counts are not multiplied. A domain with no single rate in force publishes no series, and xflow_sampler_rate carries what corrected its records.",
       "fieldConfig": {
         "defaults": {
           "color": {
