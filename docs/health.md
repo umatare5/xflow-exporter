@@ -160,7 +160,7 @@ carries each rate a device declared against the samplerId its data records name,
 - A record naming none on a device declaring several carries no rate and is published uncorrected.
 - A declaration the device stops announcing is dropped on the template TTL, so a renumbered sampler stops reading as a second rate rather than holding the device at none.
 
-This returns every domain a rate reaches only through the sampler its records name, on a device that samples:
+This returns every domain with a data template and no rate in force, on a device that samples, corrected or not:
 
 ```promql
 (xflow_templates{type="template"} > 0)
