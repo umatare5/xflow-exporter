@@ -63,6 +63,12 @@ func baseV8Want() flow.Record {
 	}
 }
 
+// decodeV8 reads one datagram through a decoder of its own, so a parse test
+// reads the record rather than the domain a shared decoder carries forward.
+func decodeV8(payload []byte) ([]flow.Record, *decodeError) {
+	return newTestDecoder().decodeNetFlowV8(testExporter, payload, nil, func(string) {})
+}
+
 func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
 	t.Parallel()
 
@@ -386,7 +392,7 @@ func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
 
 			payload := append(buildV8Header(tt.aggregation, 1), tt.record()...)
 
-			records, decErr := decodeNetFlowV8(testExporter, payload, nil)
+			records, decErr := decodeV8(payload)
 			if decErr != nil {
 				t.Fatalf("decodeNetFlowV8() error = %v, want nil", decErr)
 			}
@@ -413,7 +419,7 @@ func TestDecodeNetFlowV8_ReadsEveryClaimedRecord(t *testing.T) {
 		payload = append(payload, record...)
 	}
 
-	records, decErr := decodeNetFlowV8(testExporter, payload, nil)
+	records, decErr := decodeV8(payload)
 	if decErr != nil {
 		t.Fatalf("decodeNetFlowV8() error = %v, want nil", decErr)
 	}
@@ -482,7 +488,7 @@ func TestDecodeNetFlowV8_RejectsBrokenDatagrams(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			records, decErr := decodeNetFlowV8(testExporter, tt.payload, nil)
+			records, decErr := decodeV8(tt.payload)
 			if decErr == nil {
 				t.Fatal("decodeNetFlowV8() error = nil, want a rejection")
 			}
@@ -504,13 +510,80 @@ func BenchmarkDecodeNetFlowV8(b *testing.B) {
 		payload = append(payload, record...)
 	}
 	records := make([]flow.Record, 0, 51)
+	d := newTestDecoder()
+	noIssue := func(string) {}
 
 	b.ReportAllocs()
 	for b.Loop() {
 		var err *decodeError
-		records, err = decodeNetFlowV8(testExporter, payload, records[:0])
+		records, err = d.decodeNetFlowV8(testExporter, payload, records[:0], noIssue)
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// v8Datagram builds one method's datagram of count identical common-layout
+// records, stamped with the sequence its aggregation cache has reached.
+func v8Datagram(aggregation uint8, count int, seq uint32) []byte {
+	payload := buildV8Header(aggregation, count)
+	binary.BigEndian.PutUint32(payload[16:20], seq)
+	record := make([]byte, 28)
+	putV8Common(record)
+	for range count {
+		payload = append(payload, record...)
+	}
+	return payload
+}
+
+// TestDecodeNetFlowV8_SequencePerAggregationCache pins the space the v8
+// sequence lives in. Every cache a device enables numbers its own, so folding
+// two methods onto one position reads their interleaved arrivals as loss --
+// on the verified router's own ten caches that fabricated 11,502 records.
+func TestDecodeNetFlowV8_SequencePerAggregationCache(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	// Two caches taking turns, each advancing by the records it carried.
+	for _, step := range []struct {
+		aggregation uint8
+		seq         uint32
+	}{{1, 400}, {2, 2300}, {1, 402}, {2, 2302}} {
+		if _, err := d.Decode(testExporter, v8Datagram(step.aggregation, 2, step.seq), nil); err != nil {
+			t.Fatalf("Decode() error = %v, want nil", err)
+		}
+	}
+
+	domains := d.Domains()
+	if len(domains) != 2 {
+		t.Fatalf("Domains() = %d, want one per aggregation method", len(domains))
+	}
+	for _, domain := range domains {
+		if domain.SequenceMissed != 0 {
+			t.Errorf("method %d missed %d, want 0 from an unbroken run", domain.ODID, domain.SequenceMissed)
+		}
+	}
+}
+
+// TestDecodeNetFlowV8_SequenceCountsTheGapOnce pins what a datagram overtaken
+// in flight costs. Its records were already counted missing when the one past
+// them arrived, so rewinding the base to it counts the same records a second
+// time when the next in line lands.
+func TestDecodeNetFlowV8_SequenceCountsTheGapOnce(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+
+	// Four datagrams of two records from seq 10. The third overtakes the
+	// second, which then arrives late.
+	for _, seq := range []uint32{10, 14, 12, 16} {
+		if _, err := d.Decode(testExporter, v8Datagram(1, 2, seq), nil); err != nil {
+			t.Fatalf("Decode() error = %v, want nil", err)
+		}
+	}
+
+	if got := d.Domains()[0].SequenceMissed; got != 2 {
+		t.Errorf("SequenceMissed = %d, want the 2 records the overtake named once", got)
 	}
 }

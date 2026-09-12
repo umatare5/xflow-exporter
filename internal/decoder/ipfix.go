@@ -70,7 +70,8 @@ func (d *Decoder) decodeIPFIX(
 
 	// The sequence number counts data records, so a message with an
 	// undecodable set leaves the true count unknown and resets the tracking.
-	domain.trackRecordSequence(sequence, uint32(dataRecords), complete) //nolint:gosec // Bounded by message size.
+	// The domain id already separates what an engine halfword does on v5.
+	domain.trackRecordSequence(sequence, uint32(dataRecords), 0, complete) //nolint:gosec // Bounded by message size.
 	return dst, nil
 }
 

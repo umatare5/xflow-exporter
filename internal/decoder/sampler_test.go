@@ -223,3 +223,33 @@ func TestTrackSampler_AnAcceptedReadingEndsTheLateRun(t *testing.T) {
 		t.Errorf("sample pool = %d, want 100 measured from the base the late run left alone", got)
 	}
 }
+
+// TestTrackRecordSequence_AnAcceptedMessageEndsTheLateRun pins the reset that
+// keeps the guard working. The run bounds how long a base is held against
+// messages arriving before it, and a run that never restarts spends its bound
+// once and then rewinds on every later overtake.
+func TestTrackRecordSequence_AnAcceptedMessageEndsTheLateRun(t *testing.T) {
+	t.Parallel()
+
+	d := &domainState{}
+
+	// One datagram to take a position from, then rounds of three: one that
+	// skips ahead, the one it overtook arriving late, and one back in order.
+	// Each round names the skipped records once and nothing is ever lost.
+	const records, rounds = 2, maxLateRun + 2
+	base := uint32(100)
+	d.trackRecordSequence(base, records, 0, true)
+
+	for range rounds {
+		base += records
+		d.trackRecordSequence(base+records, records, 0, true) // skips ahead
+		d.trackRecordSequence(base, records, 0, true)         // the overtaken one
+		base += 2 * records
+		d.trackRecordSequence(base, records, 0, true) // back in order
+	}
+
+	if got := d.sequenceMissed.Load(); got != rounds*records {
+		t.Errorf("SequenceMissed = %d, want %d: the skip counted once per round",
+			got, rounds*records)
+	}
+}

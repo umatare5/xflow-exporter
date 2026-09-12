@@ -95,7 +95,7 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		),
 		seqMissedDesc: prometheus.NewDesc(
 			"xflow_sequence_missed_total",
-			"Packets on v9 and sFlow, or data records on IPFIX, the sequence numbers say were lost, per domain",
+			"Packets on v9 and sFlow, or records on v5, v8 and IPFIX, the sequence numbers say were lost, per domain",
 			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
 		samplingDesc: prometheus.NewDesc(
@@ -235,18 +235,19 @@ func (c *DecoderCollector) collectDomains(ch chan<- prometheus.Metric) {
 		version := domain.Version.String()
 		odid := strconv.FormatUint(uint64(domain.ODID), 10)
 
-		// sFlow holds no template and the other protocols carry no sampler, so
-		// one domain has the pair its own protocol can measure. Each counter
-		// appears once a difference was taken for it.
-		switch {
-		case domain.Version != flow.VersionSFlowV5:
+		// A domain publishes only what its own protocol can measure: v9 and
+		// IPFIX announce templates, sFlow reports its agent's sample counters,
+		// and v5 and v8 carry neither. Each sFlow counter appears once a
+		// difference was taken for it.
+		switch domain.Version {
+		case flow.VersionNetFlowV9, flow.VersionIPFIX:
 			ch <- prometheus.MustNewConstMetric(
 				c.templatesDesc, prometheus.GaugeValue,
 				float64(domain.Templates), exporter, version, odid, templateKindData)
 			ch <- prometheus.MustNewConstMetric(
 				c.templatesDesc, prometheus.GaugeValue,
 				float64(domain.OptionsTemplates), exporter, version, odid, templateKindOptions)
-		default:
+		case flow.VersionSFlowV5:
 			if domain.PoolMeasured {
 				ch <- prometheus.MustNewConstMetric(
 					c.samplePoolDesc, prometheus.CounterValue,
@@ -257,6 +258,9 @@ func (c *DecoderCollector) collectDomains(ch chan<- prometheus.Metric) {
 					c.samplesDroppedDesc, prometheus.CounterValue,
 					float64(domain.SamplesDropped), exporter, version, odid)
 			}
+		case flow.VersionNetFlowV5, flow.VersionNetFlowV8, flow.VersionUnknown:
+			// Neither templates nor samplers; the sequence below is all these
+			// domains are opened for.
 		}
 
 		ch <- prometheus.MustNewConstMetric(

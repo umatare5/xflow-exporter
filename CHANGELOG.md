@@ -15,6 +15,7 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#56](https://github.com/umatare5/xflow-exporter/pull/56) — Drop the device this decoder never read from the verified table
 - [#57](https://github.com/umatare5/xflow-exporter/pull/57) — Correct a sampled record by the sampler it names
 - [#58](https://github.com/umatare5/xflow-exporter/pull/58) — Key a device's traffic on the observation domain that reported it
+- [#59](https://github.com/umatare5/xflow-exporter/pull/59) — Track the NetFlow v5 and v8 export sequence, and part the two flow counters
 
 ## [v0.9.1]
 
