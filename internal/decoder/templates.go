@@ -17,6 +17,17 @@ import (
 // attacker, registering templates without end. Real devices carry tens.
 const maxTemplatesPerDomain = 8192
 
+// maxSamplersPerDomain bounds the samplers one observation domain tracks. A
+// source id is a wire field, so the map it keys grows with what a sender
+// chooses rather than with the ports a device holds.
+const maxSamplersPerDomain = 4096
+
+// maxLateRun bounds a run of samples one sampler's sequence places before the
+// current position. Reordering runs a datagram or two deep, so a longer run is
+// an agent that restarted from a sequence low enough to read as reordering,
+// and holding the base still for it freezes the counters for good.
+const maxLateRun = 4
+
 // maxDomainsPerExporter bounds the observation domains one device may open.
 // The Observation Domain ID is a wire field rather than a property of the
 // fleet, so a device with a broken numbering scheme, or one under an
@@ -91,6 +102,43 @@ type domainState struct {
 	// samplingRate is the packet sampling rate the domain's options declared,
 	// zero until one arrives.
 	samplingRate atomic.Uint32
+
+	// samplersMu guards samplers alone, so a datagram's sample loop never
+	// waits on the lock a scrape reads the templates through.
+	samplersMu sync.Mutex
+	samplers   map[uint64]*samplerState
+	// recent is the sampler the last sample named. A datagram carries one
+	// sampler's samples together, so the next one usually names it again.
+	recentID  uint64
+	recentOne *samplerState
+	// lateRun counts the samples read as late one after another. One agent
+	// owns the domain, so its samplers restart together and share the count.
+	lateRun int
+	// samplersOldest lower-bounds the least lastSeen the map holds: a sampler
+	// only moves its own forward and a new one is stamped now, so a sweep
+	// before this ages out frees nothing.
+	samplersOldest int64
+
+	// samplePool and samplesDropped accumulate the differences between one
+	// sampler's readings. The agent restarts its own counters on its terms,
+	// so what it reports is not what a Prometheus counter can carry.
+	samplePool     atomic.Uint64
+	samplesDropped atomic.Uint64
+	// poolMeasured and dropsMeasured record that a difference was taken, which
+	// a zero total cannot. The two guards are independent, so one reading may
+	// be refused while the other is accumulated.
+	poolMeasured  atomic.Bool
+	dropsMeasured atomic.Bool
+}
+
+// samplerState is one sampler's last reading, which the next one is measured
+// from.
+type samplerState struct {
+	seq      uint32
+	rate     uint32
+	pool     uint32
+	drops    uint32
+	lastSeen int64
 }
 
 // templateStore indexes the per-domain state. Domains appear on first use,
@@ -106,6 +154,10 @@ type templateStore struct {
 	// datagram naming a domain past it, so the loss is visible rather than
 	// silent.
 	domainsRefused atomic.Uint64
+
+	// samplersRefused counts the flow samples turned away at a domain's
+	// sampler budget. The sample still decodes; only its counters are lost.
+	samplersRefused atomic.Uint64
 
 	maxFields int
 	ttl       time.Duration
@@ -188,6 +240,11 @@ func (s *templateStore) sweep() int {
 // refused reports how many datagrams the budget turned away.
 func (s *templateStore) refused() uint64 {
 	return s.domainsRefused.Load()
+}
+
+// refusedSamplers reports how many flow samples the sampler budget turned away.
+func (s *templateStore) refusedSamplers() uint64 {
+	return s.samplersRefused.Load()
 }
 
 // add registers or refreshes one template. A full domain drops expired
@@ -304,6 +361,89 @@ func (d *domainState) trackSequence(seq uint32) {
 	}
 }
 
+// trackSamplerLocked folds one flow sample's counters into the domain's
+// totals. The sample sequence says whether two readings are consecutive: a
+// step the agent did not take, or a rate it did not hold before, rebases the
+// sampler rather than accumulating a difference neither reading covers.
+// The sampler lock is held across the datagram by the caller, which is where
+// the samples of one domain arrive in wire order.
+func (s *templateStore) trackSamplerLocked(d *domainState, id uint64, seq, rate, pool, drops uint32) {
+	const (
+		forwardWindow = 1 << 30
+		reorderWindow = 1024
+	)
+
+	at := d.lastSeen.Load()
+
+	last := d.recentOne
+	if last == nil || d.recentID != id {
+		var ok bool
+		if last, ok = d.samplers[id]; !ok {
+			if len(d.samplers) >= maxSamplersPerDomain {
+				if at-d.samplersOldest <= int64(s.ttl) {
+					s.samplersRefused.Add(1)
+					return
+				}
+				d.pruneIdleSamplersLocked(at, s.ttl)
+				if len(d.samplers) >= maxSamplersPerDomain {
+					s.samplersRefused.Add(1)
+					return
+				}
+			}
+			if d.samplers == nil {
+				d.samplers = make(map[uint64]*samplerState)
+			}
+			last = &samplerState{seq: seq, rate: rate, pool: pool, drops: drops, lastSeen: at}
+			d.samplers[id] = last
+			d.recentID, d.recentOne = id, last
+			return
+		}
+		d.recentID, d.recentOne = id, last
+	}
+
+	switch step := seq - last.seq; {
+	case step > ^uint32(0)-reorderWindow && pool <= last.pool && d.lateRun < maxLateRun:
+		// A late sample from before the current position.
+		d.lateRun++
+		return
+	case step >= forwardWindow || rate != last.rate:
+		// A restart or a reconfiguration, which the counters do not span.
+	default:
+		// The counters are uint32 on the wire and are held at that width, so
+		// a wrap of their own reads as the step the agent took.
+		if delta := pool - last.pool; delta < forwardWindow {
+			d.samplePool.Add(uint64(delta))
+			d.poolMeasured.Store(true)
+		}
+		if delta := drops - last.drops; delta < forwardWindow {
+			d.samplesDropped.Add(uint64(delta))
+			d.dropsMeasured.Store(true)
+		}
+	}
+
+	d.lateRun = 0
+	last.seq, last.rate, last.pool, last.drops, last.lastSeen = seq, rate, pool, drops, at
+}
+
+// pruneIdleSamplersLocked drops every sampler silent for longer than the TTL.
+// The sampler lock is held by the caller.
+func (d *domainState) pruneIdleSamplersLocked(now int64, ttl time.Duration) {
+	cutoff := now - int64(ttl)
+	oldest := now
+	for id, last := range d.samplers {
+		if last.lastSeen < cutoff {
+			delete(d.samplers, id)
+			continue
+		}
+		if last.lastSeen < oldest {
+			oldest = last.lastSeen
+		}
+	}
+	d.samplersOldest = oldest
+	// The cache may name one that went; the map is what holds a sampler.
+	d.recentOne = nil
+}
+
 // trackRecordSequence advances the IPFIX sequence, which counts data records
 // rather than packets. When a message's own record count is unknown the
 // tracking resets instead of guessing.
@@ -358,6 +498,13 @@ type DomainSnapshot struct {
 	SequenceMissed   uint64
 	// SamplingRate is zero until the domain's options declared one.
 	SamplingRate uint32
+	// SamplePool and SamplesDropped are the sFlow samplers' own counters,
+	// summed across the domain. The Measured flags carry whether a difference
+	// was taken at all, which a total of zero cannot.
+	SamplePool     uint64
+	SamplesDropped uint64
+	PoolMeasured   bool
+	DropsMeasured  bool
 }
 
 // snapshot reads every domain's state.
@@ -377,6 +524,10 @@ func (s *templateStore) snapshot() []DomainSnapshot {
 			OptionsTemplates: options,
 			SequenceMissed:   d.sequenceMissed.Load(),
 			SamplingRate:     d.samplingRate.Load(),
+			SamplePool:       d.samplePool.Load(),
+			SamplesDropped:   d.samplesDropped.Load(),
+			PoolMeasured:     d.poolMeasured.Load(),
+			DropsMeasured:    d.dropsMeasured.Load(),
 		})
 	}
 	return snapshots

@@ -451,7 +451,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Seconds since each device's last decoded record. Flow export is push, so there is no up-style reachability toward a sender and this is the only signal that a device has gone quiet. The warning line is the entry TTL its own alerting rule fires on, past which that device's entries start disappearing. A device that has never decoded has no series and no tile.",
+      "description": "Seconds since each device's last decoded flow record. Flow export is push, so there is no up-style reachability toward a sender, and a device still sending datagrams while its sampler stopped shows here alone. The warning line is the entry TTL its own alerting rule fires on, past which that device's entries start disappearing. A device that has never decoded has no series and no tile.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4263,7 +4263,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "When a device went silent and for how long, as a band per device rather than a sawtooth. The boolean comparison yields one and zero rather than filtering the series away, which is what a state panel needs. A device that stops exporting freezes every counter it feeds, which a rate renders as a flat zero indistinguishable from a quiet network; this band is what separates the two. The threshold is the entry TTL rather than an export cadence, so a device exporting only on a long idle timeout would flap here.",
+          "description": "When a device went silent and for how long, as a band per device rather than a sawtooth. The boolean comparison yields one and zero rather than filtering the series away, which is what a state panel needs. A device that stops exporting freezes every counter it feeds, which a rate renders as a flat zero indistinguishable from a quiet network. The threshold is the entry TTL rather than an export cadence, so a device exporting only on a long idle timeout would flap here.",
           "fieldConfig": {
             "defaults": {
               "color": {

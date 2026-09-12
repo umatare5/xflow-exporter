@@ -144,13 +144,13 @@ These series describe the exporter itself rather than the traffic it aggregates.
 | :------------------------------------- | :------ | :------------------------------------- |
 | `xflow_flows_total`                    | Counter | Records decoded per device and version |
 | `xflow_decode_errors_total`            | Counter | Rejections per device and reason       |
-| `xflow_last_flow_timestamp_seconds`    | Gauge   | Unix time of the last decode           |
+| `xflow_last_flow_timestamp_seconds`    | Gauge   | Unix time of the last record           |
 | `xflow_receiver_dropped_packets_total` | Counter | Pre-decode drops per listener          |
 | `xflow_sampling_rate`                  | Gauge   | Declared rate per domain               |
 | `xflow_aggregation_entries`            | Gauge   | Entries held per collector             |
 
 > [!NOTE]
-> Alert on freshness with `time() - xflow_last_flow_timestamp_seconds`, the only signal that separates a silent device from a quiet network.
+> Alert on freshness with `time() - xflow_last_flow_timestamp_seconds`, which freezes when a device stops exporting flows even while its datagrams keep arriving.
 >
 > `--remote-write.url` adds four `xflow_remote_write_*` series, catalogued on the same page.
 

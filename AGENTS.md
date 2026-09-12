@@ -89,3 +89,4 @@ What the exporting devices do, which the decoders and the pages are written arou
 - **Flexible NetFlow flushes its cache in bursts** — the receive buffer and the queue are sized for the storm rather than the average. See [Help](docs/help.md#notes).
 - **A device may accept a collect statement it cannot honour** — it exports `0` for the field, which NetFlow Lite platforms do for the output interface. See [Collectors](docs/collectors.md#labels).
 - **A device's own parse wins over a packet section** — no verified device exports a section, so that path is covered by fixtures alone. See [Protocols](docs/protocols.md#packet-sections).
+- **A sampling agent drops the samples it marked** — the rate in force is then not the rate delivered, and the agent's own counters are what say so. See [Exporter health](docs/health.md#specifications).
