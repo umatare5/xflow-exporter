@@ -126,7 +126,7 @@ the per-domain family takes no scrape-time cut, neither Top-K nor min-bytes, bec
 - A device running several caches reports one flow once per cache, so summing across `odid` counts its traffic once per view rather than once. Summing across the domains a chassis opens per linecard or VRF is a device total; the wire does not say which shape a domain is.
 - A NetFlow v8 method is a domain here. The aggregation caches share the main cache's flows, so each one re-reports traffic the device already exported under its own dimensions.
 - The identifier is the Source ID on v9, the Observation Domain ID on IPFIX, the sub-agent id on sFlow and the method on v8. A v5 export runs one cache and reports `0`.
-- `xflow_exporter_flows_total` counts one flow per record, except a v8 aggregate where it takes the count the cache itself reported. A cache the same device exports as v9 carries no such count, so its reading is records and reads low beside the v8 ones.
+- `xflow_exporter_flows_total` counts one flow per record, except a v8 aggregate where it takes the count the cache itself reported. A cache the same device exports as v9 declares its own count in IE 3, which no decoder here reads, so that cache reads low beside the v8 ones.
 
 **the interface pair on `hosts`, `services` and `threats`**
 
