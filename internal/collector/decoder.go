@@ -17,6 +17,8 @@ type DecoderSource interface {
 	SamplersRefused() uint64
 	Domains() []decoder.DomainSnapshot
 	DomainsRefused() uint64
+	Samplers() []decoder.SamplerSnapshot
+	DeclarationsRefused() uint64
 	VendorStringsRefused() uint64
 	ApplicationsRefused() uint64
 	ExportersRefused() uint64
@@ -39,6 +41,8 @@ type DecoderCollector struct {
 	samplersRefusedDesc  *prometheus.Desc
 	seqMissedDesc        *prometheus.Desc
 	samplingDesc         *prometheus.Desc
+	samplerRateDesc      *prometheus.Desc
+	declRefusedDesc      *prometheus.Desc
 	domainsRefusedDesc   *prometheus.Desc
 	exportersRefusedDesc *prometheus.Desc
 	stringsRefusedDesc   *prometheus.Desc
@@ -96,8 +100,18 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		),
 		samplingDesc: prometheus.NewDesc(
 			"xflow_sampling_rate",
-			"Packet sampling rate the domain's options declared, absent until one arrives",
+			"Packet sampling rate in force for the domain, declared by its own options or inherited from the device",
 			[]string{labelExporter, labelVersion, labelODID}, nil,
+		),
+		samplerRateDesc: prometheus.NewDesc(
+			"xflow_sampler_rate",
+			"Packet sampling rate a device declared for one named sampler",
+			[]string{labelExporter, labelVersion, labelSampler}, nil,
+		),
+		declRefusedDesc: prometheus.NewDesc(
+			"xflow_sampling_declarations_refused_total",
+			"Sampling declarations discarded since process start, the exporter being at its sampler budget",
+			nil, nil,
 		),
 		domainsRefusedDesc: prometheus.NewDesc(
 			"xflow_domains_refused_total",
@@ -134,6 +148,8 @@ func (c *DecoderCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.samplersRefusedDesc
 	ch <- c.seqMissedDesc
 	ch <- c.samplingDesc
+	ch <- c.samplerRateDesc
+	ch <- c.declRefusedDesc
 	ch <- c.domainsRefusedDesc
 	ch <- c.stringsRefusedDesc
 	ch <- c.appsRefusedDesc
@@ -176,11 +192,14 @@ func (c *DecoderCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	c.collectDomains(ch)
+	c.collectSamplers(ch)
 
 	// Seeded at zero: a first refusal must read as a rise on an existing
 	// series rather than as a series appearing from nothing.
 	ch <- prometheus.MustNewConstMetric(
 		c.domainsRefusedDesc, prometheus.CounterValue, float64(c.src.DomainsRefused()))
+	ch <- prometheus.MustNewConstMetric(
+		c.declRefusedDesc, prometheus.CounterValue, float64(c.src.DeclarationsRefused()))
 	ch <- prometheus.MustNewConstMetric(
 		c.stringsRefusedDesc, prometheus.CounterValue, float64(c.src.VendorStringsRefused()))
 	ch <- prometheus.MustNewConstMetric(
@@ -196,6 +215,18 @@ const (
 	templateKindData    = "template"
 	templateKindOptions = "options_template"
 )
+
+// collectSamplers reports each device's named sampler declarations. A domain
+// carrying several has no single rate in force, so these are what audit its
+// correction.
+func (c *DecoderCollector) collectSamplers(ch chan<- prometheus.Metric) {
+	for _, sampler := range c.src.Samplers() {
+		ch <- prometheus.MustNewConstMetric(
+			c.samplerRateDesc, prometheus.GaugeValue, float64(sampler.Rate),
+			sampler.Exporter.String(), sampler.Version.String(),
+			strconv.FormatUint(uint64(sampler.Sampler), 10))
+	}
+}
 
 // collectDomains reports the per-observation-domain state.
 func (c *DecoderCollector) collectDomains(ch chan<- prometheus.Metric) {

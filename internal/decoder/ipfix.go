@@ -277,7 +277,7 @@ func (d *Decoder) decodeIPFIXRecord(
 	dst []flow.Record,
 ) ([]flow.Record, int, bool) {
 	if tpl.options {
-		next, ok := d.readIPFIXOptionsRecord(key.exporter, domain, tpl, set, offset)
+		next, ok := d.readIPFIXOptionsRecord(key, domain, tpl, set, offset)
 		return dst, next, ok
 	}
 
@@ -307,7 +307,7 @@ func (d *Decoder) decodeIPFIXRecord(
 
 // readIPFIXOptionsRecord walks one options record into the shared consumer.
 func (d *Decoder) readIPFIXOptionsRecord(
-	exporter netip.Addr, domain *domainState, tpl *template, set []byte, offset int,
+	key domainKey, domain *domainState, tpl *template, set []byte, offset int,
 ) (int, bool) {
 	var opts optionsState
 
@@ -320,7 +320,7 @@ func (d *Decoder) readIPFIXOptionsRecord(
 		opts.apply(f.fieldType, f.enterprise, value)
 	}
 
-	opts.commit(d, exporter, domain)
+	opts.commit(d, key, domain)
 	return offset, true
 }
 

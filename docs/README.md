@@ -72,7 +72,7 @@ The counters of every collector accumulate from entry creation, and an entry evi
 
 - **Sources** — the v5 header interval, the v9/IPFIX options rates, sFlow's inline rate.
 - **Precedence** — the options pairs rank as [Protocols](protocols.md#options-templates) tabulates.
-- **Audit** — `xflow_sampling_rate` for v9 and IPFIX, the sampler counters in [Health](health.md#specifications) for sFlow.
+- **Audit** — `xflow_sampling_rate` for v9 and IPFIX, `xflow_sampler_rate` where a domain holds several, the sampler counters in [Health](health.md#specifications) for sFlow.
 - **Unsampled** — a record carrying no rate multiplies by one, which is the unsampled reading.
 - **Overflow** — a product past `uint64` clamps there, because a wrapped counter reads as a reset.
 
@@ -96,6 +96,7 @@ Every map keyed by wire data carries a bound, a push protocol not choosing its s
 | Observation domains per device    | [256](../internal/decoder/templates.go#L37)  | Datagram discarded, counting `domain_limit` |
 | Templates per domain              | [8192](../internal/decoder/templates.go#L18) | Expired go first, then `invalid_template`   |
 | Samplers per domain               | [4096](../internal/decoder/templates.go#L23) | Expired go first, then left untracked       |
+| Sampler declarations per device   | [256](../internal/decoder/templates.go#L42)  | Refused, records take the device's own rate |
 | Interned vendor strings           | [65536](../internal/decoder/apps.go#L143)    | Copied per occurrence, not refused          |
 | One vendor string                 | [255 B](../internal/decoder/apps.go#L150)    | Refused like invalid UTF-8, once per field  |
 | Announced applications per device | [16384](../internal/decoder/apps.go#L38)     | Stays numbered rather than named            |
@@ -103,7 +104,7 @@ Every map keyed by wire data carries a bound, a push protocol not choosing its s
 | AS names held from the database   | [65536](../internal/enrich/mmdb.go#L86)      | Unnamed, so a join finds nothing            |
 
 - **Announced applications** — the bound is ten times the 1500 an NBAR2 pack names.
-- **Refusal counters** — the four `_refused_total` series count attempts, not entities.
+- **Refusal counters** — the five `_refused_total` series count attempts, not entities.
 - **Fallback** — a refused vendor string leaves the record numbered, or with no name.
 - **Sweeps** — idle domains go on the template TTL, idle devices only at the budget.
 - **Source-address keyed** — the application tables and the histograms carry no budget, so who may reach the receiver port is their bound — [`SECURITY.md`](../SECURITY.md) carries the filter.

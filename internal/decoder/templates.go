@@ -36,6 +36,11 @@ const maxLateRun = 4
 // hundreds is already generous.
 const maxDomainsPerExporter = 256
 
+// maxSamplersPerExporter bounds the sampler declarations one device holds for
+// one protocol. A samplerId is a wire field and the scope is the device, so
+// the table grows with what a sender announces rather than with its domains.
+const maxSamplersPerExporter = 256
+
 // templateField is one field specifier of a template. Enterprise is zero for
 // an IANA information element and the enterprise number for a vendor one,
 // which only IPFIX can express. An IPFIX variable-length field carries length
@@ -82,6 +87,85 @@ type domainKey struct {
 	proto    flow.Version
 }
 
+// samplerKey scopes a sampler table. An options record declaring Scope System
+// describes the device, so a sampler announced in one domain measures records
+// in every domain that device exports on the same protocol.
+type samplerKey struct {
+	exporter netip.Addr
+	proto    flow.Version
+}
+
+// samplerTable holds one device's sampling declarations for one protocol.
+// rates is keyed by the samplerId (IE 48) a data record names; plain holds
+// the rate a domain declared without naming one, keyed by that domain.
+type samplerTable struct {
+	mu    sync.RWMutex
+	rates map[uint32]uint32
+	plain map[uint32]uint32
+	// inherited is the one rate every declaration on this device agrees on,
+	// and zero where they carry more than one. A record whose own domain
+	// declared nothing takes it rather than a rate the device never tied
+	// to it.
+	inherited atomic.Uint32
+}
+
+// declare records one announcement, reporting false where the device is at
+// its budget. A refusal leaves the table as it stood: evicting an entry the
+// records still name would correct them by another sampler's rate.
+func (t *samplerTable) declare(odid, samplerID uint32, named bool, rate uint32) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	key, target := odid, &t.plain
+	if named {
+		key, target = samplerID, &t.rates
+	}
+	if _, held := (*target)[key]; !held {
+		if len(t.rates)+len(t.plain) >= maxSamplersPerExporter {
+			return false
+		}
+		if *target == nil {
+			*target = make(map[uint32]uint32)
+		}
+	}
+	(*target)[key] = rate
+	t.inherited.Store(soleRate(t.rates, t.plain))
+	return true
+}
+
+// forget drops one domain's unnamed declaration as that domain is evicted.
+func (t *samplerTable) forget(odid uint32) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	delete(t.plain, odid)
+	t.inherited.Store(soleRate(t.rates, t.plain))
+}
+
+func (t *samplerTable) rateFor(samplerID uint32) (uint32, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	rate, ok := t.rates[samplerID]
+	return rate, ok
+}
+
+// soleRate returns the one rate every declaration agrees on, and zero where
+// they carry none or more than one. Zero is never stored, so it doubles as
+// the absent value.
+func soleRate(sets ...map[uint32]uint32) uint32 {
+	var sole uint32
+	for _, set := range sets {
+		for _, rate := range set {
+			if sole != 0 && rate != sole {
+				return 0
+			}
+			sole = rate
+		}
+	}
+	return sole
+}
+
 // domainState carries one observation domain's templates and the counters
 // that are naturally per-domain rather than per-exporter.
 type domainState struct {
@@ -99,9 +183,13 @@ type domainState struct {
 	// lost. Reordering and device restarts reset the base instead.
 	sequenceMissed atomic.Uint64
 
-	// samplingRate is the packet sampling rate the domain's options declared,
-	// zero until one arrives.
+	// samplingRate is the packet sampling rate the domain's options declared
+	// without naming a sampler, zero until one arrives.
 	samplingRate atomic.Uint32
+	// declared is the device's sampler table for this protocol, shared with
+	// its other domains. Held here so the record path reaches it without a
+	// store lock.
+	declared *samplerTable
 
 	// samplersMu guards samplers alone, so a datagram's sample loop never
 	// waits on the lock a scrape reads the templates through.
@@ -131,6 +219,15 @@ type domainState struct {
 	dropsMeasured atomic.Bool
 }
 
+// rateInForce is the rate a record carrying no samplerId takes: the domain's
+// own declaration, then the one rate the whole device agrees on.
+func (d *domainState) rateInForce() uint32 {
+	if rate := d.samplingRate.Load(); rate != 0 {
+		return rate
+	}
+	return d.declared.inherited.Load()
+}
+
 // samplerState is one sampler's last reading, which the next one is measured
 // from.
 type samplerState struct {
@@ -147,6 +244,9 @@ type samplerState struct {
 type templateStore struct {
 	mu      sync.RWMutex
 	domains map[domainKey]*domainState
+	// samplerTables holds each device's sampler declarations per protocol,
+	// which outlive the domain whose options record announced them.
+	samplerTables map[samplerKey]*samplerTable
 	// perExporter counts each device's live domains against its budget.
 	perExporter map[netip.Addr]int
 
@@ -159,6 +259,11 @@ type templateStore struct {
 	// sampler budget. The sample still decodes; only its counters are lost.
 	samplersRefused atomic.Uint64
 
+	// declarationsRefused counts the sampling declarations turned away at a
+	// device's table budget. Records naming a refused sampler fall back to
+	// the device's own rate rather than being corrected by another's.
+	declarationsRefused atomic.Uint64
+
 	maxFields int
 	ttl       time.Duration
 	now       func() time.Time
@@ -167,11 +272,12 @@ type templateStore struct {
 // newTemplateStore creates a store enforcing the configured limits.
 func newTemplateStore(cfg config.Parser) *templateStore {
 	return &templateStore{
-		domains:     make(map[domainKey]*domainState),
-		perExporter: make(map[netip.Addr]int),
-		maxFields:   cfg.MaxFieldsPerTemplate,
-		ttl:         cfg.TemplateTTL,
-		now:         time.Now,
+		domains:       make(map[domainKey]*domainState),
+		samplerTables: make(map[samplerKey]*samplerTable),
+		perExporter:   make(map[netip.Addr]int),
+		maxFields:     cfg.MaxFieldsPerTemplate,
+		ttl:           cfg.TemplateTTL,
+		now:           time.Now,
 	}
 }
 
@@ -201,7 +307,14 @@ func (s *templateStore) domain(key domainKey) *domainState {
 		return nil
 	}
 
-	d = &domainState{templates: make(map[uint16]*template)}
+	tk := samplerKey{exporter: key.exporter, proto: key.proto}
+	table, held := s.samplerTables[tk]
+	if !held {
+		table = &samplerTable{}
+		s.samplerTables[tk] = table
+	}
+
+	d = &domainState{templates: make(map[uint16]*template), declared: table}
 	d.lastSeen.Store(now)
 	s.domains[key] = d
 	s.perExporter[key.exporter]++
@@ -221,13 +334,39 @@ func (s *templateStore) sweepDomains(cutoff int64) int {
 		}
 
 		delete(s.domains, key)
+		d.declared.forget(key.odid)
 		s.perExporter[key.exporter]--
 		if s.perExporter[key.exporter] <= 0 {
 			delete(s.perExporter, key.exporter)
 		}
 		evicted++
 	}
+	if evicted > 0 {
+		s.sweepSamplerTablesLocked()
+	}
 	return evicted
+}
+
+// sweepSamplerTablesLocked drops every table no live domain still holds. The
+// store lock is held by the caller.
+func (s *templateStore) sweepSamplerTablesLocked() {
+	live := make(map[samplerKey]struct{}, len(s.domains))
+	for key := range s.domains {
+		live[samplerKey{exporter: key.exporter, proto: key.proto}] = struct{}{}
+	}
+	for key := range s.samplerTables {
+		if _, held := live[key]; !held {
+			delete(s.samplerTables, key)
+		}
+	}
+}
+
+// declareSampler records one options announcement onto the device's table,
+// counting a refusal where the table is at its budget.
+func (s *templateStore) declareSampler(d *domainState, odid, samplerID uint32, named bool, rate uint32) {
+	if !d.declared.declare(odid, samplerID, named, rate) {
+		s.declarationsRefused.Add(1)
+	}
 }
 
 // sweep drops the domains idle for longer than the template TTL. A domain
@@ -240,6 +379,12 @@ func (s *templateStore) sweep() int {
 // refused reports how many datagrams the budget turned away.
 func (s *templateStore) refused() uint64 {
 	return s.domainsRefused.Load()
+}
+
+// refusedDeclarations reports how many sampling declarations a device's table
+// budget turned away.
+func (s *templateStore) refusedDeclarations() uint64 {
+	return s.declarationsRefused.Load()
 }
 
 // refusedSamplers reports how many flow samples the sampler budget turned away.
@@ -496,7 +641,9 @@ type DomainSnapshot struct {
 	Templates        int
 	OptionsTemplates int
 	SequenceMissed   uint64
-	// SamplingRate is zero until the domain's options declared one.
+	// SamplingRate is the rate in force for the domain, declared by its own
+	// options or inherited from the device's single declaration. It is zero
+	// where neither settles on one.
 	SamplingRate uint32
 	// SamplePool and SamplesDropped are the sFlow samplers' own counters,
 	// summed across the domain. The Measured flags carry whether a difference
@@ -505,6 +652,36 @@ type DomainSnapshot struct {
 	SamplesDropped uint64
 	PoolMeasured   bool
 	DropsMeasured  bool
+}
+
+// SamplerSnapshot is one rate a device declared for one named sampler.
+type SamplerSnapshot struct {
+	Exporter netip.Addr
+	Version  flow.Version
+	Sampler  uint32
+	Rate     uint32
+}
+
+// samplerSnapshot reads every named declaration. A rate declared without a
+// samplerId is the domain's own and reaches the metrics through DomainSnapshot.
+func (s *templateStore) samplerSnapshot() []SamplerSnapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	snapshots := make([]SamplerSnapshot, 0, len(s.samplerTables))
+	for key, table := range s.samplerTables {
+		table.mu.RLock()
+		for sampler, rate := range table.rates {
+			snapshots = append(snapshots, SamplerSnapshot{
+				Exporter: key.exporter,
+				Version:  key.proto,
+				Sampler:  sampler,
+				Rate:     rate,
+			})
+		}
+		table.mu.RUnlock()
+	}
+	return snapshots
 }
 
 // snapshot reads every domain's state.
@@ -523,7 +700,7 @@ func (s *templateStore) snapshot() []DomainSnapshot {
 			Templates:        data,
 			OptionsTemplates: options,
 			SequenceMissed:   d.sequenceMissed.Load(),
-			SamplingRate:     d.samplingRate.Load(),
+			SamplingRate:     d.rateInForce(),
 			SamplePool:       d.samplePool.Load(),
 			SamplesDropped:   d.samplesDropped.Load(),
 			PoolMeasured:     d.poolMeasured.Load(),

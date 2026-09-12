@@ -21,10 +21,12 @@ This is the whole set of `xflow_` series the exporter publishes about itself. No
 | `decoder`      | `xflow_last_datagram_timestamp_seconds`             | Gauge   | Unix time, last datagram  |
 | `decoder`      | `xflow_templates`                                   | Gauge   | Templates per `type`      |
 | `decoder`      | `xflow_sequence_missed_total`                       | Counter | Packets or records lost   |
-| `decoder`      | `xflow_sampling_rate`                               | Gauge   | Declared sampling rate    |
+| `decoder`      | `xflow_sampling_rate`                               | Gauge   | Rate in force per domain  |
+| `decoder`      | `xflow_sampler_rate`                                | Gauge   | Rate per named sampler    |
 | `decoder`      | `xflow_sample_pool_packets_total`                   | Counter | Packets the sampler saw   |
 | `decoder`      | `xflow_samples_dropped_total`                       | Counter | Samples the agent dropped |
 | `decoder`      | `xflow_samplers_refused_total`                      | Counter | Past the sampler budget   |
+| `decoder`      | `xflow_sampling_declarations_refused_total`         | Counter | Past the sampler table    |
 | `decoder`      | `xflow_domains_refused_total`                       | Counter | Past the domain budget    |
 | `decoder`      | `xflow_vendor_strings_refused_total`                | Counter | Unrepresentable strings   |
 | `decoder`      | `xflow_applications_refused_total`                  | Counter | Past the app budget       |
@@ -59,6 +61,10 @@ the receive address a datagram arrived on, spelled as `--receiver.address` confi
 the observation domain inside one exporter and protocol.
 
 - NetFlow v9 says Source ID, IPFIX says Observation Domain ID and sFlow says sub-agent id, so spelling out any one of them would put that protocol's word on a series whose `version` names another.
+
+**`sampler`**
+
+the samplerId a device named in its options table, which its data records name to say which sampler measured them.
 
 **`type`**
 
@@ -136,9 +142,29 @@ all three carry `exporter_address`, `version` and `odid` together. A domain is t
 
 - Dropping `version` from the triple would hand two domains one label set, and a registry refuses to gather a duplicate, so the whole scrape would fail rather than one domain's series.
 - `xflow_sampling_rate` reads a v9 or IPFIX options declaration alone. An sFlow device carries its rate on the samples themselves, and what its correction is worth reads from the pair below.
+- An options record scoped on the System describes the device, so a domain that declared none inherits the one rate the device agrees on. A device declaring several leaves every domain it did not itself reach absent rather than correcting by one of them.
 - `xflow_templates` is absent on an sFlow domain, which holds no template, and the sampler counters are absent on the protocols that hold no sampler.
 - `xflow_sequence_missed_total` counts what each sequence number counts, packets on v9 and sFlow and data records on IPFIX, so one lost IPFIX message adds every record it carried.
 - A rise here is loss or reordering on the wire rather than a race between the decoders — [Push and pull](README.md#push-and-pull) carries why one worker holds each device.
+
+**`xflow_sampler_rate`**
+
+carries each rate a device declared against the samplerId its data records name, which is what corrects a record where a domain holds more than one sampler.
+
+- A domain of several samplers has no single rate in force, so `xflow_sampling_rate` is absent there while the corrections still apply. Reading one family without the other reports a correction no series accounts for.
+- `count by (exporter_address, version) (count_values by (exporter_address, version) ("rate", (xflow_sampling_rate or xflow_sampler_rate))) > 1` is every device declaring more than one rate.
+- A record naming a sampler the device has not announced yet takes its domain's rate: options arrive on the device's own timer, so what is missing is the announcement rather than the rate.
+
+This returns every domain carrying data that no rate reached, on a device that samples:
+
+```promql
+(xflow_templates{type="template"} > 0)
+  unless on (exporter_address, version, odid) xflow_sampling_rate
+  unless on (exporter_address, version, odid) (xflow_templates{type="options_template"} > 0)
+  and on (exporter_address, version) (
+    count by (exporter_address, version) ((xflow_sampling_rate or xflow_sampler_rate)) > 0
+  )
+```
 
 **`xflow_sample_pool_packets_total` and `xflow_samples_dropped_total`**
 
@@ -152,9 +178,9 @@ both carry the sFlow samplers' own counters, differenced between consecutive rea
 - A counter that falls by more than three quarters of its range while the sequence keeps stepping reads as a wrap, and adds up to a quarter of that range once.
 - Two export instances sharing a sub-agent and a source id fabricate both, and neither counter rides a rate multiplication, so a sender past the [filter](../SECURITY.md) moves them alone.
 
-**the five `_refused_total` counters**
+**the six `_refused_total` counters**
 
-four of them name a budget the wire cannot raise and count attempts rather than the entities refused — [Bounded state](README.md#bounded-state) carries the budgets and what a refusal costs the records behind it. `xflow_vendor_strings_refused_total` counts a string the exporter cannot publish instead, longer than 255 bytes or not valid UTF-8, once per field rather than once per string.
+five of them name a budget the wire cannot raise and count attempts rather than the entities refused — [Bounded state](README.md#bounded-state) carries the budgets and what a refusal costs the records behind it. `xflow_vendor_strings_refused_total` counts a string the exporter cannot publish instead, longer than 255 bytes or not valid UTF-8, once per field rather than once per string.
 
 **`xflow_enrichment_lookups_total`**
 

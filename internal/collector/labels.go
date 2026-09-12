@@ -9,6 +9,7 @@ const (
 	labelReason   = "reason"           // Reason a counter is keyed by
 	labelVersion  = "version"          // Wire protocol a datagram or record arrived in
 	labelODID     = "odid"             // Observation Domain ID (v9 Source ID) within an exporter
+	labelSampler  = "sampler"          // Sampler a device named in its options table
 	labelType     = "type"             // Kind a gauge is keyed by
 
 	// Aggregation table labels.

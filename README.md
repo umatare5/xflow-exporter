@@ -146,7 +146,7 @@ These series describe the exporter itself rather than the traffic it aggregates.
 | `xflow_decode_errors_total`            | Counter | Rejections per device and reason       |
 | `xflow_last_flow_timestamp_seconds`    | Gauge   | Unix time of the last record           |
 | `xflow_receiver_dropped_packets_total` | Counter | Pre-decode drops per listener          |
-| `xflow_sampling_rate`                  | Gauge   | Declared rate per domain               |
+| `xflow_sampling_rate`                  | Gauge   | Rate in force per domain               |
 | `xflow_aggregation_entries`            | Gauge   | Entries held per collector             |
 
 > [!NOTE]
