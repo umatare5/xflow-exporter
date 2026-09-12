@@ -12,6 +12,7 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#53](https://github.com/umatare5/xflow-exporter/pull/53) — Stamp the freshness instant on a record and publish the datagram instant
 - [#54](https://github.com/umatare5/xflow-exporter/pull/54) — Publish what an sFlow agent sampled and could not send
 - [#55](https://github.com/umatare5/xflow-exporter/pull/55) — Record the sFlow device the decoder was read against
+- [#56](https://github.com/umatare5/xflow-exporter/pull/56) — Drop the device this decoder never read from the verified table
 
 ## [v0.9.1]
 
