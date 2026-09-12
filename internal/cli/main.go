@@ -249,6 +249,12 @@ func registerCollectorFlags() []cli.Flag {
 			HideDefault: true,
 		},
 		&cli.BoolFlag{
+			Name:        "collector.vlans",
+			Usage:       "Enable VLAN pair metrics, which need vlans in --enrich.mapping-file",
+			Category:    "# Collector Options",
+			HideDefault: true,
+		},
+		&cli.BoolFlag{
 			Name:        "collector.distributions",
 			Usage:       "Enable flow size and duration native histograms",
 			Category:    "# Collector Options",
@@ -292,7 +298,7 @@ func registerEnrichmentFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:     "enrich.mapping-file",
-			Usage:    "Path to a YAML file naming devices, their interfaces and extra transport ports",
+			Usage:    "Path to a YAML file naming devices, their interfaces, VLANs and extra transport ports",
 			Category: "# Enrichment Options",
 			Config: cli.StringConfig{
 				TrimSpace: true,

@@ -2,7 +2,7 @@
 
 Every collector is off by default and enabled by its own `--collector.<name>` flag, underscores in the name spelled as hyphens: `tcp_flags` takes `--collector.tcp-flags`. With none enabled the exporter still receives, decodes and counts flows. It publishes the [health series](health.md) and no traffic series.
 
-Ten collectors aggregate into a table each and publish three counters per entry, while `distributions` observes two native histograms instead. Both naming series need `--enrich.mapping-file` besides, and neither appears with no collector enabled: they are registered with the traffic families rather than on their own.
+Eleven collectors aggregate into a table each and publish three counters per entry, while `distributions` observes two native histograms instead. All three naming series need `--enrich.mapping-file` besides, and none appears with no collector enabled: they are registered with the traffic families rather than on their own. `xflow_vlan_info` needs `vlans` in particular, no other family carrying the numbers it names.
 
 ## Metrics
 
@@ -39,6 +39,10 @@ Ten collectors aggregate into a table each and publish three counters per entry,
 | `threats`                    | `xflow_threat_bytes_total`         | Counter   | Sampling-corrected bytes   |
 | `threats`                    | `xflow_threat_packets_total`       | Counter   | Sampling-corrected packets |
 | `threats`                    | `xflow_threat_flows_total`         | Counter   | Flows the records reported |
+| `vlans`                      | `xflow_vlan_pair_bytes_total`      | Counter   | Sampling-corrected bytes   |
+| `vlans`                      | `xflow_vlan_pair_packets_total`    | Counter   | Sampling-corrected packets |
+| `vlans`                      | `xflow_vlan_pair_flows_total`      | Counter   | Flows the records reported |
+| `vlans`                      | `xflow_vlan_info`                  | Gauge     | Always 1, naming a VLAN    |
 | `distributions`              | `xflow_flow_bytes`                 | Histogram | Corrected bytes per record |
 | `distributions`              | `xflow_flow_duration_seconds`      | Histogram | Flow duration in seconds   |
 | any                          | `xflow_device_info`                | Gauge     | Always 1, naming a device  |
@@ -48,24 +52,26 @@ Ten collectors aggregate into a table each and publish three counters per entry,
 
 Every family carries `exporter_address`, and the labels beside it are its aggregation key, so two records sharing that set share one entry. The two histograms carry `exporter_address` alone.
 
-| Label                            | Description                                   |
-| :------------------------------- | :-------------------------------------------- |
-| `exporter_address`               | The UDP source address, IPv4-mapped unmapped  |
-| `version`                        | Arrival protocol, on `exporters` alone        |
-| `odid`                           | Observation domain, on `exporters` alone      |
-| `src`/`dst`                      | Flow addresses, `destinations` drops `src`    |
-| `proto`                          | The conventional name, the number if unnamed  |
-| `port`                           | The destination port, the service side        |
-| `input_ifindex`/`output_ifindex` | Interfaces crossed, `0` where none named      |
-| `flags`                          | The TCP control bits ORed together            |
-| `dscp`                           | The TOS byte's top six bits, as a class       |
-| `src_asn`/`dst_asn`              | The AS numbers as exported, `0` if unknown    |
-| `asn`/`organization`             | AS and its database name, on `xflow_asn_info` |
-| `application`                    | AVC name, vendor string or `engine:selector`  |
-| `src_country`/`dst_country`      | ISO codes, `private` on a LAN, else `unknown` |
-| `address`/`direction`            | A flagged address and its side, `src`/`dst`   |
-| `exporter_name`                  | Mapping-file name, on `xflow_device_info`     |
-| `ifindex`/`ifname`               | ifIndex and name, on `xflow_interface_info`   |
+| Label                            | Description                                       |
+| :------------------------------- | :------------------------------------------------ |
+| `exporter_address`               | The UDP source address, IPv4-mapped unmapped      |
+| `version`                        | Arrival protocol, on `exporters` alone            |
+| `odid`                           | Observation domain, on `exporters` alone          |
+| `src`/`dst`                      | Flow addresses, `destinations` drops `src`        |
+| `proto`                          | The conventional name, the number if unnamed      |
+| `port`                           | The destination port, the service side            |
+| `input_ifindex`/`output_ifindex` | Interfaces crossed, `0` where none named          |
+| `flags`                          | The TCP control bits ORed together                |
+| `dscp`                           | The TOS byte's top six bits, as a class           |
+| `src_asn`/`dst_asn`              | The AS numbers as exported, `0` if unknown        |
+| `asn`/`organization`             | AS and its database name, on `xflow_asn_info`     |
+| `application`                    | AVC name, vendor string or `engine:selector`      |
+| `src_country`/`dst_country`      | ISO codes, `private` on a LAN, else `unknown`     |
+| `address`/`direction`            | A flagged address and its side, `src`/`dst`       |
+| `src_vlan`/`dst_vlan`            | VLANs the file puts the addresses on, `0` if none |
+| `exporter_name`                  | Mapping-file name, on `xflow_device_info`         |
+| `ifindex`/`ifname`               | ifIndex and name, on `xflow_interface_info`       |
+| `vlan`/`vlan_name`               | VLAN and its name, on `xflow_vlan_info`           |
 
 **`version`**
 
@@ -102,6 +108,13 @@ The six are indistinguishable once published. NetFlow v8's one-sided aggregation
 
 The `engine:selector` split is what a record carrying only the numbered `applicationId` resolves to, and `--enrich.services` fills the label from the transport port where none of the three exist.
 
+**`src_vlan`/`dst_vlan`**
+
+Where the mapping file puts each address, which is a property of the address rather than of the path the frame took. A device reporting a VLAN of its own reports the tag on the frame or the VLAN of the interface it observed, so the two coincide only where the observation point sits on the address's own segment.
+
+- `0` is an address no prefix of that device covers. 802.1Q reserves it as the null VLAN ID, so it cannot collide with a VLAN a network numbered.
+- [Mapping file](enrichment.md#mapping-file) carries which prefix wins where two cover one address, and what the file may not say.
+
 **`src_country`/`dst_country`**
 
 Private means what Go's `netip` means, RFC 1918 and the IPv6 unique local range, nothing wider. Shared address space, loopback and link-local have no country either but are not private, and naming them so would be the guess this distinction exists to avoid.
@@ -132,7 +145,7 @@ the per-domain family takes no scrape-time cut, neither Top-K nor min-bytes, bec
 
 it keys those three tables, so one address pair reached over two paths reads as two entries rather than one sum no path can be read out of. A record naming neither interface still opens an entry under `0`/`0`. Dropping it would lose the traffic and not just its path.
 
-- The other seven families do not carry it. Each already folds many conversations into one row, and multiplying that row by every path its members crossed turns a per-device ratio into a per-path one with nothing in the labels saying so.
+- The other eight families do not carry it. Each already folds many conversations into one row, and multiplying that row by every path its members crossed turns a per-device ratio into a per-path one with nothing in the labels saying so.
 - Entries multiply by `1 + share × (k−1)`, `k` being the interface pairs one conversation spreads over and `share` the fraction that spread at all. The bound is the input interface count times the output one; `xflow_aggregation_entries` and `xflow_aggregation_overflow_records_total` are what it costs in practice.
 - Splitting one conversation across paths makes each entry sparser, and an entry that idles past `--aggregation.entry-ttl` is evicted and reopened. `rate()` extrapolates only half an interval back to a reappearing series' first sample, so the folded-back sum reads low.
 - NetFlow v5 and v8 size the interface fields at two octets, so an ifIndex above 65535 has no spelling there and what a device sends in its place is the device's own choice.
@@ -184,6 +197,20 @@ a record neither side of which resolved feeds no entry, while one side alone ope
 **the three `xflow_threat_*` counters**
 
 only addresses a list flags appear, so the table holds what is worth acting on rather than one entry per address seen, and a record flagged on both sides opens an entry for each of them.
+
+**the three `xflow_vlan_pair_*` counters**
+
+a record the file placed on neither side feeds no entry, while one side alone opens one and the other reads `0`, so a pair of zeros never reaches the table as a segment of its own.
+
+- Traffic between a mapped segment and the internet is the one-sided case, and it is the traffic the family exists to break down.
+- The table needs `vlans` in [`--enrich.mapping-file`](enrichment.md#mapping-file) to hold anything, the way `countries` needs its database, and that page carries the file's own rules.
+
+**`xflow_vlan_info`**
+
+it names each VLAN the file names, each name riding its own series for the reason `xflow_device_info` does.
+
+- The rows take no cut, their bound being the VLANs the file names times the devices that declare them, so a VLAN the file names keeps its row whether or not traffic was placed on it.
+- A VLAN the file maps without naming produces no row, and a join then finds nothing to join to and the counter keeps its number.
 
 **the histograms `xflow_flow_bytes` and `xflow_flow_duration_seconds`**
 

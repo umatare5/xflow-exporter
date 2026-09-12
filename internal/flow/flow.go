@@ -130,6 +130,15 @@ type Record struct {
 	SrcFlagged bool
 	DstFlagged bool
 
+	// SrcVLAN and DstVLAN are the VLANs a mapping file puts each address on,
+	// which is a property of the address rather than of the path the frame
+	// took: a device that reports a VLAN of its own reports the tag on the
+	// frame it saw or the VLAN of the interface it observed. Zero is the null
+	// VLAN ID of 802.1Q, so it cannot collide with a VLAN an operator
+	// numbered.
+	SrcVLAN uint16
+	DstVLAN uint16
+
 	// SrcCountry and DstCountry are ISO codes filled by enrichment. No flow
 	// protocol exports them, so they are empty unless a country database is
 	// enabled and knew the address.

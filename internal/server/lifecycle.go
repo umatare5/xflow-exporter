@@ -84,6 +84,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		Applications: cfg.Collectors.Applications,
 		Countries:    cfg.Collectors.Countries,
 		Threats:      cfg.Collectors.Threats,
+		VLANs:        cfg.Collectors.VLANs,
 	}
 
 	collectorMgr := collector.NewCollector(cfg)
@@ -236,7 +237,11 @@ func buildEnrichmentChain(
 			return nil, nil, nil, nil, err
 		}
 		mapping = loaded
-		enrichers = append(enrichers, mapping)
+		// The VLAN source reads the snapshot this one owns, so it is added
+		// with it rather than behind a flag of its own: a file carrying no
+		// vlans block leaves it reading unknown, which is what the mapping
+		// source itself does for a file carrying no services block.
+		enrichers = append(enrichers, mapping, enrich.NewVLAN(mapping))
 	}
 	if cfg.Services {
 		enrichers = append(enrichers, enrich.NewServices())

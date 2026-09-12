@@ -26,7 +26,7 @@
 This exporter receives flow records from on-premises devices and publishes Prometheus metrics.
 
 - 🔬 **Auditable Sampling**: Counts scaled by the rate in force, which is published where declared
-- 🏷️ **Enriched Labels**: Applications, ASNs, countries, threats and device names, from local files
+- 🏷️ **Enriched Labels**: Applications, ASNs, countries, threats, VLANs and names, from local files
 - 📊 **Native Histograms**: Flow size and duration quantiles within five percent, Prometheus 3.8+
 - 🧮 **In-Memory Aggregation**: Bounded-cardinality tables with Top-K and idle eviction
 
@@ -73,19 +73,20 @@ NetFlow v5/v8/v9, IPFIX and sFlow v5, over plaintext UDP. See [Protocols](docs/p
 
 Each collector is off by default and enabled by its own `--collector.<name>` flag.
 
-| Collector                   | Publishes                                                     |
-| :-------------------------- | :------------------------------------------------------------ |
-| `--collector.exporters`     | Traffic per observation domain of a device                    |
-| `--collector.hosts`         | Traffic per source-destination address pair                   |
-| `--collector.services`      | Traffic per address pair, protocol and port                   |
-| `--collector.destinations`  | Traffic per destination address, protocol and port            |
-| `--collector.tcp-flags`     | Traffic per TCP control-bit profile                           |
-| `--collector.dscp`          | Traffic per DSCP class, from the TOS byte or the code point   |
-| `--collector.asns`          | Traffic per AS pair, exported or from `--enrich.asn-database` |
-| `--collector.applications`  | Traffic per application, exported or from `--enrich.services` |
-| `--collector.countries`     | Traffic per country pair, needs `--enrich.country-database`   |
-| `--collector.threats`       | Traffic per flagged address, needs `--enrich.threat-file`     |
-| `--collector.distributions` | Flow size and duration native histograms                      |
+| Collector                   | Publishes                                                       |
+| :-------------------------- | :-------------------------------------------------------------- |
+| `--collector.exporters`     | Traffic per observation domain of a device                      |
+| `--collector.hosts`         | Traffic per source-destination address pair                     |
+| `--collector.services`      | Traffic per address pair, protocol and port                     |
+| `--collector.destinations`  | Traffic per destination address, protocol and port              |
+| `--collector.tcp-flags`     | Traffic per TCP control-bit profile                             |
+| `--collector.dscp`          | Traffic per DSCP class, from the TOS byte or the code point     |
+| `--collector.asns`          | Traffic per AS pair, exported or from `--enrich.asn-database`   |
+| `--collector.applications`  | Traffic per application, exported or from `--enrich.services`   |
+| `--collector.countries`     | Traffic per country pair, needs `--enrich.country-database`     |
+| `--collector.threats`       | Traffic per flagged address, needs `--enrich.threat-file`       |
+| `--collector.vlans`         | Traffic per VLAN pair, needs `vlans` in `--enrich.mapping-file` |
+| `--collector.distributions` | Flow size and duration native histograms                        |
 
 > [!NOTE]
 > `--enrich.*` sources fill what a device did not export, from local files. See [Enrichment](docs/enrichment.md).
@@ -113,11 +114,11 @@ See [Endpoints](docs/README.md#endpoints) for the method and status each one kee
 
 ## Metrics
 
-Eleven collectors aggregate the flows, and the catalogues live in `docs/`:
+Twelve collectors aggregate the flows, and the catalogues live in `docs/`:
 
 | Page                                  | Covers                                                        |
 | :------------------------------------ | :------------------------------------------------------------ |
-| **[Collectors](docs/collectors.md)**  | The eleven collectors, their metrics and their labels         |
+| **[Collectors](docs/collectors.md)**  | The twelve collectors, their metrics and their labels         |
 | **[Exporter health](docs/health.md)** | Reception, decoding, aggregation, enrichment and remote write |
 
 The series a dashboard usually starts from:

@@ -23,6 +23,7 @@ tmp_dir = "tmp"
            --collector.applications \
            --collector.countries \
            --collector.threats \
+           --collector.vlans \
            --collector.distributions \
            --enrich.services \
            --web.enable-lifecycle

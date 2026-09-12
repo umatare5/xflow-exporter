@@ -108,7 +108,7 @@ func TestFlagNamesAreStable(t *testing.T) {
 		"collector.exporters": true, "collector.hosts": true, "collector.services": true,
 		"collector.destinations": true, "collector.tcp-flags": true, "collector.dscp": true,
 		"collector.asns": true, "collector.applications": true, "collector.countries": true,
-		"collector.threats": true, "collector.distributions": true,
+		"collector.threats": true, "collector.vlans": true, "collector.distributions": true,
 		"collector.internal.go-runtime": true, "collector.internal.process": true,
 		"enrich.services": true, "enrich.asn-database": true, "enrich.country-database": true,
 		"enrich.threat-file": true, "enrich.mapping-file": true,
