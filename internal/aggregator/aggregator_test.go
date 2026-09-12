@@ -29,7 +29,8 @@ func testConfig() config.Aggregation {
 func allModules() Modules {
 	return Modules{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
-		ASNs: true, Applications: true,
+		TCPFlags: true, DSCP: true, ASNs: true, Applications: true,
+		Countries: true, Threats: true,
 	}
 }
 
@@ -149,13 +150,7 @@ func TestAggregator_AbsentDimensionsFeedNoTable(t *testing.T) {
 func TestAggregator_AnAggregateFeedsItsDomainAlone(t *testing.T) {
 	t.Parallel()
 
-	// Every table, which allModules leaves short of: the aggregate carries a
-	// TOS byte and a TCP flag set as well as the dimensions above.
-	a := New(testConfig(), Modules{
-		Exporters: true, Hosts: true, Services: true, Destinations: true,
-		TCPFlags: true, DSCP: true, ASNs: true, Applications: true,
-		Countries: true, Threats: true,
-	})
+	a := New(testConfig(), allModules())
 
 	a.Ingest([]flow.Record{{
 		Exporter:         testExporter,
