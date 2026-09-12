@@ -64,7 +64,7 @@ the observation domain inside one exporter and protocol.
 
 **`sampler`**
 
-the samplerId a device named in its options table, which its data records name to say which sampler measured them. A Catalyst carries it as the export ID `show sampler` prints. It hands out a fresh one whenever a sampler is created, so the identifier is unique within the device rather than stable across a reconfiguration.
+the samplerId a device named in its options table, which its data records name to say which sampler measured them. A WS-C2960CX-8PC-L on 15.2(7)E3 carries it as the export ID `show sampler` prints. It hands out a fresh one whenever a sampler is created, so the identifier is unique within the device rather than stable across a reconfiguration.
 
 **`type`**
 
