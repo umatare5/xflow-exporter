@@ -4,6 +4,8 @@ Notable changes to the metric surface, one section per release, listing the pull
 
 ## [Unreleased]
 
+## [v0.10.0]
+
 - [#47](https://github.com/umatare5/xflow-exporter/pull/47) — Split the docs by owner, rename the collector, and fix the rendering
 - [#48](https://github.com/umatare5/xflow-exporter/pull/48) — Gather the contributor conventions and cut them to reading length
 - [#49](https://github.com/umatare5/xflow-exporter/pull/49) — Ship only the licences and the parsed config beside the binary
@@ -16,6 +18,9 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#57](https://github.com/umatare5/xflow-exporter/pull/57) — Correct a sampled record by the sampler it names
 - [#58](https://github.com/umatare5/xflow-exporter/pull/58) — Key a device's traffic on the observation domain that reported it
 - [#59](https://github.com/umatare5/xflow-exporter/pull/59) — Track the NetFlow v5 and v8 export sequence, and part the two flow counters
+- [#60](https://github.com/umatare5/xflow-exporter/pull/60) — Note the Juniper devices the protocol table plans to verify
+- [#61](https://github.com/umatare5/xflow-exporter/pull/61) — Name the flow count a v9 aggregation cache does declare
+- [#62](https://github.com/umatare5/xflow-exporter/pull/62) — Record the v5 sampler a device names without its rate
 
 ## [v0.9.1]
 
@@ -84,7 +89,8 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#1](https://github.com/umatare5/xflow-exporter/pull/1) — Start the exporter with its flags, HTTP surface and UDP receiver
 - [#2](https://github.com/umatare5/xflow-exporter/pull/2) — Add the release workflow the tag and the artifacts come from
 
-[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.10.0...HEAD
+[v0.10.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.10.0
 [v0.9.1]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.9.1
 [v0.9.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.9.0
 [v0.8.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.8.0
