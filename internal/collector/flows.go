@@ -53,8 +53,7 @@ func newFamilyDescs(prefix, subject string, labels []string) familyDescs {
 		packets: prometheus.NewDesc(prefix+"_packets_total",
 			"Sampling-corrected packets per "+subject+", other carries the entry-bound fold", labels, nil),
 		flows: prometheus.NewDesc(prefix+"_flows_total",
-			"Flows per "+subject+", one per record except a v8 aggregate's own count, "+
-				"other carries the entry-bound fold", labels, nil),
+			"Flows the records reported per "+subject+", other carries the entry-bound fold", labels, nil),
 	}
 }
 
@@ -161,7 +160,7 @@ func NewFlowCollector(
 			[]string{labelExporter, labelSrc, labelDst, labelInputIf, labelOutputIf})
 	}
 	if modules.Services {
-		c.services = newFamilyDescs("xflow_service", "service five-tuple",
+		c.services = newFamilyDescs("xflow_service", "source-destination service",
 			[]string{labelExporter, labelSrc, labelDst, labelProto, labelPort, labelInputIf, labelOutputIf})
 	}
 	if modules.Destinations {

@@ -148,7 +148,7 @@ func registerParserFlags() []cli.Flag {
 		},
 		&cli.DurationFlag{
 			Name:     "parser.template-ttl",
-			Usage:    "How long an unrefreshed template stays usable",
+			Usage:    "How long an unrefreshed template, domain or sampler is held",
 			Value:    config.DefaultParserTemplateTTL,
 			Category: "* Parser Options",
 		},

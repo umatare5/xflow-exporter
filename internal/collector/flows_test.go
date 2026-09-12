@@ -63,7 +63,7 @@ func TestFlowCollector_PublishesExportersAndHosts(t *testing.T) {
 # TYPE xflow_exporter_bytes_total counter
 xflow_exporter_bytes_total{exporter_address="192.0.2.1",odid="0",version="netflow_v9"} 1500
 xflow_exporter_bytes_total{exporter_address="other",odid="other",version="other"} 0
-# HELP xflow_host_pair_flows_total Flows per source-destination pair, one per record except a v8 aggregate's own count, other carries the entry-bound fold
+# HELP xflow_host_pair_flows_total Flows the records reported per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_flows_total counter
 xflow_host_pair_flows_total{dst="10.0.0.2",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",src="10.0.0.1"} 2
 xflow_host_pair_flows_total{dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",src="other"} 0
@@ -188,7 +188,7 @@ xflow_application_bytes_total{application="other",exporter_address="other"} 0
 # TYPE xflow_asn_pair_bytes_total counter
 xflow_asn_pair_bytes_total{dst_asn="64501",exporter_address="192.0.2.1",src_asn="64500"} 700
 xflow_asn_pair_bytes_total{dst_asn="other",exporter_address="other",src_asn="other"} 0
-# HELP xflow_service_bytes_total Sampling-corrected bytes per service five-tuple, other carries the entry-bound fold
+# HELP xflow_service_bytes_total Sampling-corrected bytes per source-destination service, other carries the entry-bound fold
 # TYPE xflow_service_bytes_total counter
 xflow_service_bytes_total{dst="10.0.0.2",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",port="443",proto="tcp",src="10.0.0.1"} 700
 xflow_service_bytes_total{dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",port="other",proto="other",src="other"} 0
@@ -388,8 +388,8 @@ xflow_country_pair_bytes_total{dst_country="other",exporter_address="other",src_
 }
 
 // TestFlowCollector_DestinationLabels pins the label set and its order. The
-// family carries no source: that is what separates it from the service
-// five-tuple, and a source arriving here would make the two indistinguishable.
+// family carries no source: that separates it from the source-destination
+// service, and a source arriving here would make the two indistinguishable.
 func TestFlowCollector_DestinationLabels(t *testing.T) {
 	t.Parallel()
 
