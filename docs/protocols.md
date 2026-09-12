@@ -2,15 +2,16 @@
 
 Every listener accepts every protocol below, told apart per datagram, over plaintext UDP.
 
-| Protocol                                                | Status    | Verified on                               |
-| :------------------------------------------------------ | :-------- | :---------------------------------------- |
-| [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Fixtures only                             |
-| [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Fixtures only                             |
-| [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Cisco WS-C2960CX-8PC-L, Cisco C9800-CL-K9 |
-| [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Cisco C9800-CL-K9                         |
-| [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G                                |
+| Protocol                                                | Status    | Verified on                                                |
+| :------------------------------------------------------ | :-------- | :--------------------------------------------------------- |
+| [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Cisco C891FJ-K9                                            |
+| [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Cisco C891FJ-K9                                            |
+| [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Cisco WS-C2960CX-8PC-L, Cisco C891FJ-K9, Cisco C9800-CL-K9 |
+| [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Cisco C9800-CL-K9                                          |
+| [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G                                                 |
 
 - **Cisco WS-C2960CX-8PC-L** — a Catalyst 2960-CX on `C2960CX-UNIVERSALK9-M` 15.2(7)E3, the one device here declaring a sampler, exporting v9 under a custom record that parses a 5-tuple and an input `ifIndex`.
+- **Cisco C891FJ-K9** — an ISR 890 on IOS 15.9(3)M13, exporting its main cache as v5, ten aggregation caches as v8 and an eleventh as v9.
 - **Cisco C9800-CL-K9** — a Catalyst 9800-CL on `C9800-CL-K9_IOSXE` 17.15.6, exporting IPFIX and NetFlow v9 at once from `record wireless avc basic`, which keys a wireless client rather than a switched port.
 - **HP 2530-8G** — a J9777A on `YA.16.11.0030`, sampling one port at 1:50 into compact flow samples that carry up to 128 header bytes and the port's VLAN, and reporting the samples its agent drops.
 
@@ -166,6 +167,8 @@ The v5 header through byte 21, then the aggregation selector. The method sets re
 | 12     | ToS and destination prefix    | 32           |
 | 13     | ToS and prefix                | 40           |
 | 14     | ToS, prefix and port          | 40           |
+
+An aggregation cache is fed from the main cache, so every method a device enables re-reports traffic the main cache already exported. The method is the observation domain here, which keeps the readings apart; summing them counts one flow once per cache. A device exporting a cache as v9 instead carries no field marking it an aggregate, so its v9 cache reads as a second view beside the v5 main cache — send one view to a collector.
 
 Methods 1–5 and 9–14 open with `dFlows`/`dPkts`/`dOctets`, then the flow instants at bytes 12 and 16. The Catalyst methods 6–8 lead with their address fields instead and carry no flow count of their own; method 6 keeps the instants at the common 12 and 16, methods 7 and 8 push them to 16/20 and 20/24.
 

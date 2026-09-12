@@ -164,7 +164,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "What share of the device's packets the entries of each table actually name. The denominator is the exporters family, the one family published without a Top-K bound, so it is a true device total. The shortfall is the withheld Top-K tail and the folded overflow together, and it bounds how much of the traffic every composition panel below can account for. Both sides are sampling-corrected, so the correction cancels and the ratio is exact even though its operands are estimates.",
+      "description": "What share of the device's packets the entries of each table actually name. The denominator is the exporters family, the one family published without a Top-K bound. It reads high on a device running several aggregation caches, each reporting the same traffic again. The shortfall is the withheld Top-K tail and the folded overflow together, and it bounds how much of the traffic every composition panel below can account for. Both sides are sampling-corrected, so the correction cancels and the ratio is exact even though its operands are estimates.",
       "fieldConfig": {
         "defaults": {
           "color": {

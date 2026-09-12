@@ -284,6 +284,7 @@ func (d *Decoder) decodeIPFIXRecord(
 	dst = append(dst, flow.Record{
 		Exporter: key.exporter,
 		Version:  flow.VersionIPFIX,
+		ODID:     key.odid,
 		Flows:    1,
 	})
 	r := &dst[len(dst)-1]

@@ -59,10 +59,10 @@ func TestFlowCollector_PublishesExportersAndHosts(t *testing.T) {
 	c := NewFlowCollector(agg, modules, aggConfig(), nil, nil)
 
 	expected := `
-# HELP xflow_exporter_bytes_total Sampling-corrected bytes per exporter and version, other carries the entry-bound fold
+# HELP xflow_exporter_bytes_total Sampling-corrected bytes per observation domain, other carries the entry-bound fold
 # TYPE xflow_exporter_bytes_total counter
-xflow_exporter_bytes_total{exporter_address="192.0.2.1",version="netflow_v9"} 1500
-xflow_exporter_bytes_total{exporter_address="other",version="other"} 0
+xflow_exporter_bytes_total{exporter_address="192.0.2.1",odid="0",version="netflow_v9"} 1500
+xflow_exporter_bytes_total{exporter_address="other",odid="other",version="other"} 0
 # HELP xflow_host_pair_flows_total Flow records as exported per source-destination pair, other carries the entry-bound fold
 # TYPE xflow_host_pair_flows_total counter
 xflow_host_pair_flows_total{dst="10.0.0.2",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",src="10.0.0.1"} 2

@@ -59,6 +59,11 @@ func (d *Distributions) Register(reg *prometheus.Registry) {
 func (d *Distributions) Observe(records []flow.Record) {
 	for i := range records {
 		r := &records[i]
+		// An aggregate holds several flows, so its size is not a flow size
+		// and its span is not a flow duration.
+		if r.Aggregated() {
+			continue
+		}
 		exporter := r.Exporter.String()
 
 		// A record whose counters rode elements the decoder does not read has

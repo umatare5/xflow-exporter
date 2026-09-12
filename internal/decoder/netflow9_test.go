@@ -119,6 +119,7 @@ func fixtureV9Want() flow.Record {
 	return flow.Record{
 		Exporter:         testExporter,
 		Version:          flow.VersionNetFlowV9,
+		ODID:             fixtureV9ODID,
 		SrcAddr:          netip.MustParseAddr("10.0.0.1"),
 		DstAddr:          netip.MustParseAddr("198.51.100.7"),
 		SrcPort:          51234,

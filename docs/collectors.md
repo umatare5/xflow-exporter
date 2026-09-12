@@ -52,6 +52,7 @@ Every family carries `exporter_address`, and the labels beside it are its aggreg
 | :------------------------------- | :-------------------------------------------- |
 | `exporter_address`               | The UDP source address, IPv4-mapped unmapped  |
 | `version`                        | Arrival protocol, on `exporters` alone        |
+| `odid`                           | Observation domain, on `exporters` alone      |
 | `src`/`dst`                      | Flow addresses, `destinations` drops `src`    |
 | `proto`                          | The conventional name, the number if unnamed  |
 | `port`                           | The destination port, the service side        |
@@ -120,7 +121,11 @@ every label reads `other`, and the series carries what the entry bound rejected 
 
 **the three `xflow_exporter_*` counters**
 
-the per-device family takes no scrape-time cut, neither Top-K nor min-bytes, because its cardinality is the fleet's rather than the traffic's. A device that exported one small flow keeps its own series, where the same volume in another family could fall outside the Top-K or below `--aggregation.min-bytes` and publish nothing.
+the per-domain family takes no scrape-time cut, neither Top-K nor min-bytes, because its cardinality is the fleet's rather than the traffic's. A device that exported one small flow keeps its own series, where the same volume in another family could fall outside the Top-K or below `--aggregation.min-bytes` and publish nothing.
+
+- A device running several caches reports one flow once per cache, so summing across `odid` counts its traffic once per view rather than once. Summing across the domains a chassis opens per linecard or VRF is a device total; the wire does not say which shape a domain is.
+- A NetFlow v8 method is a domain here. The aggregation caches share the main cache's flows, so each one re-reports traffic the device already exported under its own dimensions.
+- The identifier is the Source ID on v9, the Observation Domain ID on IPFIX, the sub-agent id on sFlow and the method on v8. A v5 export runs one cache and reports `0`.
 
 **the interface pair on `hosts`, `services` and `threats`**
 

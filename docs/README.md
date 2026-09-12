@@ -50,7 +50,7 @@ Every route answers on the address `--web.listen-address` and `--web.listen-port
 A dimension the record did not carry produces no series — never `0`, `false` or an epoch instant.
 
 - **Ingest** — a record without addresses feeds no host entry, one without an application none.
-- **NetFlow v8** — an aggregate feeds only the tables its method's dimensions cover.
+- **NetFlow v8** — an aggregate feeds the domain that carried it and no table beyond.
 - **Eviction** — an entry idle past `--aggregation.entry-ttl` is removed with its series.
 - **Freshness** — the timestamp appears on the first decode, the rate on the first rate.
 

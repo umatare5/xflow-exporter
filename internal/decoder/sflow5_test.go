@@ -9,11 +9,15 @@ import (
 )
 
 // sflowDatagram assembles one sFlow v5 datagram with an IPv4 agent.
+// fixtureSFlowSubAgent is the sub-agent every fixture datagram names, which
+// is the observation domain its records carry.
+const fixtureSFlowSubAgent = 7
+
 func sflowDatagram(sequence uint32, samples ...[]byte) []byte {
 	p := be32(nil, 5)                 // version
 	p = be32(p, sflowAddrIPv4)        // agent address type
 	p = append(p, 192, 0, 2, 50)      // agent address
-	p = be32(p, 7)                    // sub agent id
+	p = be32(p, fixtureSFlowSubAgent) // sub agent id
 	p = be32(p, sequence)             // datagram sequence
 	p = be32(p, 555_000)              // uptime ms
 	p = be32(p, uint32(len(samples))) // sample count
@@ -109,6 +113,7 @@ func TestDecodeSFlowV5_RawEthernetTCP(t *testing.T) {
 	want := flow.Record{
 		Exporter:         testExporter,
 		Version:          flow.VersionSFlowV5,
+		ODID:             fixtureSFlowSubAgent,
 		SrcAddr:          netip.MustParseAddr("10.0.0.1"),
 		DstAddr:          netip.MustParseAddr("198.51.100.7"),
 		SrcPort:          51234,
@@ -204,6 +209,7 @@ func TestDecodeSFlowV5_SampledIPv4Record(t *testing.T) {
 	want := flow.Record{
 		Exporter:         testExporter,
 		Version:          flow.VersionSFlowV5,
+		ODID:             fixtureSFlowSubAgent,
 		SrcAddr:          netip.MustParseAddr("10.0.0.9"),
 		DstAddr:          netip.MustParseAddr("10.0.0.10"),
 		SrcPort:          53000,
@@ -249,6 +255,7 @@ func TestDecodeSFlowV5_SampledIPv6RecordUnmapsIPv4(t *testing.T) {
 	want := flow.Record{
 		Exporter:         testExporter,
 		Version:          flow.VersionSFlowV5,
+		ODID:             fixtureSFlowSubAgent,
 		SrcAddr:          netip.MustParseAddr("10.0.0.9"),
 		DstAddr:          netip.MustParseAddr("10.0.0.10"),
 		SrcPort:          53000,
