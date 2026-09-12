@@ -253,3 +253,62 @@ func TestTrackRecordSequence_AnAcceptedMessageEndsTheLateRun(t *testing.T) {
 			got, rounds*records)
 	}
 }
+
+// TestTrackRecordSequence_ARebaseStartsTheLateRunOver pins the state a rebase
+// clears. The run belongs to the position it was held against, so carrying it
+// past a new engine's base spends the bound early and rebases a message the
+// guard should still have held.
+func TestTrackRecordSequence_ARebaseStartsTheLateRunOver(t *testing.T) {
+	t.Parallel()
+
+	d := &domainState{}
+
+	// One engine skips ahead and its overtaken messages fill the run, then
+	// another engine repeats the shape. Each skip names its records once.
+	for _, seq := range []uint32{0, 50, 10, 20, 30} {
+		d.trackRecordSequence(seq, 10, 0, true)
+	}
+	for _, seq := range []uint32{900, 880, 890, 910} {
+		d.trackRecordSequence(seq, 10, 1, true)
+	}
+
+	if got := d.sequenceMissed.Load(); got != 40 {
+		t.Errorf("SequenceMissed = %d, want the 40 the first skip named alone", got)
+	}
+}
+
+// TestTrackRecordSequence_TheWindowBoundsWhatReadsAsLate pins where reordering
+// stops and a restart begins. A step back inside the window is a message the
+// base already passed, and one beyond it is a device that resumed from a lower
+// number, which the counter cannot span.
+func TestTrackRecordSequence_TheWindowBoundsWhatReadsAsLate(t *testing.T) {
+	t.Parallel()
+
+	const records, base = 10, 10_000
+
+	// A step past the window rebases onto the late message, so the next in
+	// order reads the step back less the records that message carried.
+	tests := []struct {
+		name string
+		back uint32
+		want uint64
+	}{
+		{name: "the last position inside the window", back: 1024, want: 0},
+		{name: "one past it", back: 1025, want: 1025 - records},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := &domainState{}
+			d.trackRecordSequence(base, records, 0, true)
+			d.trackRecordSequence(base+records-tt.back, records, 0, true)
+			d.trackRecordSequence(base+records, records, 0, true)
+
+			if got := d.sequenceMissed.Load(); got != tt.want {
+				t.Errorf("SequenceMissed = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

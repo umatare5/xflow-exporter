@@ -646,6 +646,7 @@ func (d *domainState) trackRecordSequence(seq, records uint32, engine uint16, co
 		d.seqInit = complete
 		d.seqEngine = engine
 		d.lastSeq = seq + records
+		d.seqLateRun = 0
 		return
 	}
 
