@@ -4,8 +4,8 @@ Every listener accepts every protocol below, told apart per datagram, over plain
 
 | Protocol                                                | Status    | Verified on                               |
 | :------------------------------------------------------ | :-------- | :---------------------------------------- |
-| [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Cisco C891FJ (planned)                    |
-| [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Cisco C891FJ (planned)                    |
+| [NetFlow v5](#netflow-v5) (incl. J-Flow v5)             | Supported | Fixtures only                             |
+| [NetFlow v8](#netflow-v8) (incl. J-Flow v8)             | Supported | Fixtures only                             |
 | [NetFlow v9](#netflow-v9-and-ipfix) (incl. FNF, J-Flow) | Supported | Cisco WS-C2960CX-8PC-L, Cisco C9800-CL-K9 |
 | [IPFIX](#netflow-v9-and-ipfix) / NetFlow v10            | Supported | Cisco C9800-CL-K9                         |
 | [sFlow v5](#sflow-v5)                                   | Supported | HP 2530-8G                                |
@@ -15,7 +15,7 @@ Every listener accepts every protocol below, told apart per datagram, over plain
 - **HP 2530-8G** — a J9777A on `YA.16.11.0030`, sampling one port at 1:50 into compact flow samples that carry up to 128 header bytes and the port's VLAN, and reporting the samples its agent drops.
 
 > [!NOTE]
-> **Verified on** names the vendor and model whose own export this decoder was read against, so synthetic datagrams and unit tests do not count. A row reading `(planned)` names hardware awaiting measurement, leaving that protocol implemented and covered by fixtures but never read off a wire. No verified device exports a section.
+> **Verified on** names the vendor and model whose own export this decoder was read against, so synthetic datagrams and unit tests do not count. No verified device exports a section.
 
 > [!NOTE]
 > DTLS is unsupported: no network OS ships flows over it, and Go has no production 1.3 stack.
