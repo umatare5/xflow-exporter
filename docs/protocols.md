@@ -33,6 +33,8 @@ The protocol is read from the first bytes of every datagram, not from the port i
 
 The fixed 48-byte record format, shared byte for byte with J-Flow v5. Flow instants are anchored from the device uptime to the export timestamp. The header's sampling interval rides each record.
 
+A C891FJ-K9 on 15.9(3)M13 running Random Sampled NetFlow leaves that interval zero and names its sampler in `pad2` instead, so the rate it sampled at reaches no collector. Its counts then read low by that rate with nothing on the wire saying so.
+
 ### Packet Layout
 
 A 24-byte header and 1 to 30 fixed records. Bytes past the count are tolerated as padding.
@@ -112,7 +114,7 @@ A 24-byte header and 1 to 30 fixed records. Bytes past the count are tolerated a
 | 38–39 | `prot` / `tos`          | IP protocol, then the ToS byte        |
 | 40–43 | `src_as` / `dst_as`     | Two bytes each                        |
 | 44–45 | `src_mask` / `dst_mask` | Prefix lengths in bits                |
-| 46–47 | `pad2`                  | Padding                               |
+| 46–47 | `pad2`                  | Padding, or the sampler id if sampled |
 
 ## NetFlow v8
 
