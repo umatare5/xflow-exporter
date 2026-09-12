@@ -56,8 +56,8 @@ type Record struct {
 	// ODID is the observation domain the record arrived in: the Source ID on
 	// v9, the Observation Domain ID on IPFIX, the sub-agent id on sFlow and
 	// the aggregation method on v8, each keeping its own templates and
-	// sequence space. A v5 export runs one cache and reports zero, which is
-	// also what an sFlow agent numbering one sub-agent reports.
+	// sequence space. A v5 export carries no domain field and reports zero,
+	// which is also what an sFlow agent numbering one sub-agent reports.
 	ODID uint32
 
 	SrcAddr netip.Addr

@@ -168,7 +168,7 @@ The v5 header through byte 21, then the aggregation selector. The method sets re
 | 13     | ToS and prefix                | 40           |
 | 14     | ToS, prefix and port          | 40           |
 
-An aggregation cache is fed from the main cache, so every method a device enables re-reports traffic the main cache already exported. The method is the observation domain here, which keeps the readings apart; summing them counts one flow once per cache. A device exporting a cache as v9 instead carries no field saying so, so send one view to a collector.
+An aggregation cache is fed from the main cache, so every method a device enables re-reports traffic the main cache already exported. The method is the observation domain here, which keeps the readings apart; summing them counts one flow once per cache. A device exporting a cache as v9 instead carries no field marking it an aggregate, so its v9 cache reads as a second view beside the v5 main cache — send one view to a collector.
 
 Methods 1–5 and 9–14 open with `dFlows`/`dPkts`/`dOctets`, then the flow instants at bytes 12 and 16. The Catalyst methods 6–8 lead with their address fields instead and carry no flow count of their own; method 6 keeps the instants at the common 12 and 16, methods 7 and 8 push them to 16/20 and 20/24.
 
