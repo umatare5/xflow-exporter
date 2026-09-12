@@ -121,6 +121,7 @@ all four are keyed by the device, so a device refused at the exporter budget rea
 - Alert on `time() - xflow_last_flow_timestamp_seconds > 900 and time() - xflow_last_datagram_timestamp_seconds < 900` for a sampler that stopped, and on the first term alone for a device gone silent.
 - A sampled port carrying no traffic reaches the same threshold on its own, the flow instant ageing whenever `pps` falls below `N/900` at a 1-in-N rate.
 - Neither instant carries `version`, so a device exporting two protocols hides one of them stopping — `increase(xflow_flows_total{version=...}[15m])` reads them apart.
+- `xflow_flows_total` counts the records decoded, where `xflow_exporter_flows_total` counts the flows those records reported. The two part on a v8 aggregate, whose one record carries the count of the flows its cache folded.
 
 **`xflow_decode_errors_total`**
 

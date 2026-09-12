@@ -10,35 +10,35 @@ Ten collectors aggregate into a table each and publish three counters per entry,
 | :--------------------------- | :--------------------------------- | :-------- | :------------------------- |
 | `exporters`                  | `xflow_exporter_bytes_total`       | Counter   | Sampling-corrected bytes   |
 | `exporters`                  | `xflow_exporter_packets_total`     | Counter   | Sampling-corrected packets |
-| `exporters`                  | `xflow_exporter_flows_total`       | Counter   | Flow records as exported   |
+| `exporters`                  | `xflow_exporter_flows_total`       | Counter   | Flows the records reported |
 | `hosts`                      | `xflow_host_pair_bytes_total`      | Counter   | Sampling-corrected bytes   |
 | `hosts`                      | `xflow_host_pair_packets_total`    | Counter   | Sampling-corrected packets |
-| `hosts`                      | `xflow_host_pair_flows_total`      | Counter   | Flow records as exported   |
+| `hosts`                      | `xflow_host_pair_flows_total`      | Counter   | Flows the records reported |
 | `services`                   | `xflow_service_bytes_total`        | Counter   | Sampling-corrected bytes   |
 | `services`                   | `xflow_service_packets_total`      | Counter   | Sampling-corrected packets |
-| `services`                   | `xflow_service_flows_total`        | Counter   | Flow records as exported   |
+| `services`                   | `xflow_service_flows_total`        | Counter   | Flows the records reported |
 | `destinations`               | `xflow_destination_bytes_total`    | Counter   | Sampling-corrected bytes   |
 | `destinations`               | `xflow_destination_packets_total`  | Counter   | Sampling-corrected packets |
-| `destinations`               | `xflow_destination_flows_total`    | Counter   | Flow records as exported   |
+| `destinations`               | `xflow_destination_flows_total`    | Counter   | Flows the records reported |
 | `tcp_flags`                  | `xflow_tcp_flags_bytes_total`      | Counter   | Sampling-corrected bytes   |
 | `tcp_flags`                  | `xflow_tcp_flags_packets_total`    | Counter   | Sampling-corrected packets |
-| `tcp_flags`                  | `xflow_tcp_flags_flows_total`      | Counter   | Flow records as exported   |
+| `tcp_flags`                  | `xflow_tcp_flags_flows_total`      | Counter   | Flows the records reported |
 | `dscp`                       | `xflow_dscp_bytes_total`           | Counter   | Sampling-corrected bytes   |
 | `dscp`                       | `xflow_dscp_packets_total`         | Counter   | Sampling-corrected packets |
-| `dscp`                       | `xflow_dscp_flows_total`           | Counter   | Flow records as exported   |
+| `dscp`                       | `xflow_dscp_flows_total`           | Counter   | Flows the records reported |
 | `asns`                       | `xflow_asn_pair_bytes_total`       | Counter   | Sampling-corrected bytes   |
 | `asns`                       | `xflow_asn_pair_packets_total`     | Counter   | Sampling-corrected packets |
-| `asns`                       | `xflow_asn_pair_flows_total`       | Counter   | Flow records as exported   |
+| `asns`                       | `xflow_asn_pair_flows_total`       | Counter   | Flows the records reported |
 | `asns`                       | `xflow_asn_info`                   | Gauge     | Always 1, naming an AS     |
 | `applications`               | `xflow_application_bytes_total`    | Counter   | Sampling-corrected bytes   |
 | `applications`               | `xflow_application_packets_total`  | Counter   | Sampling-corrected packets |
-| `applications`               | `xflow_application_flows_total`    | Counter   | Flow records as exported   |
+| `applications`               | `xflow_application_flows_total`    | Counter   | Flows the records reported |
 | `countries`                  | `xflow_country_pair_bytes_total`   | Counter   | Sampling-corrected bytes   |
 | `countries`                  | `xflow_country_pair_packets_total` | Counter   | Sampling-corrected packets |
-| `countries`                  | `xflow_country_pair_flows_total`   | Counter   | Flow records as exported   |
+| `countries`                  | `xflow_country_pair_flows_total`   | Counter   | Flows the records reported |
 | `threats`                    | `xflow_threat_bytes_total`         | Counter   | Sampling-corrected bytes   |
 | `threats`                    | `xflow_threat_packets_total`       | Counter   | Sampling-corrected packets |
-| `threats`                    | `xflow_threat_flows_total`         | Counter   | Flow records as exported   |
+| `threats`                    | `xflow_threat_flows_total`         | Counter   | Flows the records reported |
 | `distributions`              | `xflow_flow_bytes`                 | Histogram | Corrected bytes per record |
 | `distributions`              | `xflow_flow_duration_seconds`      | Histogram | Flow duration in seconds   |
 | any                          | `xflow_device_info`                | Gauge     | Always 1, naming a device  |
@@ -126,6 +126,7 @@ the per-domain family takes no scrape-time cut, neither Top-K nor min-bytes, bec
 - A device running several caches reports one flow once per cache, so summing across `odid` counts its traffic once per view rather than once. Summing across the domains a chassis opens per linecard or VRF is a device total; the wire does not say which shape a domain is.
 - A NetFlow v8 method is a domain here. The aggregation caches share the main cache's flows, so each one re-reports traffic the device already exported under its own dimensions.
 - The identifier is the Source ID on v9, the Observation Domain ID on IPFIX, the sub-agent id on sFlow and the method on v8. A v5 export runs one cache and reports `0`.
+- `xflow_exporter_flows_total` counts one flow per record, except a v8 aggregate where it takes the count the cache itself reported. A cache the same device exports as v9 carries no such count, so its reading is records and reads low beside the v8 ones.
 
 **the interface pair on `hosts`, `services` and `threats`**
 
