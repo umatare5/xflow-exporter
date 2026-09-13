@@ -61,7 +61,6 @@
             "# Contributing",
             "## Development", "*",
             "## Testing", "*",
-            "## Code Style", "*",
             "## Documentation"
           ]
         }
@@ -81,8 +80,8 @@
           "headings": [
             "## Overview", "*",
             "## Architecture", "*",
-            "## Quick Start", "*",
             "## Supported Protocols", "*",
+            "## Quick Start", "*",
             "## Collectors", "*",
             "## Flags", "*",
             "## Endpoints", "*",
@@ -118,8 +117,27 @@
           "match_case": true,
           "headings": [
             "# Documentation",
-            "## Technical Information",
-            "*"
+            "## For Users Docs", "*",
+            "## For Developers Docs", "*"
+          ]
+        }
+      }
+    },
+    {
+      "filter": ["docs/architecture.md"],
+      "combine": "merge",
+      "config": {
+        "MD043": {
+          "match_case": true,
+          "headings": [
+            "# Architecture",
+            "## Push and Pull", "*",
+            "## Decoder", "*",
+            "## Endpoints", "*",
+            "## Counter Semantics", "*",
+            "## Sampling Correction", "*",
+            "## Bounded State", "*",
+            "## Absence"
           ]
         }
       }
@@ -134,7 +152,8 @@
             "# Collectors",
             "## Metrics", "*",
             "## Labels", "*",
-            "## Specifications"
+            "## Annotations", "*",
+            "## Technical Notes"
           ]
         }
       }
@@ -148,11 +167,10 @@
           "headings": [
             "# Enrichment",
             "## Sources", "*",
-            "## Service Names", "*",
             "## Databases", "*",
-            "## Threat Lists", "*",
             "## Mapping File", "*",
-            "## Reloading"
+            "## Service Names", "*",
+            "## Threat Lists"
           ]
         }
       }
@@ -165,7 +183,7 @@
           "match_case": true,
           "headings": [
             "# Help",
-            "## Notes"
+            "## Technical Notes"
           ]
         }
       }
@@ -180,7 +198,8 @@
             "# Exporter Health",
             "## Metrics", "*",
             "## Labels", "*",
-            "## Specifications"
+            "## Annotations", "*",
+            "## Technical Notes"
           ]
         }
       }
@@ -189,17 +208,22 @@
       "filter": ["docs/protocols.md"],
       "combine": "merge",
       "config": {
+        // Each record layout is folded into a <details> block the reader opens on demand
+        "MD033": {
+          "allowed_elements": ["b", "details", "p", "summary"]
+        },
         "MD043": {
           "match_case": true,
           "headings": [
             "# Protocols",
+            "## Verification Matrix", "*",
             "## Version Identification", "*",
             "## NetFlow v5", "*",
             "## NetFlow v8", "*",
-            "## NetFlow v9 and IPFIX", "*",
-            "## Packet Sections", "*",
+            "## NetFlow v9", "*",
+            "## IPFIX", "*",
             "## sFlow v5", "*",
-            "## Options Templates", "*",
+            "## Packet Sections", "*",
             "## References"
           ]
         }

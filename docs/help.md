@@ -1,6 +1,6 @@
 # Help
 
-The `xflow-exporter --help` text, transcribed from the binary.
+The dump of `xflow-exporter --help`. It shows all available command-line options and their descriptions.
 
 ```text
 NAME:
@@ -10,7 +10,7 @@ USAGE:
    xflow-exporter [global options]
 
 VERSION:
-   0.10.0
+   0.11.0
 
 GLOBAL OPTIONS:
    --dry-run                    Validate configuration without starting the server
@@ -72,7 +72,7 @@ GLOBAL OPTIONS:
    --receiver.queue-size int                                Datagrams buffered between the read loops and the decoders (default: 8192)
    --receiver.workers int                                   Decode workers, each device hashed to one of them (0 sizes to GOMAXPROCS) (default: 0)
 
-   * Remote Write Options
+   * Remote Write Options [Experimental]
 
    --remote-write.header string [ --remote-write.header string ]  Extra request header as name=value (repeatable)
    --remote-write.interval duration                               How often the registry is shipped (default: 1m0s)
@@ -82,14 +82,16 @@ GLOBAL OPTIONS:
    --remote-write.username string                                 Basic auth username for the endpoint [$XFLOW_REMOTE_WRITE_USERNAME]
 ```
 
-## Notes
+## Technical Notes
 
-`--receiver.buffer-bytes` asks the kernel for that much `SO_RCVBUF`, and Linux clamps the grant to `net.core.rmem_max`, which this exporter cannot raise. Size both it and `--receiver.queue-size` to absorb a Flexible NetFlow cache-flush storm.
+This section covers technical considerations and best practices for development, configuration, and operation.
 
-Each device hashes to one worker, so `--receiver.workers` above the device count adds nothing. A device outrunning its worker fills the shared queue, so every listener drops as `queue_full`.
+**Socket Buffer Tuning**: `--receiver.buffer-bytes` sets `SO_RCVBUF`, clamped by `net.core.rmem_max`. Tune both this and `--receiver.queue-size` to absorb burst cache flushes.
 
-Every listener accepts every supported protocol, told apart as [Protocols](protocols.md#version-identification) describes, so `--receiver.address` entries separate networks or ports rather than protocols. Each stream a device sends belongs on one listener, because two read loops share no ordering.
+**Worker Allocation**: Ingest workers hash by exporter IP. Setting `--receiver.workers` beyond total active devices provides no concurrency benefit.
 
-`--dry-run` validates the whole flag set first, then opens every file an `--enrich.*` flag names and closes it again, and exits 1 on the first one a real startup would refuse. It binds neither the UDP listeners nor the HTTP server and makes no remote-write connection, so a port already taken or an unreachable endpoint is not something it reports.
+**Protocol Multiplexing**: Listeners ingest all supported protocols on the same socket. Dedicate one listener per device stream to prevent packet reordering across threads.
 
-`--remote-write.username` and `--remote-write.password` read `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD` where the flag is absent, and a flag given on the command line wins over the variable. The variable keeps the credential out of the process table, where any account on the host reads a flag — [`SECURITY.md`](../SECURITY.md) carries what else the exporter holds.
+**Dry-Run Validation**: `--dry-run` validates flags and verifies readability of `--enrich.*` files without binding UDP/HTTP ports or testing remote endpoints.
+
+**Credential Precedence**: `--remote-write.*` CLI flags override `XFLOW_REMOTE_WRITE_*` environment variables. Prefer environment variables to prevent leaking credentials into the OS process table.
