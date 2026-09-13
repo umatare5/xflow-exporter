@@ -226,9 +226,9 @@ The three collectors usually start from:
 
 There are several Prometheus configuration examples provided below:
 
-- **Job:** [`examples/prometheus.yml`](./examples/prometheus.yml)
-- **Recording Rules:** [`examples/prometheus_record_rules.yml`](./examples/prometheus_record_rules.yml)
-- **Alerting Rules:** [`examples/prometheus_alert_rules.yml`](./examples/prometheus_alert_rules.yml)
+- **Example Job:** [`examples/prometheus.yml`](./examples/prometheus.yml)
+- **Example Recording Rules:** [`examples/prometheus_record_rules.yml`](./examples/prometheus_record_rules.yml)
+- **Example Alerting Rules:** [`examples/prometheus_alert_rules.yml`](./examples/prometheus_alert_rules.yml)
 
 ### Grafana Configuration
 
