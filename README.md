@@ -58,17 +58,17 @@ For example, on **Cisco C2960CX** and **Netflow v9**, use the following configur
 ```bash
 # 1. Create minimum set of flow records
 flow record MINIMAL_FLOW_RECORDS_IPV4
- match ipv4 tos                       # For DSCP
- match ipv4 protocol                  # For the protocol type - 6: TCP, 17: UDP
- match ipv4 source address            # Required: Source IP address of the flow
- match ipv4 destination address       # Required: Destination IP address of the flow
- match transport source-port          # Required: Source port of the flow
- match transport destination-port     # Required: Destination port of the flow
- collect transport tcp flags          # Collect TCP flags
- collect interface input              # Collect input interface
- collect flow sampler                 # Collect flow sampler information
- collect counter bytes long           # Collect byte count of the flow
- collect counter packets long         # Collect packet count of the flow
+  match ipv4 tos                       # For DSCP
+  match ipv4 protocol                  # For the protocol type - 6: TCP, 17: UDP
+  match ipv4 source address            # Required: Source IP address of the flow
+  match ipv4 destination address       # Required: Destination IP address of the flow
+  match transport source-port          # Required: Source port of the flow
+  match transport destination-port     # Required: Destination port of the flow
+  collect transport tcp flags          # Collect TCP flags
+  collect interface input              # Collect input interface
+  collect flow sampler                 # Collect flow sampler information
+  collect counter bytes long           # Collect byte count of the flow
+  collect counter packets long         # Collect packet count of the flow
 
 # 2. Configure the flow exporter
 flow exporter XFLOW-EXPORTER
@@ -80,16 +80,16 @@ flow exporter XFLOW-EXPORTER
 
 # 3. Set up the flow monitor
 flow monitor EXAMPLE_FLOW_MONITOR
- exporter XFLOW-EXPORTER
- record MINIMAL_FLOW_RECORDS_IPV4
+  exporter XFLOW-EXPORTER
+  record MINIMAL_FLOW_RECORDS_IPV4
 
 # 4. Create the sampler
 sampler MINIMAL_RESOLUTION_SAMPLER
- mode random 1 out-of 1022            # Window size to select packets from. On C2960CX, the range is <32-1022>.
+  mode random 1 out-of 1022            # Window size to select packets from. On C2960CX, the range is <32-1022>.
 
 # 5. Apply the sampler to the interface
 interface GigabitEthernet0/1
- ip flow monitor EXAMPLE_FLOW_MONITOR sampler MINIMAL_RESOLUTION_SAMPLER input
+  ip flow monitor EXAMPLE_FLOW_MONITOR sampler MINIMAL_RESOLUTION_SAMPLER input
 
 # 6. Verify the configuration and flow records
 show flow monitor EXAMPLE_FLOW_MONITOR
@@ -125,20 +125,20 @@ curl http://localhost:10053/metrics
 
 This exporter supports multiple collectors. See [Enrichment](docs/enrichment.md) for the details.
 
-| Collector     | Flag                        | Exposes                                                         |
-| :------------ | :-------------------------- | :-------------------------------------------------------------- |
-| Applications  | `--collector.applications`  | Traffic per application, exported or from `--enrich.services`   |
-| BGP AS        | `--collector.asns`          | Traffic per AS pair, exported or from `--enrich.asn-database`   |
-| Countries     | `--collector.countries`     | Traffic per country pair, needs `--enrich.country-database`     |
-| Destinations  | `--collector.destinations`  | Traffic per destination address, protocol and port              |
-| Distributions | `--collector.distributions` | Flow size and duration native histograms                        |
-| DSCP          | `--collector.dscp`          | Traffic per DSCP class, from the TOS byte or the code point     |
-| Exporter      | `--collector.exporters`     | Traffic per observation domain of a device                      |
-| Hosts         | `--collector.hosts`         | Traffic per source-destination address pair                     |
-| Services      | `--collector.services`      | Traffic per address pair, protocol and port                     |
-| TCP Flags     | `--collector.tcp-flags`     | Traffic per TCP control-bit profile                             |
-| Threats       | `--collector.threats`       | Traffic per flagged address, needs `--enrich.threat-file`       |
-| VLANs         | `--collector.vlans`         | Traffic per VLAN pair, needs `vlans` in `--enrich.mapping-file` |
+| Collector     | Flag                        | Exposes                                    |
+| :------------ | :-------------------------- | :----------------------------------------- |
+| Applications  | `--collector.applications`  | Traffic per application — `--enrich.*`     |
+| BGP AS        | `--collector.asns`          | Traffic per AS pair — `--enrich.*`         |
+| Countries     | `--collector.countries`     | Traffic per country pair — `--enrich.*`    |
+| Destinations  | `--collector.destinations`  | Traffic per destination, protocol, port    |
+| Distributions | `--collector.distributions` | Flow size and duration native histograms   |
+| DSCP          | `--collector.dscp`          | Traffic per DSCP class                     |
+| Exporter      | `--collector.exporters`     | Traffic per observation domain             |
+| Hosts         | `--collector.hosts`         | Traffic per source-destination pair        |
+| Services      | `--collector.services`      | Traffic per address pair, protocol, port   |
+| TCP Flags     | `--collector.tcp-flags`     | Traffic per TCP control-bit profile        |
+| Threats       | `--collector.threats`       | Traffic per flagged address — `--enrich.*` |
+| VLANs         | `--collector.vlans`         | Traffic per VLAN pair — `--enrich.*`       |
 
 > [!IMPORTANT]
 > All collectors are **disabled by default** to bound cardinality, and `--collector.distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration.
@@ -232,7 +232,7 @@ There are several Prometheus configuration examples provided below:
 
 ### Grafana Configuration
 
-Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json). See also [`docs/collectors.md`](docs/collectors.md) and [`docs/health.md`](docs/health.md) for the panels.
+Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json). See [`docs/collectors.md`](docs/collectors.md) for the panels and metrics.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard_dark.png">
