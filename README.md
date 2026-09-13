@@ -38,7 +38,7 @@ Networking devices push flow datagrams into the exporter, and Prometheus pulls a
   <img alt="Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/readme_architecture.png" width="705px">
 </picture>
 
-This architecture is **suitable for lightweight traffic analysis** in enterprise and small-to-medium data center environments with minimal resource and cost requirements, **but not for heavy traffic analysis** in large-scale data centers, clouds, ISPs, or **the digital forensics in the security domain**
+This architecture is **suitable for lightweight traffic analysis** in enterprise and small-to-medium data center environments with minimal resource and cost requirements, **but not for heavy traffic analysis** in large-scale data centers, clouds, ISPs, or **the digital forensics in the security domain.**
 
 > [!NOTE]
 > Scrapes read in-memory tables asynchronously, never waiting on flow arrival. See [Push and Pull](docs/architecture.md#push-and-pull) for the details.
