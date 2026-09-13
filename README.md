@@ -38,7 +38,7 @@ Networking devices push flow datagrams into the exporter, and Prometheus pulls a
   <img alt="Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/readme_architecture.png" width="705px">
 </picture>
 
-This architecture is **suitable for lightweight traffic analysis** in enterprise and small-to-medium data center environments with minimal resource and cost requirements, **but not for heavy traffic analysis** in large-scale data centers, clouds, ISPs, or security domains.
+This architecture is **suitable for lightweight traffic analysis** in enterprise and small-to-medium data center environments with minimal resource and cost requirements, **but not for heavy traffic analysis** in large-scale data centers, clouds, ISPs, or **the digital forensics in the security domain.**
 
 > [!NOTE]
 > Scrapes read in-memory tables asynchronously, never waiting on flow arrival. See [Push and Pull](docs/architecture.md#push-and-pull) for the details.
@@ -123,7 +123,7 @@ curl http://localhost:10053/metrics
 
 ## Collectors
 
-This exporter supports multiple collectors. See [Enrichment](docs/enrichment.md) for the details.
+This exporter supports multiple collectors. See [Collectors](docs/collectors.md) for the details.
 
 | Collector     | Flag                        | Exposes                                    |
 | :------------ | :-------------------------- | :----------------------------------------- |
@@ -226,13 +226,13 @@ The three collectors usually start from:
 
 There are several Prometheus configuration examples provided below:
 
-- **Job:** [`examples/prometheus.yml`](./examples/prometheus.yml)
-- **Recording Rules:** [`examples/prometheus_record_rules.yml`](./examples/prometheus_record_rules.yml)
-- **Alerting Rules:** [`examples/prometheus_alert_rules.yml`](./examples/prometheus_alert_rules.yml)
+- **Example Job:** [`examples/prometheus.yml`](./examples/prometheus.yml)
+- **Example Recording Rules:** [`examples/prometheus_record_rules.yml`](./examples/prometheus_record_rules.yml)
+- **Example Alerting Rules:** [`examples/prometheus_alert_rules.yml`](./examples/prometheus_alert_rules.yml)
 
 ### Grafana Configuration
 
-Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json). See [`docs/collectors.md`](docs/collectors.md) for the panels and metrics.
+Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json) and visualize the metrics.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard_dark.png">
