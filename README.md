@@ -125,23 +125,23 @@ curl http://localhost:10053/metrics
 
 This exporter supports multiple collectors. See [Enrichment](docs/enrichment.md) for the details.
 
-| Collector     | Flag                        | Exposes                                  |
-| :------------ | :-------------------------- | :--------------------------------------- |
-| Applications  | `--collector.applications`  | Traffic per application                  |
-| BGP AS        | `--collector.asns`          | Traffic per AS pair                      |
-| Countries     | `--collector.countries`     | Traffic per country pair                 |
-| Destinations  | `--collector.destinations`  | Traffic per destination, protocol, port  |
-| Distributions | `--collector.distributions` | Flow size and duration native histograms |
-| DSCP          | `--collector.dscp`          | Traffic per DSCP class                   |
-| Exporter      | `--collector.exporters`     | Traffic per observation domain           |
-| Hosts         | `--collector.hosts`         | Traffic per source-destination pair      |
-| Services      | `--collector.services`      | Traffic per address pair, protocol, port |
-| TCP Flags     | `--collector.tcp-flags`     | Traffic per TCP control-bit profile      |
-| Threats       | `--collector.threats`       | Traffic per flagged address              |
-| VLANs         | `--collector.vlans`         | Traffic per VLAN pair                    |
+| Collector     | Flag                        | Exposes                                    |
+| :------------ | :-------------------------- | :----------------------------------------- |
+| Applications  | `--collector.applications`  | Traffic per application — `--enrich.*`     |
+| BGP AS        | `--collector.asns`          | Traffic per AS pair — `--enrich.*`         |
+| Countries     | `--collector.countries`     | Traffic per country pair — `--enrich.*`    |
+| Destinations  | `--collector.destinations`  | Traffic per destination, protocol, port    |
+| Distributions | `--collector.distributions` | Flow size and duration native histograms   |
+| DSCP          | `--collector.dscp`          | Traffic per DSCP class                     |
+| Exporter      | `--collector.exporters`     | Traffic per observation domain             |
+| Hosts         | `--collector.hosts`         | Traffic per source-destination pair        |
+| Services      | `--collector.services`      | Traffic per address pair, protocol, port   |
+| TCP Flags     | `--collector.tcp-flags`     | Traffic per TCP control-bit profile        |
+| Threats       | `--collector.threats`       | Traffic per flagged address — `--enrich.*` |
+| VLANs         | `--collector.vlans`         | Traffic per VLAN pair — `--enrich.*`       |
 
 > [!IMPORTANT]
-> All collectors are **disabled by default** to bound cardinality, and `--collector.distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration. Applications, BGP AS, Countries, Threats and VLANs each draw on an `--enrich.*` source.
+> All collectors are **disabled by default** to bound cardinality, and `--collector.distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration.
 
 ## Flags
 
