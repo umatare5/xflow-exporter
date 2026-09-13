@@ -58,17 +58,17 @@ For example, on **Cisco C2960CX** and **Netflow v9**, use the following configur
 ```bash
 # 1. Create minimum set of flow records
 flow record MINIMAL_FLOW_RECORDS_IPV4
- match ipv4 tos                       # For DSCP
- match ipv4 protocol                  # For the protocol type - 6: TCP, 17: UDP
- match ipv4 source address            # Required: Source IP address of the flow
- match ipv4 destination address       # Required: Destination IP address of the flow
- match transport source-port          # Required: Source port of the flow
- match transport destination-port     # Required: Destination port of the flow
- collect transport tcp flags          # Collect TCP flags
- collect interface input              # Collect input interface
- collect flow sampler                 # Collect flow sampler information
- collect counter bytes long           # Collect byte count of the flow
- collect counter packets long         # Collect packet count of the flow
+  match ipv4 tos                       # For DSCP
+  match ipv4 protocol                  # For the protocol type - 6: TCP, 17: UDP
+  match ipv4 source address            # Required: Source IP address of the flow
+  match ipv4 destination address       # Required: Destination IP address of the flow
+  match transport source-port          # Required: Source port of the flow
+  match transport destination-port     # Required: Destination port of the flow
+  collect transport tcp flags          # Collect TCP flags
+  collect interface input              # Collect input interface
+  collect flow sampler                 # Collect flow sampler information
+  collect counter bytes long           # Collect byte count of the flow
+  collect counter packets long         # Collect packet count of the flow
 
 # 2. Configure the flow exporter
 flow exporter XFLOW-EXPORTER
@@ -80,16 +80,16 @@ flow exporter XFLOW-EXPORTER
 
 # 3. Set up the flow monitor
 flow monitor EXAMPLE_FLOW_MONITOR
- exporter XFLOW-EXPORTER
- record MINIMAL_FLOW_RECORDS_IPV4
+  exporter XFLOW-EXPORTER
+  record MINIMAL_FLOW_RECORDS_IPV4
 
 # 4. Create the sampler
 sampler MINIMAL_RESOLUTION_SAMPLER
- mode random 1 out-of 1022            # Window size to select packets from. On C2960CX, the range is <32-1022>.
+  mode random 1 out-of 1022            # Window size to select packets from. On C2960CX, the range is <32-1022>.
 
 # 5. Apply the sampler to the interface
 interface GigabitEthernet0/1
- ip flow monitor EXAMPLE_FLOW_MONITOR sampler MINIMAL_RESOLUTION_SAMPLER input
+  ip flow monitor EXAMPLE_FLOW_MONITOR sampler MINIMAL_RESOLUTION_SAMPLER input
 
 # 6. Verify the configuration and flow records
 show flow monitor EXAMPLE_FLOW_MONITOR
