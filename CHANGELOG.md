@@ -4,8 +4,11 @@ Notable changes to the metric surface, one section per release, listing the pull
 
 ## [Unreleased]
 
+## [v0.11.0]
+
 - [#64](https://github.com/umatare5/xflow-exporter/pull/64) — Describe what each series counts and what the sampling audit returns
 - [#65](https://github.com/umatare5/xflow-exporter/pull/65) — Break traffic down by the VLAN a mapping file puts each address on
+- [#66](https://github.com/umatare5/xflow-exporter/pull/66) — Restructure the documentation set and repair its cross-links
 
 ## [v0.10.0]
 
@@ -92,7 +95,8 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#1](https://github.com/umatare5/xflow-exporter/pull/1) — Start the exporter with its flags, HTTP surface and UDP receiver
 - [#2](https://github.com/umatare5/xflow-exporter/pull/2) — Add the release workflow the tag and the artifacts come from
 
-[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.11.0...HEAD
+[v0.11.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.11.0
 [v0.10.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.10.0
 [v0.9.1]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.9.1
 [v0.9.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.9.0
