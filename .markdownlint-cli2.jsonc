@@ -80,8 +80,8 @@
           "headings": [
             "## Overview", "*",
             "## Architecture", "*",
-            "## Quick Start", "*",
             "## Supported Protocols", "*",
+            "## Quick Start", "*",
             "## Collectors", "*",
             "## Flags", "*",
             "## Endpoints", "*",

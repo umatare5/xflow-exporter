@@ -43,6 +43,10 @@ This architecture is **suitable for lightweight traffic analysis** in enterprise
 > [!NOTE]
 > Scrapes read in-memory tables asynchronously, never waiting on flow arrival. See [Push and Pull](docs/architecture.md#push-and-pull) for the details.
 
+## Supported Protocols
+
+**NetFlow v5, v8, v9, IPFIX and sFlow v5.** See [Protocols](docs/protocols.md) for wire formats and devices each decoder was read on.
+
 ## Quick Start
 
 ### 1. Send flow records from the networking devices
@@ -116,10 +120,6 @@ curl http://localhost:10053/metrics
 
 > [!TIP]
 > See [Metrics](#metrics) for available metrics, and [Prometheus Configuration](#prometheus-configuration) for the job and the alerting rules.
-
-## Supported Protocols
-
-**NetFlow v5, v8, v9, IPFIX and sFlow v5.** See [Protocols](docs/protocols.md) for wire formats and devices each decoder was read on.
 
 ## Collectors
 
@@ -232,7 +232,7 @@ There are several Prometheus configuration examples provided below:
 
 ### Grafana Configuration
 
-Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json). See also [`docs/collectors.md`](docs/collectors.md) and [`docs/health.md`](docs/health.md) for the metrics.
+Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json). See also [`docs/collectors.md`](docs/collectors.md) and [`docs/health.md`](docs/health.md) for the panels.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard_dark.png">
