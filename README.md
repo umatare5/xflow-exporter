@@ -123,7 +123,7 @@ curl http://localhost:10053/metrics
 
 ## Collectors
 
-This exporter supports multiple collectors. See [Enrichment](docs/enrichment.md) for the details.
+This exporter supports multiple collectors. See [Collectors](docs/collectors.md) for the details.
 
 | Collector     | Flag                        | Exposes                                    |
 | :------------ | :-------------------------- | :----------------------------------------- |
