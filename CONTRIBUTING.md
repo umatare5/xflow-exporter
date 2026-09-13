@@ -1,44 +1,37 @@
 # Contributing
 
-The [shared contribution guide](https://github.com/umatare5/.github/blob/main/CONTRIBUTING.md) covers what every exporter shares. This page carries the rest.
+**[The shared contribution guide](https://github.com/umatare5/.github/blob/main/CONTRIBUTING.md)** defines the toolchain, the make targets and the conventions every exporter here shares.
+
+This page specifies what is particular to this one: what CI enforces, how a fixture is built and which page owns which fact.
 
 ## Development
 
-CI runs Format and Lint, Test and Build, Coverage against a threshold of 80 percent, Prometheus Rules, markdownlint, Link Check, actionlint, CodeQL and govulncheck on every pull request.
+**The shared contribution guide** defines the general rules and conventions for contributing to this codebase.
+
+- **Four checks are path-filtered** — govulncheck, markdownlint, Link Check and actionlint.
+- **Coverage fails below 80 percent** — `make test-unit` writes the profile without judging it.
+- **actionlint in CI never fails** — it reports and exits zero, so the pre-commit hook enforces it.
+- **`make lint` differs from CI** — CI pins the linter's version and runs `go mod verify` first.
 
 ## Testing
 
-The shared guide carries placement, mutation and coverage. These are the flow-specific rules.
+**The shared contribution guide** defines the general approach to the testing in this codebase.
 
-- **Fixtures are datagrams** — each is laid out as a device lays it out on the wire.
-- **Addresses are reserved** — RFC 5737 or RFC 1918, never a monitored network or a real device.
-- **One skip is normal** — a test skips unless `XFLOW_TEST_ASN_DATABASE` names a MaxMind database.
-
-Three commands reproduce the `Prometheus Rules` job locally.
-
-```bash
-promtool check rules --lint all --lint-fatal examples/prometheus_*_rules.yml
-promtool test rules examples/prometheus_*_rules_test.yml
-promtool check config --lint all --lint-fatal examples/prometheus.yml
-```
-
-## Code Style
-
-A `--collector.<name>` flag switches a collector, a named series group is a family, and a table is the aggregation mechanism behind a collector.
-
-A HELP string states the reading of one series in one sentence, and a family that folds at the entry bound says so in it, as in `Sampling-corrected bytes per exporter and version, other carries the entry-bound fold`.
+- **Decoder fixtures are datagrams** — each is built byte by byte, as a device lays it on the wire.
+- **One skip is normal** — one test skips unless `XFLOW_TEST_ASN_DATABASE` names a MaxMind database.
 
 ## Documentation
 
-Every fact has one page that owns it, and the other pages link to it rather than restating it.
+The shared guide defines one owner per fact, and this table names the owner of each.
 
-| Page                                      | Owns                                      |
-| :---------------------------------------- | :---------------------------------------- |
-| `README.md`                               | What it is, how to run and scrape it      |
-| `docs/README.md`                          | The rules every collector obeys           |
-| `docs/collectors.md` and `docs/health.md` | The metric catalogues                     |
-| `docs/enrichment.md`                      | The files an operator supplies            |
-| `docs/help.md`                            | The verbatim `--help` transcript          |
-| `docs/protocols.md`                       | The wire formats and the verified devices |
-
-A sentence about what a device exports is written only after that device's own export was decoded, and the `Verified on` column in `docs/protocols.md` names which device each claim came from.
+| Page                   | Owns                                                |
+| :--------------------- | :-------------------------------------------------- |
+| `README.md`            | What it is, how to run and scrape it                |
+| `SECURITY.md`          | The exposure, the egress paths and redaction        |
+| `docs/README.md`       | The index of the documentation                      |
+| `docs/architecture.md` | The foundational architecture and design principles |
+| `docs/collectors.md`   | The traffic metric catalogues and technical notes   |
+| `docs/health.md`       | The health metric catalogues and technical notes    |
+| `docs/enrichment.md`   | The operator's files, and the reload path           |
+| `docs/help.md`         | The verbatim `--help` transcript                    |
+| `docs/protocols.md`    | The wire formats and the verified devices           |
