@@ -313,7 +313,7 @@ func registerRemoteWriteFlags() []cli.Flag {
 		&cli.StringFlag{
 			Name:     "remote-write.url",
 			Usage:    "Remote Write 2.0 endpoint to ship metrics to, which enables the client when set",
-			Category: "* Remote Write Options",
+			Category: "* Remote Write Options [Experimental]",
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
@@ -322,19 +322,19 @@ func registerRemoteWriteFlags() []cli.Flag {
 			Name:     "remote-write.interval",
 			Usage:    "How often the registry is shipped",
 			Value:    config.DefaultRemoteWriteInterval,
-			Category: "* Remote Write Options",
+			Category: "* Remote Write Options [Experimental]",
 		},
 		&cli.DurationFlag{
 			Name:     "remote-write.timeout",
 			Usage:    "Timeout of one write",
 			Value:    config.DefaultRemoteWriteTimeout,
-			Category: "* Remote Write Options",
+			Category: "* Remote Write Options [Experimental]",
 		},
 		&cli.StringFlag{
 			Name:     "remote-write.username",
 			Usage:    "Basic auth username for the endpoint",
 			Sources:  cli.EnvVars("XFLOW_REMOTE_WRITE_USERNAME"),
-			Category: "* Remote Write Options",
+			Category: "* Remote Write Options [Experimental]",
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
@@ -343,12 +343,12 @@ func registerRemoteWriteFlags() []cli.Flag {
 			Name:     "remote-write.password",
 			Usage:    "Basic auth password for the endpoint",
 			Sources:  cli.EnvVars("XFLOW_REMOTE_WRITE_PASSWORD"),
-			Category: "* Remote Write Options",
+			Category: "* Remote Write Options [Experimental]",
 		},
 		&cli.StringSliceFlag{
 			Name:     "remote-write.header",
 			Usage:    "Extra request header as name=value (repeatable)",
-			Category: "* Remote Write Options",
+			Category: "* Remote Write Options [Experimental]",
 			Config: cli.StringConfig{
 				TrimSpace: true,
 			},
