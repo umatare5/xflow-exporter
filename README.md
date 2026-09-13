@@ -232,7 +232,7 @@ There are several Prometheus configuration examples provided below:
 
 ### Grafana Configuration
 
-Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json). See also [`docs/collectors.md`](docs/collectors.md) and [`docs/health.md`](docs/health.md) for the panels.
+Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json). See [`docs/collectors.md`](docs/collectors.md) for the panels and the metrics.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard_dark.png">
