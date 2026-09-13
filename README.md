@@ -123,7 +123,7 @@ curl http://localhost:10053/metrics
 
 ## Collectors
 
-This exporter supports multiple collectors. Applications, BGP AS, Countries, Threats and VLANs draw on an `--enrich.*` source, which [Enrichment](docs/enrichment.md) specifies.
+This exporter supports multiple collectors. See [Enrichment](docs/enrichment.md) for the details.
 
 | Collector     | Flag                        | Exposes                                  |
 | :------------ | :-------------------------- | :--------------------------------------- |
@@ -141,7 +141,7 @@ This exporter supports multiple collectors. Applications, BGP AS, Countries, Thr
 | VLANs         | `--collector.vlans`         | Traffic per VLAN pair                    |
 
 > [!IMPORTANT]
-> All collectors are **disabled by default** to bound cardinality, and `--collector.distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration.
+> All collectors are **disabled by default** to bound cardinality, and `--collector.distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration. Applications, BGP AS, Countries, Threats and VLANs each draw on an `--enrich.*` source.
 
 ## Flags
 
