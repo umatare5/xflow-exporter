@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"math"
 	"net/netip"
 	"testing"
 	"time"
@@ -50,4 +51,63 @@ func TestDistributions_LeaveAnAggregateUnobserved(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestDistributions_HoldResolutionOverTheCorrectedSpan pins the cap against
+// the width a device's range takes, below which the schema halves.
+func TestDistributions_HoldResolutionOverTheCorrectedSpan(t *testing.T) {
+	t.Parallel()
+
+	// One value per schema-3 bucket, across a width past what a device
+	// exporting both corrected and uncorrected records takes.
+	const (
+		keysPerOctave = 8
+		octaves       = 23
+		smallest      = 64
+	)
+
+	d := NewDistributions()
+	reg := prometheus.NewRegistry()
+	d.Register(reg)
+
+	records := make([]flow.Record, 0, keysPerOctave*octaves)
+	for i := range keysPerOctave * octaves {
+		records = append(records, flow.Record{
+			Exporter:      netip.MustParseAddr("192.0.2.1"),
+			Version:       flow.VersionNetFlowV9,
+			Bytes:         uint64(math.Pow(2, float64(i)/keysPerOctave) * smallest),
+			Packets:       1,
+			BytesReported: true,
+			Flows:         1,
+		})
+	}
+	d.Observe(records)
+
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather() error = %v", err)
+	}
+
+	for _, mf := range families {
+		if mf.GetName() != "xflow_flow_bytes" {
+			continue
+		}
+		// The cap counts populated keys, not span length.
+		h := mf.GetMetric()[0].GetHistogram()
+		buckets, count := 0, int64(0)
+		for _, delta := range h.GetPositiveDelta() {
+			count += delta
+			if count > 0 {
+				buckets++
+			}
+		}
+		if got := h.GetSchema(); got != 3 {
+			t.Errorf("schema = %d after %d buckets, want 3 kept", got, buckets)
+		}
+		if buckets <= 100 {
+			t.Errorf("populated buckets = %d, want the span to pass the former cap", buckets)
+		}
+		return
+	}
+	t.Fatal("xflow_flow_bytes was not gathered")
 }

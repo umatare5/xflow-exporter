@@ -22,12 +22,12 @@ type Distributions struct {
 }
 
 // NewDistributions creates the histograms. The factor bounds the relative
-// bucket error at about five percent, and the bucket cap with the reset
-// window bounds memory per series.
+// bucket error at about five percent, and the cap with the reset window
+// bounds memory per series. The cap holds a range's width, not its scale.
 func NewDistributions() *Distributions {
 	const (
 		bucketFactor    = 1.1
-		maxBuckets      = 100
+		maxBuckets      = 200
 		minResetSpacing = time.Hour
 	)
 
