@@ -60,18 +60,19 @@ Every map keyed by wire data takes a bound, because a push protocol cannot choos
 | Bounded                           | Limit                                        | Action at the limit                              |
 | :-------------------------------- | :------------------------------------------- | :----------------------------------------------- |
 | Observation domains per device    | [256](../internal/decoder/templates.go#L37)  | Discard the record; v5 and v8 lose sequence      |
+| Devices holding domain state      | [65536](../internal/decoder/stats.go#L29)    | Discard the datagram; v5 and v8 lose sequence    |
 | Templates per domain              | [8192](../internal/decoder/templates.go#L18) | Prune expired, then reject as `invalid_template` |
 | Samplers per domain               | [4096](../internal/decoder/templates.go#L23) | Prune idle, then leave the sampler untracked     |
 | Sampler declarations per device   | [256](../internal/decoder/templates.go#L42)  | Refuse; records take the device's own rate       |
 | Interned vendor strings           | [65536](../internal/decoder/apps.go#L143)    | Copy per occurrence rather than refuse           |
 | One vendor string                 | [255 B](../internal/decoder/apps.go#L150)    | Refuse like invalid UTF-8, once per field        |
 | Announced applications per device | [16384](../internal/decoder/apps.go#L38)     | Leave the application numbered, never named      |
-| Devices with decode statistics    | [65536](../internal/decoder/stats.go#L29)    | Decode on, but publish no per-device series      |
+| Devices with decode statistics    | [65536](../internal/decoder/stats.go#L29)    | Decode on, but publish no per-device counters    |
 | AS names cached from the database | [65536](../internal/enrich/mmdb.go#L86)      | Leave the AS unnamed; a join finds no name       |
 
 The six `_refused_total` counters track attempts rather than entities, acting as capacity saturation indicators. Application bounds safely accommodate ten times the capacity of a standard NBAR2 pack. Aggregation tables are bounded by `--aggregation.max-entries`, histograms by their bucket cap and the device budget.
 
-Memory reclamation operates asynchronously via sweeps. Idle domains and sampler declarations are garbage-collected via TTL expiry, while devices are reclaimed only upon reaching fleet budgets. Refused devices keep decoding and feeding aggregation tables but are structurally denied granular per-device tracking.
+Memory reclamation operates asynchronously via sweeps. Idle domains and sampler declarations are garbage-collected via TTL expiry, while devices are reclaimed only upon reaching fleet budgets. Refused devices keep decoding and feeding aggregation tables but are structurally denied per-device counters, the two device budgets bounding their product rather than their sum.
 
 ## Absence
 

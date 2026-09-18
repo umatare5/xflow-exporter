@@ -49,6 +49,47 @@ func TestTemplateStore_DomainsAreBoundedPerExporter(t *testing.T) {
 	}
 }
 
+// TestTemplateStore_DomainsAreBoundedAcrossTheFleet is the regression test for
+// the device dimension. The source address is a wire field like the domain id,
+// so a budget per device leaves the product of the two open.
+func TestTemplateStore_DomainsAreBoundedAcrossTheFleet(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	for i := range maxExporters {
+		_, _ = d.Decode(spoofedAddr(i), ipfixHeaderOnly(1), nil)
+	}
+	if got := len(d.Domains()); got != maxExporters {
+		t.Fatalf("domains = %d, want the fleet budget of %d", got, maxExporters)
+	}
+
+	refused := d.DomainsRefused()
+	fresh := netip.MustParseAddr("203.0.113.9")
+	_, _ = d.Decode(fresh, ipfixHeaderOnly(1), nil)
+
+	for _, domain := range d.Domains() {
+		if domain.Exporter == fresh {
+			t.Error("a device past the fleet budget holds a domain, want it refused")
+		}
+	}
+	if d.DomainsRefused() <= refused {
+		t.Error("DomainsRefused() did not move, want the refusal counted")
+	}
+
+	// A device already inside the budget keeps its own, so a full fleet costs
+	// the newcomer rather than the devices that were already reporting.
+	_, _ = d.Decode(spoofedAddr(0), ipfixHeaderOnly(2), nil)
+	held := 0
+	for _, domain := range d.Domains() {
+		if domain.Exporter == spoofedAddr(0) {
+			held++
+		}
+	}
+	if held != 2 {
+		t.Errorf("domains for a held device = %d, want its own budget untouched", held)
+	}
+}
+
 // TestTemplateStore_BudgetIsPerExporter pins that one device exhausting its
 // budget does not deny another device its own.
 func TestTemplateStore_BudgetIsPerExporter(t *testing.T) {
