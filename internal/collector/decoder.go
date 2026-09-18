@@ -35,18 +35,19 @@ type DecoderCollector struct {
 	lastFlowDesc     *prometheus.Desc
 	lastDatagramDesc *prometheus.Desc
 
-	templatesDesc        *prometheus.Desc
-	samplePoolDesc       *prometheus.Desc
-	samplesDroppedDesc   *prometheus.Desc
-	samplersRefusedDesc  *prometheus.Desc
-	seqMissedDesc        *prometheus.Desc
-	samplingDesc         *prometheus.Desc
-	samplerRateDesc      *prometheus.Desc
-	declRefusedDesc      *prometheus.Desc
-	domainsRefusedDesc   *prometheus.Desc
-	exportersRefusedDesc *prometheus.Desc
-	stringsRefusedDesc   *prometheus.Desc
-	appsRefusedDesc      *prometheus.Desc
+	templatesDesc          *prometheus.Desc
+	samplePoolDesc         *prometheus.Desc
+	samplesDroppedDesc     *prometheus.Desc
+	samplersRefusedDesc    *prometheus.Desc
+	seqMissedDesc          *prometheus.Desc
+	samplingUnresolvedDesc *prometheus.Desc
+	samplingDesc           *prometheus.Desc
+	samplerRateDesc        *prometheus.Desc
+	declRefusedDesc        *prometheus.Desc
+	domainsRefusedDesc     *prometheus.Desc
+	exportersRefusedDesc   *prometheus.Desc
+	stringsRefusedDesc     *prometheus.Desc
+	appsRefusedDesc        *prometheus.Desc
 }
 
 // NewDecoderCollector creates a collector reporting decode outcomes.
@@ -98,6 +99,11 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 			"Packets on v9 and sFlow, or records on v5, v8 and IPFIX, the sequence numbers say were lost, per domain",
 			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
+		samplingUnresolvedDesc: prometheus.NewDesc(
+			"xflow_sampling_unresolved_flows_total",
+			"Records on v9 and IPFIX no declaration settled a sampling rate for, taken uncorrected, per domain",
+			[]string{labelExporter, labelVersion, labelODID}, nil,
+		),
 		samplingDesc: prometheus.NewDesc(
 			"xflow_sampling_rate",
 			"Packet sampling rate in force for the domain, declared by its own options or inherited from the device",
@@ -147,6 +153,7 @@ func (c *DecoderCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.samplesDroppedDesc
 	ch <- c.samplersRefusedDesc
 	ch <- c.seqMissedDesc
+	ch <- c.samplingUnresolvedDesc
 	ch <- c.samplingDesc
 	ch <- c.samplerRateDesc
 	ch <- c.declRefusedDesc
@@ -247,6 +254,14 @@ func (c *DecoderCollector) collectDomains(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				c.templatesDesc, prometheus.GaugeValue,
 				float64(domain.OptionsTemplates), exporter, version, odid, templateKindOptions)
+
+			// A device that never declared reads no differently from one
+			// sampling at 1:1, so only a sampling device gets the series.
+			if domain.Sampled {
+				ch <- prometheus.MustNewConstMetric(
+					c.samplingUnresolvedDesc, prometheus.CounterValue,
+					float64(domain.SamplingUnresolved), exporter, version, odid)
+			}
 		case flow.VersionSFlowV5:
 			if domain.PoolMeasured {
 				ch <- prometheus.MustNewConstMetric(

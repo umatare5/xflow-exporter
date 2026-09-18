@@ -26,6 +26,7 @@ The following table lists the metrics exposed by each subsystem.
 | `decoder`      | `xflow_sequence_missed_total`                       | Counter | Packets or records lost        |
 | `decoder`      | `xflow_sampling_rate`                               | Gauge   | Rate in force per domain       |
 | `decoder`      | `xflow_sampler_rate`                                | Gauge   | Rate per declared sampler      |
+| `decoder`      | `xflow_sampling_unresolved_flows_total`             | Counter | Records taken uncorrected      |
 | `decoder`      | `xflow_sample_pool_packets_total`                   | Counter | Packets the samplers saw       |
 | `decoder`      | `xflow_samples_dropped_total`                       | Counter | Samples the agent lost         |
 | `decoder`      | `xflow_samplers_refused_total`                      | Counter | Samples left untracked         |
@@ -81,6 +82,10 @@ Reflects the rate in force for a domain, declared by its own options or inherite
 
 Tracks each sampler a device declared, keyed per device and protocol rather than per domain.
 
+**`xflow_sampling_unresolved_flows_total`**
+
+Counts the v9 and IPFIX records that reached the end of the correction precedence with nothing to apply. Published only for a device that has declared a sampler, because an uncorrected record and one corrected at 1:1 carry identical counts.
+
 **`xflow_*_refused_total`**
 
 Bounds state objects such as domains, applications, and exporters according to hard limits.
@@ -101,7 +106,7 @@ This section covers technical considerations and best practices for development,
 
 **Sampling Declarations**: `xflow_sampling_rate` tracks singular v9/IPFIX Options Templates, while `xflow_sampler_rate` resolves mappings for devices declaring multiple samplers, keyed per device and protocol. Auditing devices with multiple rates can be achieved via: `count by (exporter_address, version) (count_values by (exporter_address, version) ("rate", (xflow_sampling_rate or xflow_sampler_rate))) > 1`.
 
-**Correction Precedence**: A record takes the rate of the sampler it names, failing that its own domain's declaration, and failing that the one rate every declaration on the device agrees on. Where none answers, the counts are corrected by one and no `xflow_sampling_rate` series exists, which is how an undeclared rate reads and how conflicting declarations read.
+**Correction Precedence**: A record takes the rate of the sampler it names, failing that its own domain's declaration, and failing that the one rate every declaration on the device agrees on. Where none answers, the counts are corrected by one and no `xflow_sampling_rate` series exists, which is how an undeclared rate reads and how conflicting declarations read. `xflow_sampling_unresolved_flows_total` counts those records — it appears once the device has declared, so a restart leaves it absent until the device re-announces.
 
 **Series Presence**: A series keyed by wire data appears on its first event, so `xflow_decode_errors_total`, `xflow_last_flow_timestamp_seconds` and `xflow_sampling_rate` read as absent rather than zero beforehand. The `_refused_total` counters are seeded at zero instead, a first refusal reading as a rise.
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/umatare5/xflow-exporter/internal/config"
 	"github.com/umatare5/xflow-exporter/internal/decoder"
+	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
 // newTestDecoder builds a decoder with the default parser limits.
@@ -47,8 +48,8 @@ func TestDecoderCollector_Describe(t *testing.T) {
 	for range ch {
 		count++
 	}
-	if count != 16 {
-		t.Errorf("Describe() emitted %d descriptors, want 16", count)
+	if count != 17 {
+		t.Errorf("Describe() emitted %d descriptors, want 17", count)
 	}
 }
 
@@ -321,10 +322,11 @@ xflow_applications_refused_total 0
 // stubDecoderSource reports a distinct count from each refusal accessor.
 type stubDecoderSource struct {
 	domains, strings, applications, exporters, samplers, declarations uint64
+	domainList                                                        []decoder.DomainSnapshot
 }
 
 func (s stubDecoderSource) Stats() *decoder.Stats               { return &decoder.Stats{} }
-func (s stubDecoderSource) Domains() []decoder.DomainSnapshot   { return nil }
+func (s stubDecoderSource) Domains() []decoder.DomainSnapshot   { return s.domainList }
 func (s stubDecoderSource) DomainsRefused() uint64              { return s.domains }
 func (s stubDecoderSource) VendorStringsRefused() uint64        { return s.strings }
 func (s stubDecoderSource) ApplicationsRefused() uint64         { return s.applications }
@@ -570,5 +572,34 @@ xflow_sampler_rate{exporter_address="192.0.2.21",sampler="2",version="netflow_v9
 	}
 	if got := testutil.CollectAndCount(c, "xflow_sampling_rate"); got != 0 {
 		t.Errorf("xflow_sampling_rate = %d series, want none with no single rate in force", got)
+	}
+}
+
+// TestDecoderCollector_UnresolvedRidesTheSamplingDevicesAlone pins the gate on
+// the audit counter. A device that never declared is not sampling, so a zero
+// on it would copy xflow_flows_total across the fleet and read as a fault
+// where there is none.
+func TestDecoderCollector_UnresolvedRidesTheSamplingDevicesAlone(t *testing.T) {
+	t.Parallel()
+
+	c := NewDecoderCollector(stubDecoderSource{domainList: []decoder.DomainSnapshot{
+		{
+			Exporter: netip.MustParseAddr("192.0.2.1"), ODID: 1,
+			Version: flow.VersionNetFlowV9, SamplingUnresolved: 3, Sampled: true,
+		},
+		{
+			Exporter: netip.MustParseAddr("192.0.2.2"), ODID: 2,
+			Version: flow.VersionNetFlowV9, SamplingUnresolved: 7, Sampled: false,
+		},
+	}})
+
+	const want = `# HELP xflow_sampling_unresolved_flows_total Records on v9 and IPFIX no declaration settled a sampling rate for, taken uncorrected, per domain
+# TYPE xflow_sampling_unresolved_flows_total counter
+xflow_sampling_unresolved_flows_total{exporter_address="192.0.2.1",odid="1",version="netflow_v9"} 3
+`
+
+	if err := testutil.CollectAndCompare(c, strings.NewReader(want),
+		"xflow_sampling_unresolved_flows_total"); err != nil {
+		t.Errorf("CollectAndCompare() error = %v", err)
 	}
 }
