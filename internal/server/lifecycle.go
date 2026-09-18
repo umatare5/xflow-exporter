@@ -134,9 +134,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	if mapping != nil {
 		names = mapping.Names
 	}
-	// Declared as the interface: a nil *FlowCollector placed in one is not a
-	// nil interface, and the listing would then register over a nil receiver.
-	var flows EntryLister
+	var flows *collector.FlowCollector
 	if modules.Any() {
 		agg = aggregator.New(cfg.Aggregation, modules)
 		flows = collectorMgr.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation, asnNames, names)
@@ -203,7 +201,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		close(remoteDone)
 	}
 
-	serverMgr := NewLifecycleManager(collectorMgr.Registry(), cfg, chain, flows)
+	serverMgr := NewLifecycleManager(collectorMgr.Registry(), cfg, chain, listerOf(flows))
 	err = serverMgr.Run(ctx)
 
 	cancel()

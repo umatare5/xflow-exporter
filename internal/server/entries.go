@@ -21,6 +21,16 @@ type EntryLister interface {
 	Entries(name string) (collector.AggregationEntries, bool)
 }
 
+// listerOf hands the flow collector to the listing as an interface. A nil
+// collector becomes a nil interface rather than one wrapping a nil pointer,
+// which New would register a handler over.
+func listerOf(flows *collector.FlowCollector) EntryLister {
+	if flows == nil {
+		return nil
+	}
+	return flows
+}
+
 // entriesWriteTimeout bounds one listing's write. Without it a client that
 // stops reading holds the single slot below until it disconnects, and one such
 // connection is then all it takes to refuse every other listing. It is
