@@ -116,6 +116,9 @@ type samplerTable struct {
 	// declared nothing takes it rather than a rate the device never tied
 	// to it.
 	inherited atomic.Uint32
+	// sampled marks a device that has declared at least once. It never
+	// clears, so an expiry that empties the table still reads as sampling.
+	sampled atomic.Bool
 }
 
 // declare records one announcement, reporting false where the device is at
@@ -139,6 +142,7 @@ func (t *samplerTable) declare(odid, samplerID uint32, named bool, rate uint32, 
 	}
 	(*target)[key] = samplerEntry{rate: rate, lastSeen: at}
 	t.inherited.Store(soleRate(t.rates, t.plain))
+	t.sampled.Store(true)
 	return true
 }
 
@@ -236,6 +240,10 @@ type domainState struct {
 	// only moves its own forward and a new one is stamped now, so a sweep
 	// before this ages out frees nothing.
 	samplersOldest int64
+
+	// samplingUnresolved counts the records that reached the end of the
+	// correction precedence with nothing to apply.
+	samplingUnresolved atomic.Uint64
 
 	// samplePool and samplesDropped accumulate the differences between one
 	// sampler's readings. The agent restarts its own counters on its terms,
@@ -696,6 +704,10 @@ type DomainSnapshot struct {
 	Templates        int
 	OptionsTemplates int
 	SequenceMissed   uint64
+	// SamplingUnresolved counts the records taken uncorrected, and Sampled
+	// carries whether the device ever declared, which a zero cannot.
+	SamplingUnresolved uint64
+	Sampled            bool
 	// SamplingRate is the rate in force for the domain, declared by its own
 	// options or inherited from the device's single declaration. It is zero
 	// where neither settles on one.
@@ -749,17 +761,19 @@ func (s *templateStore) snapshot() []DomainSnapshot {
 	for key, d := range s.domains {
 		data, options := d.counts(now, s.ttl)
 		snapshots = append(snapshots, DomainSnapshot{
-			Exporter:         key.exporter,
-			ODID:             key.odid,
-			Version:          key.proto,
-			Templates:        data,
-			OptionsTemplates: options,
-			SequenceMissed:   d.sequenceMissed.Load(),
-			SamplingRate:     d.rateInForce(),
-			SamplePool:       d.samplePool.Load(),
-			SamplesDropped:   d.samplesDropped.Load(),
-			PoolMeasured:     d.poolMeasured.Load(),
-			DropsMeasured:    d.dropsMeasured.Load(),
+			Exporter:           key.exporter,
+			ODID:               key.odid,
+			Version:            key.proto,
+			Templates:          data,
+			OptionsTemplates:   options,
+			SequenceMissed:     d.sequenceMissed.Load(),
+			SamplingUnresolved: d.samplingUnresolved.Load(),
+			Sampled:            d.declared.sampled.Load(),
+			SamplingRate:       d.rateInForce(),
+			SamplePool:         d.samplePool.Load(),
+			SamplesDropped:     d.samplesDropped.Load(),
+			PoolMeasured:       d.poolMeasured.Load(),
+			DropsMeasured:      d.dropsMeasured.Load(),
 		})
 	}
 	return snapshots

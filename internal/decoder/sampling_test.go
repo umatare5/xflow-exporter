@@ -331,3 +331,94 @@ func TestSamplingRate_ClearsARateTheDeviceStoppedDeclaring(t *testing.T) {
 		t.Errorf("xflow_sampling_rate = %d, want none", got)
 	}
 }
+
+// domainSampling reads what the audit series are built from.
+func domainSampling(d *Decoder, odid uint32) (uint64, bool) {
+	for _, snapshot := range d.Domains() {
+		if snapshot.ODID == odid {
+			return snapshot.SamplingUnresolved, snapshot.Sampled
+		}
+	}
+	return 0, false
+}
+
+// TestSamplingUnresolved_CountsWhatNoDeclarationSettles pins the record-level
+// fact no other series carries. A record taken uncorrected and one corrected
+// at 1:1 publish the same counts, and the declarations behind them read alike.
+func TestSamplingUnresolved_CountsWhatNoDeclarationSettles(t *testing.T) {
+	t.Parallel()
+
+	named := true
+
+	tests := []struct {
+		name       string
+		declare    []byte
+		wantCount  uint64
+		wantSample bool
+	}{
+		{
+			// Two rates leave the device with nothing it tied to the record,
+			// so the counts pass through uncorrected.
+			name:       "declarations disagree",
+			declare:    samplingDeclaration(1, named, [2]uint32{1, 32}, [2]uint32{2, 1024}),
+			wantCount:  1,
+			wantSample: true,
+		},
+		{
+			name:       "one declaration settles it",
+			declare:    samplingDeclaration(1, named, [2]uint32{1, 32}),
+			wantCount:  0,
+			wantSample: true,
+		},
+		{
+			// A device that never declared is not sampling, and the series
+			// would otherwise copy xflow_flows_total for every such device.
+			name:       "never declared",
+			wantCount:  1,
+			wantSample: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			if tc.declare != nil {
+				decodeSampling(t, d, tc.declare)
+			}
+			decodeSampling(t, d, v9Packet(10, samplingODID, samplingTemplate(false)))
+			decodeSampling(t, d, v9Packet(11, samplingODID,
+				flowSet(samplingTemplateID, samplingRecord(0, false))))
+
+			count, sampled := domainSampling(d, samplingODID)
+			if count != tc.wantCount {
+				t.Errorf("xflow_sampling_unresolved_flows_total = %d, want %d", count, tc.wantCount)
+			}
+			if sampled != tc.wantSample {
+				t.Errorf("sampled = %t, want %t", sampled, tc.wantSample)
+			}
+		})
+	}
+}
+
+// TestSamplerTable_StaysSampledAfterItsDeclarationsExpire pins the flag
+// against the device that stops re-announcing. The rate goes, and the
+// records it stops correcting are the ones worth counting.
+func TestSamplerTable_StaysSampledAfterItsDeclarationsExpire(t *testing.T) {
+	t.Parallel()
+
+	table := &samplerTable{}
+	if !table.declare(0, 0, false, 32, 100) {
+		t.Fatal("declare() = false, want the first declaration held")
+	}
+
+	table.expire(200)
+
+	if got := table.inherited.Load(); got != 0 {
+		t.Errorf("inherited = %d after expiry, want none", got)
+	}
+	if !table.sampled.Load() {
+		t.Error("sampled = false after expiry, want the device still known to sample")
+	}
+}

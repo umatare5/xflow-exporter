@@ -114,6 +114,9 @@ func finishRecord(r *flow.Record, state *fieldState, bootTime time.Time, domain 
 
 	if r.SamplingRate == 0 {
 		r.SamplingRate = rateInForce(state, domain)
+		if r.SamplingRate == 0 {
+			domain.samplingUnresolved.Add(1)
+		}
 	}
 }
 
