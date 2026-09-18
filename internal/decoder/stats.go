@@ -149,6 +149,14 @@ func (s *Stats) exporter(addr netip.Addr, at time.Time) *ExporterStats {
 	return es
 }
 
+// admitted reports whether the device holds counters.
+func (s *Stats) admitted(addr netip.Addr) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.exporters[addr]
+	return ok
+}
+
 // refusedCount reports how many datagrams the budget left unattributed.
 func (s *Stats) refusedCount() uint64 {
 	return s.refused.Load()
@@ -158,21 +166,21 @@ func (s *Stats) refusedCount() uint64 {
 // budget is reached. Below it nothing is ever evicted: a device that has gone
 // quiet is exactly what the freshness series exists to show, and a sweep that
 // removed it would resolve the alarm by deleting the evidence.
-func (s *Stats) sweepIdle(cutoff int64) int {
+func (s *Stats) sweepIdle(cutoff int64) []netip.Addr {
 	if s.live.Load() < maxExporters {
-		return 0
+		return nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	evicted := 0
+	var evicted []netip.Addr
 	for addr, es := range s.exporters {
 		if es.lastSeenUnixNano.Load() >= cutoff {
 			continue
 		}
 		delete(s.exporters, addr)
-		evicted++
+		evicted = append(evicted, addr)
 	}
 	s.live.Store(int64(len(s.exporters)))
 	return evicted

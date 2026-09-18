@@ -5,6 +5,7 @@
 package collector
 
 import (
+	"net/netip"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -48,6 +49,13 @@ func NewDistributions() *Distributions {
 			NativeHistogramMinResetDuration: minResetSpacing,
 		}, exporterLabels),
 	}
+}
+
+// Forget drops the device's histograms, which a vector keeps until deleted.
+func (d *Distributions) Forget(exporter netip.Addr) {
+	label := exporter.String()
+	d.flowBytes.DeleteLabelValues(label)
+	d.flowDuration.DeleteLabelValues(label)
 }
 
 // Register registers both histograms with the registry.

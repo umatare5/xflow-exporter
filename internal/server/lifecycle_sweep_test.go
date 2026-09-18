@@ -7,8 +7,12 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/umatare5/xflow-exporter/internal/collector"
 	"github.com/umatare5/xflow-exporter/internal/config"
 	"github.com/umatare5/xflow-exporter/internal/decoder"
+	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
 // spoofedAddr is a distinct address per index, which is what a sender writes
@@ -57,7 +61,7 @@ func TestSweepDomains_ReclaimsTheExporterBudget(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			sweepDomains(ctx, dec, ttl)
+			sweepDomains(ctx, dec, nil, ttl)
 		}()
 
 		// Past one tick of the floored interval, with the burst idle since
@@ -81,6 +85,64 @@ func TestSweepDomains_ReclaimsTheExporterBudget(t *testing.T) {
 		}
 		if got := dec.ExportersRefused(); got != refused {
 			t.Errorf("ExportersRefused() = %d, want it held at %d: the slots were reclaimed", got, refused)
+		}
+	})
+}
+
+// TestSweepDomains_ReleasesTheSeriesWithTheSlot pins the other half of the
+// reclaim above. A histogram child outlives the device that made it, so the
+// sweep drops it with the slot.
+func TestSweepDomains_ReleasesTheSeriesWithTheSlot(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		const ttl = time.Millisecond
+		dec := decoder.New(config.Parser{
+			MaxFieldsPerTemplate: config.DefaultParserMaxFieldsPerTemplate,
+			TemplateTTL:          ttl,
+		})
+
+		burst := []byte{0xff, 0xff}
+		const maxFill = 1 << 20
+		for i := range maxFill {
+			_, _ = dec.Decode(spoofedAddr(i), burst, nil)
+			if dec.ExportersRefused() > 0 {
+				break
+			}
+		}
+		if dec.ExportersRefused() == 0 {
+			t.Fatalf("%d spoofed addresses did not reach the exporter budget", maxFill)
+		}
+
+		reg := prometheus.NewRegistry()
+		dist := collector.NewDistributions()
+		dist.Register(reg)
+		dist.Observe([]flow.Record{{
+			Exporter:      spoofedAddr(0),
+			Version:       flow.VersionNetFlowV9,
+			Bytes:         1024,
+			Packets:       1,
+			BytesReported: true,
+			Flows:         1,
+		}})
+		if got := seriesCount(t, reg); got != 1 {
+			t.Fatalf("series before the sweep = %d, want the observation to have made one", got)
+		}
+
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			sweepDomains(ctx, dec, dist, ttl)
+		}()
+
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		cancel()
+		<-done
+
+		if got := seriesCount(t, reg); got != 0 {
+			t.Errorf("series after the sweep = %d, want the swept device to hold none", got)
 		}
 	})
 }

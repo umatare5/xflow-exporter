@@ -165,7 +165,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	domainSweepDone := make(chan struct{})
 	go func() {
 		defer close(domainSweepDone)
-		sweepDomains(ctx, dec, cfg.Parser.TemplateTTL)
+		sweepDomains(ctx, dec, dist, cfg.Parser.TemplateTTL)
 	}()
 
 	// The dispatcher hands the queue to the decode workers, one exporter per
@@ -285,7 +285,9 @@ func buildEnrichmentChain(
 // sweepDomains drops idle observation domains until ctx ends. The interval is
 // a quarter of the template TTL, so an idle domain outlives its slot by at
 // most that much.
-func sweepDomains(ctx context.Context, dec *decoder.Decoder, ttl time.Duration) {
+func sweepDomains(
+	ctx context.Context, dec *decoder.Decoder, dist *collector.Distributions, ttl time.Duration,
+) {
 	const sweepDivisor = 4
 
 	interval := ttl / sweepDivisor
@@ -304,8 +306,13 @@ func sweepDomains(ctx context.Context, dec *decoder.Decoder, ttl time.Duration) 
 			if evicted := dec.SweepDomains(); evicted > 0 {
 				slog.Debug("Swept idle observation domains", "evicted", evicted)
 			}
-			if evicted := dec.SweepExporters(); evicted > 0 {
-				slog.Debug("Swept idle exporters", "evicted", evicted)
+			if evicted := dec.SweepExporters(); len(evicted) > 0 {
+				for _, addr := range evicted {
+					if dist != nil {
+						dist.Forget(addr)
+					}
+				}
+				slog.Debug("Swept idle exporters", "evicted", len(evicted))
 			}
 		}
 	}
@@ -414,7 +421,9 @@ func decodeLoop(
 		if agg != nil {
 			agg.Ingest(records)
 		}
-		if dist != nil {
+		// The vector bounds no series, so only a device the budget holds is
+		// observed.
+		if dist != nil && len(records) > 0 && dec.Admits(pkt.Src.Addr()) {
 			dist.Observe(records)
 		}
 	}
