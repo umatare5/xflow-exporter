@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"fmt"
 	"net/netip"
 	"slices"
 	"strings"
@@ -76,22 +77,36 @@ func TestFlowCollector_EntriesLeaveExportersUncut(t *testing.T) {
 	cfg := aggConfig()
 	cfg.TopK = 1
 
+	const domains = 5
+
 	agg := aggregator.New(cfg, aggregator.Modules{Exporters: true})
-	for _, addr := range []string{"192.0.2.1", "192.0.2.2", "192.0.2.3"} {
-		record := flowRecord("10.0.0.1", "10.0.0.9", 1000)
-		record.Exporter = netip.MustParseAddr(addr)
+	for i := range domains {
+		record := flowRecord("10.0.0.1", "10.0.0.9", uint64(i+1)*100)
+		record.Exporter = netip.MustParseAddr(fmt.Sprintf("192.0.2.%d", i+1))
 		agg.Ingest([]flow.Record{record})
 	}
 
 	c := NewFlowCollector(agg, config.Collectors{Exporters: true}, cfg, nil, nil)
 
-	table, ok := c.Entries("exporters")
-	if !ok {
-		t.Fatal(`Entries("exporters") reported the table absent, want it read`)
-	}
-	if table.Published != 3 || table.Withheld != 0 {
-		t.Errorf("published/withheld = %d/%d, want 3/0 under top-k 1",
-			table.Published, table.Withheld)
+	// The snapshot arrives in map order, so the ranks are read more than once:
+	// an unsorted listing would have to land on the sorted permutation every
+	// time to pass.
+	wantBytes := []uint64{500, 400, 300, 200, 100}
+	for read := range domains {
+		table, ok := c.Entries("exporters")
+		if !ok {
+			t.Fatal(`Entries("exporters") reported the table absent, want it read`)
+		}
+		if table.Published != domains || table.Withheld != 0 {
+			t.Fatalf("published/withheld = %d/%d, want %d/0 under top-k 1",
+				table.Published, table.Withheld, domains)
+		}
+		for i, row := range table.Rows {
+			if row.Rank != i+1 || row.Bytes != wantBytes[i] {
+				t.Fatalf("read %d rows[%d] = rank %d, %d bytes; want rank %d, %d bytes",
+					read+1, i, row.Rank, row.Bytes, i+1, wantBytes[i])
+			}
+		}
 	}
 }
 

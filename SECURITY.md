@@ -8,7 +8,7 @@ This page specifies the controls particular to a report redacts, where the ingre
 
 Redact these before reporting, in addition to the credentials the shared policy names.
 
-- **Infrastructure** — A monitored address, from a datagram, a capture or a `/metrics` sample
+- **Infrastructure** — A monitored address, from a datagram, a capture, `/metrics` or `/entries`
 - **Application** — The exporting device's address, and any name a mapping file supplied
 - **Credentials** — A remote write credential, from a flag, an environment variable or a header
 

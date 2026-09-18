@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/umatare5/xflow-exporter/internal/collector"
 )
@@ -18,6 +20,12 @@ type EntryLister interface {
 	EntryScope() (topK int, minBytes uint64)
 	Entries(name string) (collector.AggregationEntries, bool)
 }
+
+// entriesWriteTimeout bounds one listing's write. Without it a client that
+// stops reading holds the single slot below until it disconnects, and one such
+// connection is then all it takes to refuse every other listing. It is
+// generous for the largest body the entry bound can produce.
+const entriesWriteTimeout = 60 * time.Second
 
 // entriesHandler lists what the aggregation tables hold, the entries the
 // scrape-time cuts withhold included.
@@ -54,6 +62,10 @@ func entriesHandler(lister EntryLister) http.HandlerFunc {
 			return
 		}
 
+		// net/http clears the deadline once the handler returns, and a
+		// recorder supports no deadline at all, so the error is dropped.
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(entriesWriteTimeout))
+
 		w.Header().Set("Content-Type", "application/json")
 		writeEntries(w, lister, names)
 	}
@@ -62,8 +74,17 @@ func entriesHandler(lister EntryLister) http.HandlerFunc {
 // askedFor resolves the aggregation parameter against the known names. An
 // absent parameter asks for all of them; anything else has to name one, an
 // empty or repeated value included.
+//
+// The query is parsed here rather than read through Query, which drops the
+// pairs it cannot parse: a misencoded parameter would then arrive as an absent
+// one and answer with every table.
 func askedFor(known []string, r *http.Request) ([]string, bool) {
-	asked := r.URL.Query()["aggregation"]
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		return nil, false
+	}
+
+	asked := query["aggregation"]
 	switch {
 	case len(asked) == 0:
 		return known, true

@@ -39,6 +39,8 @@ The HTTP server binds a unified listener for all internal routes without authent
 
 The `/metrics` endpoint enforces a hard concurrency limit of 10 to bound memory consumption during in-flight serialization. Slower scrapes are forcefully terminated upon reaching a 30-second header timeout or a 5-second graceful shutdown drain. This strictly bounds process lingering and exhaustion attacks.
 
+The `/entries` endpoint admits one listing at a time and bounds its write with a 60-second deadline, so a client that stops reading releases the slot on that deadline rather than on disconnect.
+
 ## Counter Semantics
 
 The aggregation model utilizes ephemeral counters that accumulate from entry creation and reset upon eviction. Prometheus staleness markers demarcate these lifecycles, ensuring `rate()` calculations gracefully handle metric reincarnation. Flow counts reflect raw device exports and are deliberately decoupled from sampling correction logic.

@@ -165,7 +165,7 @@ The exporter serves these endpoints. See [Endpoints](docs/architecture.md#endpoi
 | `/metrics`  | Metrics endpoint – set via `--web.telemetry-path`                              |
 | `/healthz`  | Liveness endpoint – returns static 200 and deliberately ignores flow data      |
 | `/-/reload` | Reload endpoint – re-reads sources on POST/PUT, needs `--web.enable-lifecycle` |
-| `/entries`  | Entry listing – the withheld tail, needs `--web.enable-aggregation-entries`    |
+| `/entries`  | Entry listing – ranks every entry, needs `--web.enable-aggregation-entries`    |
 
 ## Metrics
 

@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/umatare5/xflow-exporter/internal/collector"
 	"github.com/umatare5/xflow-exporter/internal/config"
@@ -19,7 +20,7 @@ import (
 type stubLister struct {
 	entered chan struct{}
 	release chan struct{}
-	once    sync.Once
+	holding atomic.Bool
 }
 
 func (s *stubLister) Aggregations() []string {
@@ -31,8 +32,11 @@ func (s *stubLister) EntryScope() (topK int, minBytes uint64) {
 }
 
 func (s *stubLister) Entries(name string) (collector.AggregationEntries, bool) {
-	if s.release != nil {
-		s.once.Do(func() { close(s.entered) })
+	// Only the first listing waits: a second one reaching this point means the
+	// in-flight bound let it through, which has to fail as an assertion rather
+	// than as a deadlock.
+	if s.release != nil && s.holding.CompareAndSwap(false, true) {
+		close(s.entered)
 		<-s.release
 	}
 	if name == "services" {
@@ -107,6 +111,10 @@ func TestServer_EntriesRefuseWhatTheyCannotName(t *testing.T) {
 		config.EntriesPath + "?aggregation=tcp_flag",
 		config.EntriesPath + "?aggregation=",
 		config.EntriesPath + "?aggregation=hosts&aggregation=exporters",
+		// Query drops the pairs it cannot parse, so these would otherwise
+		// arrive as an absent parameter and list every table.
+		config.EntriesPath + "?aggregation=%zz",
+		config.EntriesPath + "?aggregation=hosts;aggregation=exporters",
 	} {
 		w := get(t, srv, target)
 		if w.Code != http.StatusBadRequest {
@@ -164,6 +172,37 @@ func TestServer_EntriesServeJSON(t *testing.T) {
 	}
 	if _, listed := named.Aggregations["hosts"]; !listed || len(named.Aggregations) != 1 {
 		t.Errorf("aggregations = %v, want hosts alone", named.Aggregations)
+	}
+}
+
+// deadlineRecorder is what ResponseController finds when the handler asks for
+// a write deadline.
+type deadlineRecorder struct {
+	*httptest.ResponseRecorder
+	deadline time.Time
+}
+
+func (d *deadlineRecorder) SetWriteDeadline(t time.Time) error {
+	d.deadline = t
+	return nil
+}
+
+// TestServer_EntriesBoundTheirWrite pins the write deadline. The in-flight
+// bound is one, so a client that stops reading would otherwise hold the only
+// slot until it disconnects and no other listing would be served.
+func TestServer_EntriesBoundTheirWrite(t *testing.T) {
+	t.Parallel()
+
+	srv := entriesServer(t, &stubLister{})
+
+	w := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+	srv.Handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, config.EntriesPath, http.NoBody))
+
+	if w.deadline.IsZero() {
+		t.Fatal("the listing set no write deadline, want one bounding the response")
+	}
+	if !w.deadline.After(time.Now()) {
+		t.Errorf("write deadline = %v, want it ahead of now", w.deadline)
 	}
 }
 
