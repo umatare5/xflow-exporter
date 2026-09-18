@@ -199,7 +199,7 @@ The following table summarizes the health metrics of the exporter itself. See [`
 | `xflow_last_flow_timestamp_seconds`    | Gauge   | Unix time of the last record           |
 | `xflow_receiver_dropped_packets_total` | Counter | Pre-decode drops per listener          |
 | `xflow_sampling_rate`                  | Gauge   | Rate in force per domain               |
-| `xflow_aggregation_entries`            | Gauge   | Entries held per collector             |
+| `xflow_aggregation_entries`            | Gauge   | Entries held per aggregation table     |
 
 ## Examples
 
