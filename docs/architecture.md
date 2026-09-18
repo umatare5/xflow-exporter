@@ -30,9 +30,9 @@ Every route binds to the address configured via `--web.listen-address` and `--we
 | Path        | Methods   | Status             | Behaviour                                  |
 | :---------- | :-------- | :----------------- | :----------------------------------------- |
 | `/metrics`  | Any       | 200, 503           | 503 past ten concurrent gathers            |
+| `/entries`  | GET       | 200, 400, 405, 503 | 400 names the values, 503 past one listing |
 | `/healthz`  | Any       | 200                | Static `OK`, reading no state              |
 | `/-/reload` | POST, PUT | 200, 405, 500      | 405 sets `Allow`, 500 names the error      |
-| `/entries`  | GET       | 200, 400, 405, 503 | 400 names the values, 503 past one listing |
 | `/`         | Any       | 200                | Catch-all landing page, never 404          |
 
 The HTTP server binds a unified listener for all internal routes without authentication layers. Unregistered paths act as a catch-all, returning HTTP 200 to prevent scanner enumeration. Disabling an endpoint flag leaves that route unregistered, securely falling back to this default behavior.
