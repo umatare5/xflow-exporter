@@ -55,7 +55,10 @@ func TestTemplateStore_DomainsAreBoundedPerExporter(t *testing.T) {
 func TestTemplateStore_DomainsAreBoundedAcrossTheFleet(t *testing.T) {
 	t.Parallel()
 
-	d := newTestDecoder()
+	d := New(config.Parser{MaxFieldsPerTemplate: 128, TemplateTTL: time.Minute})
+	now := time.Unix(1_756_600_000, 0)
+	d.templates.now = func() time.Time { return now }
+
 	for i := range maxExporters {
 		_, _ = d.Decode(spoofedAddr(i), ipfixHeaderOnly(1), nil)
 	}
@@ -87,6 +90,22 @@ func TestTemplateStore_DomainsAreBoundedAcrossTheFleet(t *testing.T) {
 	}
 	if held != 2 {
 		t.Errorf("domains for a held device = %d, want its own budget untouched", held)
+	}
+
+	// The sweep returns the slot as well as the domain, so a flood costs a
+	// template TTL rather than the process.
+	now = now.Add(2 * time.Minute)
+	d.SweepDomains()
+	_, _ = d.Decode(fresh, ipfixHeaderOnly(1), nil)
+
+	readmitted := false
+	for _, domain := range d.Domains() {
+		if domain.Exporter == fresh {
+			readmitted = true
+		}
+	}
+	if !readmitted {
+		t.Error("a device seen after the sweep holds no domain, want the fleet slot returned")
 	}
 }
 
