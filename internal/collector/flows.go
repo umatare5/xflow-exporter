@@ -44,6 +44,9 @@ type familyDescs struct {
 	bytes   *prometheus.Desc
 	packets *prometheus.Desc
 	flows   *prometheus.Desc
+	// labels names what emit passes positionally, which the entry listing
+	// reports beside each row's values.
+	labels []string
 }
 
 // newFamilyDescs builds the three descriptors of one family.
@@ -55,6 +58,7 @@ func newFamilyDescs(prefix, subject string, labels []string) familyDescs {
 			"Sampling-corrected packets per "+subject+", other carries the entry-bound fold", labels, nil),
 		flows: prometheus.NewDesc(prefix+"_flows_total",
 			"Flows the records reported per "+subject+", other carries the entry-bound fold", labels, nil),
+		labels: labels,
 	}
 }
 
@@ -423,8 +427,7 @@ func (c *FlowCollector) collectNames(
 func (c *FlowCollector) collectExporters(ch chan<- prometheus.Metric) {
 	entries, overflow := c.src.Exporters()
 	for _, e := range entries {
-		c.exporters.emit(ch, e.Totals, e.Key.Exporter.String(), e.Key.Version.String(),
-			strconv.FormatUint(uint64(e.Key.ODID), 10))
+		c.exporters.emit(ch, e.Totals, exporterLabels(e.Key)...)
 	}
 	c.exporters.emit(ch, overflow, otherLabel, otherLabel, otherLabel)
 }
@@ -455,17 +458,14 @@ func collectFamily[K comparable](
 	return cut
 }
 
-// published sorts a table's entries and returns the ones that keep their own
-// labels. Both tests fail monotonically down the sorted slice, so the cut is a
-// prefix of it and anything reading the published set can take it whole.
-func published[K comparable](
-	c *FlowCollector, entries []aggregator.EntrySnapshot[K],
-) []aggregator.EntrySnapshot[K] {
-	// The largest entries by bytes keep their own series, the older entry
-	// winning a tie. The order has to be total: a comparison that returns
-	// zero leaves the sort free to place either first, and the snapshot
-	// arrives in map order, so the cut would admit a different subset of a
-	// tie group on every scrape and publish churn nothing ingested.
+// sortEntries orders a table largest by bytes first, the older entry winning
+// a tie.
+//
+// The order has to be total: a comparison that returns zero leaves the sort
+// free to place either first, and the snapshot arrives in map order, so the
+// cut would admit a different subset of a tie group on every scrape and
+// publish churn nothing ingested.
+func sortEntries[K comparable](entries []aggregator.EntrySnapshot[K]) {
 	slices.SortFunc(entries, func(a, b aggregator.EntrySnapshot[K]) int {
 		switch {
 		case a.Bytes > b.Bytes:
@@ -480,6 +480,15 @@ func published[K comparable](
 			return 0
 		}
 	})
+}
+
+// published sorts a table's entries and returns the ones that keep their own
+// labels. Both tests fail monotonically down the sorted slice, so the cut is a
+// prefix of it and anything reading the published set can take it whole.
+func published[K comparable](
+	c *FlowCollector, entries []aggregator.EntrySnapshot[K],
+) []aggregator.EntrySnapshot[K] {
+	sortEntries(entries)
 
 	for i, e := range entries {
 		if i >= c.topK || e.Bytes < c.minBytes {
@@ -513,6 +522,13 @@ func (c *FlowCollector) collectHealth(ch chan<- prometheus.Metric) {
 }
 
 // Label builders per family.
+
+func exporterLabels(k aggregator.ExporterKey) []string {
+	return []string{
+		k.Exporter.String(), k.Version.String(),
+		strconv.FormatUint(uint64(k.ODID), 10),
+	}
+}
 
 func hostLabels(k aggregator.HostKey) []string {
 	return []string{

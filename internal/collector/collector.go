@@ -63,13 +63,16 @@ func (c *Collector) RegisterDecoderCollector(src DecoderSource) {
 	slog.Debug("Registered decoder collector")
 }
 
-// RegisterFlowCollector registers the aggregation table collector.
+// RegisterFlowCollector registers the aggregation table collector and returns
+// it for the entry listing to read.
 func (c *Collector) RegisterFlowCollector(
 	src FlowSource, modules config.Collectors, agg config.Aggregation,
 	asnNames func(uint32) (string, bool), names func() *enrich.NameSet,
-) {
-	c.registry.MustRegister(NewSafeCollector(NewFlowCollector(src, modules, agg, asnNames, names), "Flow"))
+) *FlowCollector {
+	flows := NewFlowCollector(src, modules, agg, asnNames, names)
+	c.registry.MustRegister(NewSafeCollector(flows, "Flow"))
 	slog.Debug("Registered flow collector")
+	return flows
 }
 
 // RegisterDistributions registers the flow distribution histograms and

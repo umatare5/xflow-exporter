@@ -13,15 +13,16 @@ VERSION:
    0.11.0
 
 GLOBAL OPTIONS:
-   --dry-run                    Validate configuration without starting the server
-   --help, -h                   show help
-   --log.format string          Log format (json, text) (default: "json")
-   --log.level string           Log level (debug, info, warn, error) (default: "info")
-   --version, -v                print the version
-   --web.enable-lifecycle       Enable /-/reload, which re-reads the enrichment sources
-   --web.listen-address string  Address to bind the HTTP server to (default: "0.0.0.0")
-   --web.listen-port int        Port number to bind the HTTP server to (default: 10053)
-   --web.telemetry-path string  Path for the metrics endpoint (default: "/metrics")
+   --dry-run                         Validate configuration without starting the server
+   --help, -h                        show help
+   --log.format string               Log format (json, text) (default: "json")
+   --log.level string                Log level (debug, info, warn, error) (default: "info")
+   --version, -v                     print the version
+   --web.enable-aggregation-entries  Enable /entries, which lists every entry the aggregation tables hold
+   --web.enable-lifecycle            Enable /-/reload, which re-reads the enrichment sources
+   --web.listen-address string       Address to bind the HTTP server to (default: "0.0.0.0")
+   --web.listen-port int             Port number to bind the HTTP server to (default: 10053)
+   --web.telemetry-path string       Path for the metrics endpoint (default: "/metrics")
 
    # Collector Options
 

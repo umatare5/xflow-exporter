@@ -39,8 +39,11 @@ type LifecycleManager struct {
 
 // NewLifecycleManager creates a new server lifecycle manager. reloader is
 // exposed on the management endpoint only when the lifecycle flag is set,
-// and it is what a SIGHUP drives as well.
-func NewLifecycleManager(registry *prometheus.Registry, cfg *config.Config, reloader Reloader) *LifecycleManager {
+// and it is what a SIGHUP drives as well. entries is exposed on the same
+// terms, under the flag of its own.
+func NewLifecycleManager(
+	registry *prometheus.Registry, cfg *config.Config, reloader Reloader, entries EntryLister,
+) *LifecycleManager {
 	addr := net.JoinHostPort(cfg.Web.ListenAddress, strconv.Itoa(cfg.Web.ListenPort))
 
 	var exposed Reloader
@@ -48,8 +51,13 @@ func NewLifecycleManager(registry *prometheus.Registry, cfg *config.Config, relo
 		exposed = reloader
 	}
 
+	var listed EntryLister
+	if cfg.Web.EnableAggregationEntries {
+		listed = entries
+	}
+
 	return &LifecycleManager{
-		server:   New(registry, addr, cfg.Web.TelemetryPath, exposed),
+		server:   New(registry, addr, cfg.Web.TelemetryPath, exposed, listed),
 		cfg:      cfg,
 		reloader: reloader,
 	}
@@ -126,9 +134,12 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	if mapping != nil {
 		names = mapping.Names
 	}
+	// Declared as the interface: a nil *FlowCollector placed in one is not a
+	// nil interface, and the listing would then register over a nil receiver.
+	var flows EntryLister
 	if modules.Any() {
 		agg = aggregator.New(cfg.Aggregation, modules)
-		collectorMgr.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation, asnNames, names)
+		flows = collectorMgr.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation, asnNames, names)
 	}
 
 	// The receiver stops when this context ends, which Run ties to the
@@ -192,7 +203,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 		close(remoteDone)
 	}
 
-	serverMgr := NewLifecycleManager(collectorMgr.Registry(), cfg, chain)
+	serverMgr := NewLifecycleManager(collectorMgr.Registry(), cfg, chain, flows)
 	err = serverMgr.Run(ctx)
 
 	cancel()

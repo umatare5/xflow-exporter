@@ -332,6 +332,19 @@ func TestConfig_Validate(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			name: "telemetry path taking the entries path with the flag",
+			mutate: func(c *Config) {
+				c.Web.TelemetryPath = EntriesPath
+				c.Web.EnableAggregationEntries = true
+			},
+			wantErr: "--web.enable-aggregation-entries",
+		},
+		{
+			name:    "telemetry path taking the entries path without the flag",
+			mutate:  func(c *Config) { c.Web.TelemetryPath = EntriesPath },
+			wantErr: "",
+		},
+		{
 			name:    "no receiver address",
 			mutate:  func(c *Config) { c.Receiver.Addresses = nil },
 			wantErr: "at least one receiver address",

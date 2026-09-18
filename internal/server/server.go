@@ -21,16 +21,27 @@ type Reloader interface {
 // New creates a new HTTP server with metrics and health endpoints. Config.Validate
 // rejects every telemetryPath that http.ServeMux would panic on except two: the root,
 // which is handled below, and config.ReloadPath, which conflicts only when a non-nil
-// reloader registers it.
+// reloader registers it. config.EntriesPath is rejected on the same condition, which
+// Validate reads from the flag.
 //
 // reloader is wired to the management endpoint when it is non-nil, which is
 // what --web.enable-lifecycle decides. The endpoint is a write, so it stays
 // unexposed by default rather than answering anyone who can reach the port.
-func New(reg *prometheus.Registry, addr, telemetryPath string, reloader Reloader) *http.Server {
+//
+// entries is wired on the same terms, which --web.enable-aggregation-entries
+// decides. It reads far more than a scrape does, so it stays unexposed too.
+func New(
+	reg *prometheus.Registry, addr, telemetryPath string,
+	reloader Reloader, entries EntryLister,
+) *http.Server {
 	mux := http.NewServeMux()
 
 	if reloader != nil {
 		mux.HandleFunc(config.ReloadPath, reloadHandler(reloader))
+	}
+
+	if entries != nil {
+		mux.HandleFunc(config.EntriesPath, entriesHandler(entries))
 	}
 
 	mux.Handle(telemetryPath, promhttp.HandlerFor(reg, promhttp.HandlerOpts{

@@ -28,7 +28,7 @@ func TestServer_ServesMetricsAtTheConfiguredPath(t *testing.T) {
 
 	const telemetryPath = "/wnc-metrics"
 
-	srv := server.New(probeRegistry(t), ":8080", telemetryPath, nil)
+	srv := server.New(probeRegistry(t), ":8080", telemetryPath, nil, nil)
 
 	w := httptest.NewRecorder()
 	srv.Handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, telemetryPath, http.NoBody))
@@ -54,7 +54,7 @@ func TestServer_ServesMetricsAtTheConfiguredPath(t *testing.T) {
 func TestServer_ServesMetricsAtTheRoot(t *testing.T) {
 	t.Parallel()
 
-	srv := server.New(probeRegistry(t), ":8080", "/", nil)
+	srv := server.New(probeRegistry(t), ":8080", "/", nil, nil)
 
 	w := httptest.NewRecorder()
 	srv.Handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", http.NoBody))
@@ -85,7 +85,7 @@ func TestNew(t *testing.T) {
 			t.Parallel()
 
 			reg := prometheus.NewRegistry()
-			srv := server.New(reg, tt.addr, config.DefaultTelemetryPath, nil)
+			srv := server.New(reg, tt.addr, config.DefaultTelemetryPath, nil, nil)
 
 			if srv == nil {
 				t.Fatal("New() returned nil server")
@@ -111,7 +111,7 @@ func TestServer_MetricsEndpoint(t *testing.T) {
 	t.Parallel()
 
 	reg := prometheus.NewRegistry()
-	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil)
+	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics", http.NoBody)
 	w := httptest.NewRecorder()
@@ -132,7 +132,7 @@ func TestServer_HealthzEndpoint(t *testing.T) {
 	t.Parallel()
 
 	reg := prometheus.NewRegistry()
-	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil)
+	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
 	w := httptest.NewRecorder()
@@ -158,7 +158,7 @@ func TestServer_RootEndpoint(t *testing.T) {
 	t.Parallel()
 
 	reg := prometheus.NewRegistry()
-	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil)
+	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	w := httptest.NewRecorder()
@@ -193,7 +193,7 @@ func TestServer_NotFoundEndpoint(t *testing.T) {
 	t.Parallel()
 
 	reg := prometheus.NewRegistry()
-	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil)
+	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/nonexistent", http.NoBody)
 	w := httptest.NewRecorder()
@@ -214,7 +214,7 @@ func TestServer_HTTPMethods(t *testing.T) {
 	t.Parallel()
 
 	reg := prometheus.NewRegistry()
-	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil)
+	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil, nil)
 
 	methods := []string{http.MethodPost, http.MethodPut, http.MethodDelete}
 
@@ -245,7 +245,7 @@ func TestServer_MetricsHonoursTheNameFilter(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(prometheus.NewGauge(prometheus.GaugeOpts{Name: "xflow_wanted", Help: "wanted"}))
 	reg.MustRegister(prometheus.NewGauge(prometheus.GaugeOpts{Name: "xflow_unwanted", Help: "unwanted"}))
-	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil)
+	srv := server.New(reg, ":8080", config.DefaultTelemetryPath, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, config.DefaultTelemetryPath+"?name%5B%5D=xflow_wanted", http.NoBody)
 	req.Header.Set("Accept", "application/openmetrics-text; version=1.0.0; charset=utf-8")

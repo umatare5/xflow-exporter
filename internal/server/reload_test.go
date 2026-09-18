@@ -30,7 +30,7 @@ func (s *stubReloader) Reload() error {
 func reloadServer(t *testing.T, reloader server.Reloader) *http.Server {
 	t.Helper()
 
-	return server.New(probeRegistry(t), ":8080", config.DefaultTelemetryPath, reloader)
+	return server.New(probeRegistry(t), ":8080", config.DefaultTelemetryPath, reloader, nil)
 }
 
 // TestReload_AcceptsPostAndPut pins the methods, which are the two
@@ -104,7 +104,7 @@ func TestReload_ReportsAFailure(t *testing.T) {
 func TestReload_IsAbsentByDefault(t *testing.T) {
 	t.Parallel()
 
-	srv := server.New(probeRegistry(t), ":8080", config.DefaultTelemetryPath, nil)
+	srv := server.New(probeRegistry(t), ":8080", config.DefaultTelemetryPath, nil, nil)
 
 	w := httptest.NewRecorder()
 	srv.Handler.ServeHTTP(w, httptest.NewRequest(http.MethodPost, config.ReloadPath, http.NoBody))
@@ -142,7 +142,7 @@ func TestLifecycleManager_ExposesReloadOnlyWithTheFlag(t *testing.T) {
 			}
 
 			reloader := &stubReloader{}
-			mgr := server.NewLifecycleManager(probeRegistry(t), cfg, reloader)
+			mgr := server.NewLifecycleManager(probeRegistry(t), cfg, reloader, nil)
 			if mgr == nil {
 				t.Fatal("NewLifecycleManager() returned nil")
 			}
@@ -151,7 +151,7 @@ func TestLifecycleManager_ExposesReloadOnlyWithTheFlag(t *testing.T) {
 			// a reload attempt: only the enabled case reaches the reloader.
 			w := httptest.NewRecorder()
 			server.New(probeRegistry(t), ":8080", config.DefaultTelemetryPath,
-				reloaderFor(tt.enabled, reloader)).
+				reloaderFor(tt.enabled, reloader), nil).
 				Handler.ServeHTTP(w, httptest.NewRequest(http.MethodPost, config.ReloadPath, http.NoBody))
 
 			if tt.enabled && reloader.calls.Load() == 0 {
