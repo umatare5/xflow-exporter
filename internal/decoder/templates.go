@@ -321,8 +321,9 @@ func newTemplateStore(cfg config.Parser) *templateStore {
 
 // domain returns one observation domain's state, creating it on first use and
 // stamping it as seen. It returns nil once the exporter is at its domain
-// budget: the identifier is a wire field, so an unbounded map here is
-// reachable from one permitted source address.
+// budget, or once the fleet is: the identifier and the source address are both
+// wire fields, so either map is unbounded from the wire without a budget. A
+// device already holding domains keeps its own.
 func (s *templateStore) domain(key domainKey) *domainState {
 	now := s.now().UnixNano()
 
@@ -340,7 +341,12 @@ func (s *templateStore) domain(key domainKey) *domainState {
 		d.lastSeen.Store(now)
 		return d
 	}
-	if s.perExporter[key.exporter] >= maxDomainsPerExporter {
+	owned := s.perExporter[key.exporter]
+	if owned >= maxDomainsPerExporter {
+		s.domainsRefused.Add(1)
+		return nil
+	}
+	if owned == 0 && len(s.perExporter) >= maxExporters {
 		s.domainsRefused.Add(1)
 		return nil
 	}

@@ -253,12 +253,12 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	}
 	// The count this surface publishes, held exactly rather than as a floor:
 	// a floor cannot see a family disappear in the same change that adds
-	// another, and the lint below reaches only what was gathered. Three
-	// registered families stay outside it -- the sampling rate and the
-	// sampler rate need an options template announcing a sampler, and the
-	// remote write instant needs a client that has written, whose counters
-	// the package keeps unexported. Changing the surface is meant to change
-	// this number.
+	// another, and the lint below reaches only what was gathered. Four
+	// registered families stay outside it -- the sampling rate, the sampler
+	// rate and the unresolved count need an options template announcing a
+	// rate, and the remote write instant needs a client that has written,
+	// whose counters the package keeps unexported. Changing the surface is
+	// meant to change this number.
 	const wantFamilies = 71
 	if len(families) != wantFamilies {
 		t.Fatalf("gathered %d families, want %d: the lint below covers only what is registered",

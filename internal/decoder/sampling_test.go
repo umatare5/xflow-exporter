@@ -422,3 +422,55 @@ func TestSamplerTable_StaysSampledAfterItsDeclarationsExpire(t *testing.T) {
 		t.Error("sampled = false after expiry, want the device still known to sample")
 	}
 }
+
+// TestSamplingUnresolved_SurvivesTheDeclarationExpiring pins the flag through
+// the snapshot the collector reads. A device that stops re-announcing keeps
+// the series, which is when the records worth counting start arriving.
+func TestSamplingUnresolved_SurvivesTheDeclarationExpiring(t *testing.T) {
+	t.Parallel()
+
+	d := New(config.Parser{MaxFieldsPerTemplate: 128, TemplateTTL: time.Minute})
+	now := time.Unix(1_756_600_000, 0)
+	d.templates.now = func() time.Time { return now }
+
+	decodeSampling(t, d, samplingDeclaration(1, true, [2]uint32{1, 32}))
+	decodeSampling(t, d, v9Packet(10, samplingODID, samplingTemplate(false)))
+
+	if _, sampled := domainSampling(d, samplingODID); !sampled {
+		t.Fatal("sampled = false after a declaration, want true")
+	}
+
+	// The device stops re-announcing while its records keep the domain live.
+	now = now.Add(2 * time.Minute)
+	decodeSampling(t, d, v9Packet(11, samplingODID,
+		flowSet(samplingTemplateID, samplingRecord(0, false))))
+	d.SweepDomains()
+
+	if got := domainRate(d, samplingODID); got != 0 {
+		t.Errorf("xflow_sampling_rate = %d after the declaration expired, want none", got)
+	}
+	if _, sampled := domainSampling(d, samplingODID); !sampled {
+		t.Error("sampled = false after the declaration expired, want the device still sampling")
+	}
+}
+
+// TestSamplingUnresolved_RidesTheDeviceNotTheDomain pins the flag's scope. A
+// stack member announces its samplers on one domain and exports records on
+// another, so a flag kept per domain would miss the domain that exports.
+func TestSamplingUnresolved_RidesTheDeviceNotTheDomain(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	decodeSampling(t, d, samplingDeclaration(1, true, [2]uint32{1, 32}, [2]uint32{2, 1024}))
+	decodeSampling(t, d, v9Packet(10, samplingDataODID, samplingTemplate(false)))
+	decodeSampling(t, d, v9Packet(11, samplingDataODID,
+		flowSet(samplingTemplateID, samplingRecord(0, false))))
+
+	count, sampled := domainSampling(d, samplingDataODID)
+	if !sampled {
+		t.Error("sampled = false on the exporting domain, want the device's own flag")
+	}
+	if count != 1 {
+		t.Errorf("unresolved = %d, want the record taken uncorrected counted", count)
+	}
+}
