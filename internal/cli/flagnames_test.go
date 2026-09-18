@@ -99,8 +99,8 @@ func TestFlagNamesAreStable(t *testing.T) {
 
 	want := map[string]bool{
 		"web.listen-address": true, "web.listen-port": true, "web.telemetry-path": true,
-		"web.enable-lifecycle": true,
-		"receiver.address":     true, "receiver.batch-size": true, "receiver.queue-size": true,
+		"web.enable-lifecycle": true, "web.enable-aggregation-entries": true,
+		"receiver.address": true, "receiver.batch-size": true, "receiver.queue-size": true,
 		"receiver.buffer-bytes": true, "receiver.max-packet-size": true, "receiver.workers": true,
 		"parser.max-fields-per-template": true, "parser.template-ttl": true,
 		"aggregation.entry-ttl": true, "aggregation.max-entries": true,

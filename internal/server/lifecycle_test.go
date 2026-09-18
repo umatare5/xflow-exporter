@@ -46,7 +46,7 @@ func TestNewLifecycleManager(t *testing.T) {
 			t.Parallel()
 
 			registry := prometheus.NewRegistry()
-			mgr := server.NewLifecycleManager(registry, tt.cfg, nil)
+			mgr := server.NewLifecycleManager(registry, tt.cfg, nil, nil)
 
 			if mgr == nil {
 				t.Fatal("NewLifecycleManager() returned nil")
@@ -67,7 +67,7 @@ func TestLifecycleManager_RunWithImmediateCancel(t *testing.T) {
 	}
 
 	registry := prometheus.NewRegistry()
-	mgr := server.NewLifecycleManager(registry, cfg, nil)
+	mgr := server.NewLifecycleManager(registry, cfg, nil, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -90,7 +90,7 @@ func TestLifecycleManager_RunWithTimeout(t *testing.T) {
 	}
 
 	registry := prometheus.NewRegistry()
-	mgr := server.NewLifecycleManager(registry, cfg, nil)
+	mgr := server.NewLifecycleManager(registry, cfg, nil, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -147,7 +147,7 @@ func TestLifecycleManager_RunReturnsWhenTheServerCannotListen(t *testing.T) {
 		},
 	}
 
-	mgr := server.NewLifecycleManager(prometheus.NewRegistry(), cfg, &stubReloader{})
+	mgr := server.NewLifecycleManager(prometheus.NewRegistry(), cfg, &stubReloader{}, nil)
 
 	returned := make(chan error, 1)
 	go func() { returned <- mgr.Run(context.Background()) }()

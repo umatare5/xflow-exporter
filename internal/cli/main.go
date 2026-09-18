@@ -89,6 +89,11 @@ func registerWebFlags() []cli.Flag {
 			Usage:       "Enable " + config.ReloadPath + ", which re-reads the enrichment sources",
 			HideDefault: true,
 		},
+		&cli.BoolFlag{
+			Name:        "web.enable-aggregation-entries",
+			Usage:       "Enable " + config.EntriesPath + ", which lists every entry the aggregation tables hold",
+			HideDefault: true,
+		},
 	}
 }
 

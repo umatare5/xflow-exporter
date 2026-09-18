@@ -27,16 +27,19 @@ Records transporting sampled packet headers bypass standard field extraction. Th
 
 Every route binds to the address configured via `--web.listen-address` and `--web.listen-port`, and none of them authenticates — [`SECURITY.md`](../SECURITY.md) specifies the network path they belong on.
 
-| Path        | Methods   | Status        | Behaviour                             |
-| :---------- | :-------- | :------------ | :------------------------------------ |
-| `/metrics`  | Any       | 200, 503      | 503 past ten concurrent gathers       |
-| `/healthz`  | Any       | 200           | Static `OK`, reading no state         |
-| `/-/reload` | POST, PUT | 200, 405, 500 | 405 sets `Allow`, 500 names the error |
-| `/`         | Any       | 200           | Catch-all landing page, never 404     |
+| Path        | Methods   | Status             | Behaviour                                  |
+| :---------- | :-------- | :----------------- | :----------------------------------------- |
+| `/metrics`  | Any       | 200, 503           | 503 past ten concurrent gathers            |
+| `/entries`  | GET       | 200, 400, 405, 503 | 400 names the values, 503 past one listing |
+| `/healthz`  | Any       | 200                | Static `OK`, reading no state              |
+| `/-/reload` | POST, PUT | 200, 405, 500      | 405 sets `Allow`, 500 names the error      |
+| `/`         | Any       | 200                | Catch-all landing page, never 404          |
 
-The HTTP server binds a unified listener for all internal routes without authentication layers. Unregistered paths act as a catch-all, returning HTTP 200 to prevent scanner enumeration. Disabling lifecycle flags leaves reload endpoints unregistered, securely falling back to this default behavior.
+The HTTP server binds a unified listener for all internal routes without authentication layers. Unregistered paths act as a catch-all, returning HTTP 200 to prevent scanner enumeration. Disabling an endpoint flag leaves that route unregistered, securely falling back to this default behavior.
 
 The `/metrics` endpoint enforces a hard concurrency limit of 10 to bound memory consumption during in-flight serialization. Slower scrapes are forcefully terminated upon reaching a 30-second header timeout or a 5-second graceful shutdown drain. This strictly bounds process lingering and exhaustion attacks.
+
+The `/entries` endpoint admits one listing at a time and bounds its write with a 60-second deadline, so a client that stops reading releases the slot on that deadline rather than on disconnect.
 
 ## Counter Semantics
 

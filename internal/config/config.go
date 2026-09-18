@@ -77,7 +77,11 @@ const (
 	// ReloadPath re-reads the enrichment sources. It is exposed only with
 	// --web.enable-lifecycle, which is the spelling Prometheus uses for the
 	// same endpoint.
-	ReloadPath       = "/-/reload"
+	ReloadPath = "/-/reload"
+	// EntriesPath lists what a table holds, including the entries the
+	// scrape-time cuts withhold. It is exposed only with
+	// --web.enable-aggregation-entries.
+	EntriesPath      = "/entries"
 	DefaultLogLevel  = "info"
 	DefaultLogFormat = "json"
 )
@@ -105,6 +109,11 @@ type Web struct {
 	// enrichment sources from disk. It is off by default, the reload being
 	// an unauthenticated write that belongs behind a controlled path.
 	EnableLifecycle bool `json:"enable_lifecycle"`
+	// EnableAggregationEntries exposes the entry listing. It is off by
+	// default on two counts: the listing reads every entry a table holds
+	// rather than the Top-K a scrape publishes, and those entries are the
+	// conversations the cut withholds.
+	EnableAggregationEntries bool `json:"enable_aggregation_entries"`
 }
 
 // Receiver holds UDP flow receiver configuration.
@@ -193,10 +202,11 @@ type InternalCollector struct {
 func Parse(cmd *cli.Command) (*Config, error) {
 	cfg := &Config{
 		Web: Web{
-			ListenAddress:   cmd.String("web.listen-address"),
-			ListenPort:      cmd.Int("web.listen-port"),
-			TelemetryPath:   cmd.String("web.telemetry-path"),
-			EnableLifecycle: cmd.Bool("web.enable-lifecycle"),
+			ListenAddress:            cmd.String("web.listen-address"),
+			ListenPort:               cmd.Int("web.listen-port"),
+			TelemetryPath:            cmd.String("web.telemetry-path"),
+			EnableLifecycle:          cmd.Bool("web.enable-lifecycle"),
+			EnableAggregationEntries: cmd.Bool("web.enable-aggregation-entries"),
 		},
 		Receiver: Receiver{
 			Addresses:     cmd.StringSlice("receiver.address"),
@@ -303,6 +313,12 @@ func (c *Config) Validate() error {
 		{
 			c.Web.TelemetryPath == HealthPath,
 			"telemetry path must not be " + HealthPath + ", which serves the health check",
+		},
+		{
+			// Unconditional above, conditional here: the entry listing registers
+			// its pattern only with the flag, so without it the path is free.
+			c.Web.EnableAggregationEntries && c.Web.TelemetryPath == EntriesPath,
+			"telemetry path must not be " + EntriesPath + " with --web.enable-aggregation-entries",
 		},
 		{
 			!isValidLogLevel(c.Log.Level),

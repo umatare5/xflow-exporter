@@ -8,7 +8,7 @@ This page specifies the controls particular to a report redacts, where the ingre
 
 Redact these before reporting, in addition to the credentials the shared policy names.
 
-- **Infrastructure** — A monitored address, from a datagram, a capture or a `/metrics` sample
+- **Infrastructure** — A monitored address, from a datagram, a capture, `/metrics` or `/entries`
 - **Application** — The exporting device's address, and any name a mapping file supplied
 - **Credentials** — A remote write credential, from a flag, an environment variable or a header
 
@@ -31,7 +31,9 @@ No route authenticates, so the network path the listener sits on is the whole ac
 - **Lifecycle** — `--web.enable-lifecycle` exposes `/-/reload` to any client reaching the listener.
 - **Effect** — a reload re-reads the enrichment files from disk and changes no other state.
 - **Signal** — `SIGHUP` performs that same reload, so local control needs neither flag nor route.
-- **Restriction** — with the flag set, put a packet filter or an authenticating proxy in front.
+- **Entries** — `--web.enable-aggregation-entries` exposes `/entries`, which reads whole tables.
+- **Disclosure** — that listing carries the pairs the Top-K cut keeps off `/metrics`.
+- **Restriction** — with either flag set, put a packet filter or an authenticating proxy in front.
 
 ## Ingress Paths
 

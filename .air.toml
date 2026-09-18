@@ -26,7 +26,8 @@ tmp_dir = "tmp"
            --collector.vlans \
            --collector.distributions \
            --enrich.services \
-           --web.enable-lifecycle
+           --web.enable-lifecycle \
+           --web.enable-aggregation-entries
 
     [ -f "$D/asn.mmdb" ]       && set -- "$@" --enrich.asn-database "$D/asn.mmdb"
     [ -f "$D/country.mmdb" ]   && set -- "$@" --enrich.country-database "$D/country.mmdb"

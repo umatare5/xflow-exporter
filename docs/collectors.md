@@ -94,7 +94,7 @@ Every traffic family is labeled with `exporter_address` (except `xflow_asn_info`
 
 **`xflow_*_other`**
 
-Accumulates rejected ingest attempts bound by `--aggregation.max-entries`. The tail below Top-K and min-bytes cuts is withheld rather than folded to prevent breaking `rate()`.
+Accumulates rejected ingest attempts bound by `--aggregation.max-entries`. The tail below Top-K and min-bytes cuts is withheld rather than folded to prevent breaking `rate()`. The `/entries` endpoint ranks every entry, and rows past its `published` count are that tail.
 
 **`xflow_*_info`**
 

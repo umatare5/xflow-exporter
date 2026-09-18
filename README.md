@@ -163,6 +163,7 @@ The exporter serves these endpoints. See [Endpoints](docs/architecture.md#endpoi
 | :---------- | :----------------------------------------------------------------------------- |
 | `/`         | Landing page – confirming the exporter is up at <http://localhost:10053/>      |
 | `/metrics`  | Metrics endpoint – set via `--web.telemetry-path`                              |
+| `/entries`  | Entry listing – ranks every entry, needs `--web.enable-aggregation-entries`    |
 | `/healthz`  | Liveness endpoint – returns static 200 and deliberately ignores flow data      |
 | `/-/reload` | Reload endpoint – re-reads sources on POST/PUT, needs `--web.enable-lifecycle` |
 

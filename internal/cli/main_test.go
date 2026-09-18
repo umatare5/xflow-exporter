@@ -10,7 +10,7 @@ func TestRegisterFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerFlags()
-	if got, want := len(flags), 44; got != want {
+	if got, want := len(flags), 45; got != want {
 		t.Errorf("registerFlags() returned %d flags, want %d", got, want)
 	}
 }
@@ -19,11 +19,11 @@ func TestRegisterWebFlags(t *testing.T) {
 	t.Parallel()
 
 	flags := registerWebFlags()
-	if got, want := len(flags), 4; got != want {
+	if got, want := len(flags), 5; got != want {
 		t.Fatalf("registerWebFlags() returned %d flags, want %d", got, want)
 	}
 
-	expectedTypes := []string{"string", "int", "string", "bool"}
+	expectedTypes := []string{"string", "int", "string", "bool", "bool"}
 	for i, flag := range flags {
 		var gotType string
 		switch flag.(type) {
