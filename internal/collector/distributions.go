@@ -5,6 +5,7 @@
 package collector
 
 import (
+	"net/netip"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -21,12 +22,12 @@ type Distributions struct {
 }
 
 // NewDistributions creates the histograms. The factor bounds the relative
-// bucket error at about five percent, and the bucket cap with the reset
-// window bounds memory per series.
+// bucket error at about five percent, and the cap with the reset window
+// bounds memory per series. The cap holds a range's width, not its scale.
 func NewDistributions() *Distributions {
 	const (
 		bucketFactor    = 1.1
-		maxBuckets      = 100
+		maxBuckets      = 200
 		minResetSpacing = time.Hour
 	)
 
@@ -48,6 +49,13 @@ func NewDistributions() *Distributions {
 			NativeHistogramMinResetDuration: minResetSpacing,
 		}, exporterLabels),
 	}
+}
+
+// Forget drops the device's histograms, which a vector keeps until deleted.
+func (d *Distributions) Forget(exporter netip.Addr) {
+	label := exporter.String()
+	d.flowBytes.DeleteLabelValues(label)
+	d.flowDuration.DeleteLabelValues(label)
 }
 
 // Register registers both histograms with the registry.

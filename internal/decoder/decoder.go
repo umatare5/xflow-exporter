@@ -125,8 +125,8 @@ func (d *Decoder) SweepDomains() int {
 }
 
 // SweepExporters drops the devices silent past the template TTL, but only
-// once the exporter budget is reached.
-func (d *Decoder) SweepExporters() int {
+// once the exporter budget is reached, returning them so their series go too.
+func (d *Decoder) SweepExporters() []netip.Addr {
 	return d.stats.sweepIdle(d.now().Add(-d.templates.ttl).UnixNano())
 }
 
@@ -183,6 +183,12 @@ func (d *Decoder) DeclarationsRefused() uint64 {
 // Domains returns the per-observation-domain state for the metrics collector.
 func (d *Decoder) Domains() []DomainSnapshot {
 	return d.templates.snapshot()
+}
+
+// Admits reports whether the device is inside the exporter budget. A device
+// past it decodes and feeds the aggregation tables, but holds no counters.
+func (d *Decoder) Admits(exporter netip.Addr) bool {
+	return d.stats.admitted(exporter)
 }
 
 // Stats returns the decode statistics for the metrics collector.

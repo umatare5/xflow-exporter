@@ -138,7 +138,7 @@ Records matching no mapping on either side feed no entry. A `0` indicates the op
 
 **`xflow_flow_bytes`, `xflow_flow_duration_seconds`**
 
-Native histograms observing flow byte sizes and durations, excluding unmeasured or clock-less records. Uses `NativeHistogramBucketFactor` of 1.1 (schema 3). Capped at 100 buckets per `exporter_address`, past which it resets whole where the last reset or creation is an hour or more old, zeroing `_count` and `_sum`, and otherwise halves resolution until then.
+Native histograms observing flow byte sizes and durations, excluding unmeasured or clock-less records. Uses `NativeHistogramBucketFactor` of 1.1 (schema 3). Capped at 200 buckets per `exporter_address`, past which it resets whole where the last reset or creation is an hour or more old, zeroing `_count` and `_sum`, and otherwise halves resolution until then.
 
 ## Technical Notes
 

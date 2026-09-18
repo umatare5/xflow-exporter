@@ -74,8 +74,8 @@ func TestStats_SweepOnlyRunsUnderPressure(t *testing.T) {
 		s.exporter(spoofedAddr(i), long).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
 	}
 
-	if evicted := s.sweepIdle(time.Now().UnixNano()); evicted != 0 {
-		t.Errorf("swept %d devices below the budget, want none", evicted)
+	if evicted := s.sweepIdle(time.Now().UnixNano()); len(evicted) != 0 {
+		t.Errorf("swept %d devices below the budget, want none", len(evicted))
 	}
 	if got := len(s.Snapshot()); got != 100 {
 		t.Errorf("held %d devices, want all 100 kept", got)
@@ -94,8 +94,8 @@ func TestStats_SweepAtTheBudgetReclaims(t *testing.T) {
 		s.exporter(spoofedAddr(i), long).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
 	}
 
-	if evicted := s.sweepIdle(time.Now().UnixNano()); evicted != maxExporters {
-		t.Errorf("swept %d devices, want the whole idle budget of %d", evicted, maxExporters)
+	if evicted := s.sweepIdle(time.Now().UnixNano()); len(evicted) != maxExporters {
+		t.Errorf("swept %d devices, want the whole idle budget of %d", len(evicted), maxExporters)
 	}
 
 	// The slot is available again, which is what the sweep is for.
@@ -160,8 +160,8 @@ func TestStats_SweepReadsEveryDatagramNotJustTheFirst(t *testing.T) {
 	s.exporter(active, long).countFlows(flow.VersionNetFlowV9, 1, long)
 	s.exporter(active, time.Now()).countFlows(flow.VersionNetFlowV9, 1, time.Now())
 
-	if evicted := s.sweepIdle(time.Now().Add(-time.Minute).UnixNano()); evicted != maxExporters-1 {
-		t.Errorf("swept %d devices, want the %d silent since the burst", evicted, maxExporters-1)
+	if evicted := s.sweepIdle(time.Now().Add(-time.Minute).UnixNano()); len(evicted) != maxExporters-1 {
+		t.Errorf("swept %d devices, want the %d silent since the burst", len(evicted), maxExporters-1)
 	}
 	for _, snap := range s.Snapshot() {
 		if snap.Exporter == active {
@@ -223,8 +223,8 @@ func TestDecoder_SweepExportersUsesTheTemplateTTL(t *testing.T) {
 		d.stats.exporter(spoofedAddr(i), long).countError(flow.VersionUnknown, ReasonUnsupportedVersion)
 	}
 
-	if evicted := d.SweepExporters(); evicted != maxExporters {
-		t.Errorf("SweepExporters() = %d, want the whole budget past the template TTL", evicted)
+	if evicted := d.SweepExporters(); len(evicted) != maxExporters {
+		t.Errorf("SweepExporters() = %d, want the whole budget past the template TTL", len(evicted))
 	}
 	if got := d.ExportersRefused(); got != 0 {
 		t.Errorf("ExportersRefused() = %d, want none: the budget was reached, not exceeded", got)
@@ -323,5 +323,34 @@ func TestDecoder_RefusalCountsTheDatagramNotTheFlowSet(t *testing.T) {
 	}
 	if got := refusing.ExportersRefused(); got != 1 {
 		t.Errorf("ExportersRefused() = %d for one datagram of four flowsets, want 1", got)
+	}
+}
+
+// TestDecoder_AdmitsOnlyWhatTheBudgetHolds pins the predicate the ingest path
+// gates the flow histograms on.
+func TestDecoder_AdmitsOnlyWhatTheBudgetHolds(t *testing.T) {
+	t.Parallel()
+
+	d := New(config.Parser{
+		MaxFieldsPerTemplate: config.DefaultParserMaxFieldsPerTemplate,
+		TemplateTTL:          config.DefaultParserTemplateTTL,
+	})
+	base := time.Now()
+	held := netip.MustParseAddr("192.0.2.1")
+
+	if d.Admits(held) {
+		t.Error("Admits() before any datagram = true, want the device unknown")
+	}
+
+	d.stats.exporter(held, base)
+	if !d.Admits(held) {
+		t.Error("Admits() for a held device = false, want true")
+	}
+
+	for i := range maxExporters {
+		d.stats.exporter(spoofedAddr(i), base)
+	}
+	if d.Admits(netip.MustParseAddr("203.0.113.9")) {
+		t.Error("Admits() past the budget = true, want the refused device excluded")
 	}
 }
