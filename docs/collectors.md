@@ -52,7 +52,7 @@ The following table lists the metrics exposed by each collector, including their
 
 > [!TIP]
 >
-> **BGP AS, Countries, VLANs, and Threats** need the following enrichment files. See [Enrichment](../docs/enrichment.md) for more details.
+> **BGP AS, Countries, VLANs, Threats, and the naming gauges** need the following enrichment files. See [Enrichment](../docs/enrichment.md) for more details.
 >
 > - `--enrich.asn-database`: MaxMind-format ASN database, filling the AS numbers a device omits
 > - `--enrich.country-database`: MaxMind-format country database, filling the ISO codes for --collector.countries
@@ -79,8 +79,8 @@ Every traffic family is labeled with `exporter_address` (except `xflow_asn_info`
 | `port`                           | Destination port (service side)                                         |
 | `input_ifindex`/`output_ifindex` | SNMP ifIndex, or `0` if unknown                                         |
 | `flags`                          | Cumulative TCP control bits (e.g., `syn,ack`), or `none`                |
-| `dscp`                           | TOS byte's top 6 bits                                                   |
-| `src_asn`/`dst_asn`              | Exported AS numbers, or `0` if unknown                                  |
+| `dscp`                           | DSCP class name (e.g. `ef`), or the code point where none names it      |
+| `src_asn`/`dst_asn`              | Exported or database-filled AS numbers, or `0` if unknown               |
 | `asn`/`organization`             | AS number and database organization name                                |
 | `application`                    | AVC name, vendor string, or `engine:selector`                           |
 | `src_country`/`dst_country`      | ISO country code, `private`, or `unknown`                               |
@@ -92,13 +92,13 @@ Every traffic family is labeled with `exporter_address` (except `xflow_asn_info`
 
 ## Annotations
 
-**`xflow_*_other`**
+**`xflow_*_total{…="other"}`**
 
 Accumulates rejected ingest attempts bound by `--aggregation.max-entries`. The tail below Top-K and min-bytes cuts is withheld rather than folded to prevent breaking `rate()`. The `/entries` endpoint ranks every entry, and rows past its `published` count are that tail.
 
 **`xflow_*_info`**
 
-Publishing names as separate gauges avoids churning labels on metric counters when names are updated. Gauges bounded by `--aggregation.max-entries` lose their names when entries fall below the cut. Gauges bounded by mapping files are published regardless of traffic.
+Publishing names as separate gauges avoids churning labels on metric counters when names are updated. `xflow_interface_info` and `xflow_asn_info` take the Top-K and min-bytes cuts, losing a name with its entry. The mapping file bounds `xflow_device_info` and `xflow_vlan_info`, so both publish regardless of traffic.
 
 **`xflow_exporter_*`**
 
@@ -138,7 +138,7 @@ Records matching no mapping on either side feed no entry. A `0` indicates the op
 
 **`xflow_flow_bytes`, `xflow_flow_duration_seconds`**
 
-Native histograms observing flow byte sizes and durations, excluding unmeasured or clock-less records. Uses `NativeHistogramBucketFactor` of 1.1 (schema 3). Capped at 100 buckets per `exporter_address`; passing this cap halves resolution if the last reset is under an hour old.
+Native histograms observing flow byte sizes and durations, excluding unmeasured or clock-less records. Uses `NativeHistogramBucketFactor` of 1.1 (schema 3). Capped at 100 buckets per `exporter_address`, past which it resets whole where the last reset or creation is an hour or more old, zeroing `_count` and `_sum`, and otherwise halves resolution until then.
 
 ## Technical Notes
 
