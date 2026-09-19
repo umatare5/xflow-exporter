@@ -48,9 +48,13 @@ func testRecord() flow.Record {
 		Bytes:    1000,
 		Packets:  10,
 		Flows:    1,
-		SrcAS:    64500,
-		DstAS:    64501,
-		AppName:  "https",
+		// Every template the fleet announces carries IE 1 and IE 2, so the
+		// shared record is one whose counts the device reported.
+		BytesReported:   true,
+		PacketsReported: true,
+		SrcAS:           64500,
+		DstAS:           64501,
+		AppName:         "https",
 	}
 }
 
@@ -474,7 +478,7 @@ func TestAggregator_DestinationsFoldEverySourceIntoOne(t *testing.T) {
 	if got.Key.Dst != testDst || got.Key.Protocol != 6 || got.Key.Port != 443 {
 		t.Errorf("destination key = %+v, want the service the records reached", got.Key)
 	}
-	if fold != (Totals{}) {
+	if fold.Bytes != 0 || fold.Packets != 0 || fold.Flows != 0 {
 		t.Errorf("fold = %+v, want nothing folded below the entry bound", fold)
 	}
 }

@@ -794,13 +794,13 @@ func TestFlowCollector_ASNNamesReadTheSnapshotThePairsCameFrom(t *testing.T) {
 	exporter := netip.MustParseAddr("192.0.2.1")
 	pair := aggregator.EntrySnapshot[aggregator.ASNKey]{
 		Key:    aggregator.ASNKey{Exporter: exporter, SrcAS: 64500, DstAS: 64501},
-		Totals: aggregator.Totals{Bytes: 5000, Packets: 5, Flows: 1},
+		Totals: aggregator.Totals{Bytes: 5000, Packets: 5, Flows: 1, BytesMeasured: true, PacketsMeasured: true},
 	}
 	// The same table one ingest later, with a heavier pair holding the only
 	// slot the cut has.
 	usurper := aggregator.EntrySnapshot[aggregator.ASNKey]{
 		Key:    aggregator.ASNKey{Exporter: exporter, SrcAS: 64600, DstAS: 64601},
-		Totals: aggregator.Totals{Bytes: 9000, Packets: 9, Flows: 1},
+		Totals: aggregator.Totals{Bytes: 9000, Packets: 9, Flows: 1, BytesMeasured: true, PacketsMeasured: true},
 	}
 
 	src := &movingASNs{reads: [][]aggregator.EntrySnapshot[aggregator.ASNKey]{

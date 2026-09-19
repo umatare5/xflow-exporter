@@ -82,10 +82,20 @@ func (f *familyDescs) emit(ch chan<- prometheus.Metric, totals aggregator.Totals
 		return true
 	}
 
-	if !send(f.bytes, totals.Bytes) {
-		return
+	// A family the entry holds no complete sum for is withheld rather than
+	// published short. A partial total reads exactly like a measured one,
+	// which is the fault a fabricated zero carries, and the flow count is
+	// unaffected either way.
+	if totals.BytesMeasured {
+		if !send(f.bytes, totals.Bytes) {
+			return
+		}
 	}
-	send(f.packets, totals.Packets)
+	if totals.PacketsMeasured {
+		if !send(f.packets, totals.Packets) {
+			return
+		}
+	}
 	send(f.flows, totals.Flows)
 }
 
@@ -432,7 +442,7 @@ func (c *FlowCollector) collectExporters(ch chan<- prometheus.Metric) {
 	for _, e := range entries {
 		c.exporters.emit(ch, e.Totals, exporterLabels(e.Key)...)
 	}
-	c.exporters.emit(ch, overflow, otherLabels(exporterLabels)...)
+	c.exporters.emit(ch, whole(overflow), otherLabels(exporterLabels)...)
 }
 
 // collectFamily publishes one folded table: the Top-K entries at or above the
@@ -457,8 +467,16 @@ func collectFamily[K comparable](
 		descs.emit(ch, e.Totals, labels(e.Key)...)
 	}
 
-	descs.emit(ch, fold, otherLabels(labels)...)
+	descs.emit(ch, whole(fold), otherLabels(labels)...)
 	return cut
+}
+
+// whole marks a fold complete. The bucket is a lower bound by construction --
+// the tail below the cut is not in it either -- so withholding it over one
+// unmeasured contribution trades an understatement for a missing series.
+func whole(totals aggregator.Totals) aggregator.Totals {
+	totals.BytesMeasured, totals.PacketsMeasured = true, true
+	return totals
 }
 
 // compareEntries orders a table largest by bytes first, the older entry

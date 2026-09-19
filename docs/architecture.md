@@ -79,6 +79,8 @@ Memory reclamation operates asynchronously via sweeps. Idle domains, sampler dec
 
 ## Absence
 
-The aggregation engine strictly omits unsupplied dimensions rather than fabricating `0` or `false` values. This guarantees mathematical purity in downstream Prometheus aggregations. For example, NetFlow v8 aggregates strictly feed their respective domains, completely bypassing downstream volumetric tables.
+The aggregation engine strictly omits unsupplied dimensions rather than fabricating `0` or `false` values. This guarantees mathematical purity in downstream Prometheus aggregations. For example, an aggregated cache strictly feeds its own domain, completely bypassing downstream volumetric tables.
+
+The same rule covers the counts. An entry one of whose records kept its byte or packet total in unread elements publishes no such series, a partial sum reading exactly like a complete one, and the byte-ranked scrape cut withholds it whole. `/entries` reports both flags per row.
 
 Memory pressure is managed via temporal eviction strategies. Entries idling beyond configured TTLs are purged alongside their associated metrics series. Timestamps and rates are strictly generated at the point of decode, ensuring absolute temporal accuracy.

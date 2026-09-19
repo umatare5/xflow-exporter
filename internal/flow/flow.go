@@ -121,10 +121,12 @@ type Record struct {
 	// downstream, where the rate in force is known.
 	Bytes   uint64
 	Packets uint64
-	// BytesReported records that the record carried a byte count, which the
-	// count cannot: a template keeping its counters in elements this decoder
-	// skips leaves Bytes at zero, and that zero is not an empty flow.
-	BytesReported bool
+	// BytesReported and PacketsReported record that the record carried each
+	// count, which the counts cannot: a template keeping its counters in
+	// elements this decoder skips leaves them at zero, and that zero is not
+	// an empty flow.
+	BytesReported   bool
+	PacketsReported bool
 	// Flows is how many flows this record aggregates: 1 for a per-flow
 	// protocol, the device's own count for a NetFlow v8 aggregate that
 	// carries one -- the Catalyst methods 6-8 do not, and read as 1.

@@ -12,6 +12,19 @@ type Totals struct {
 	Bytes   uint64
 	Packets uint64
 	Flows   uint64
+	// BytesMeasured and PacketsMeasured report that every record folded into
+	// the entry carried that count. One that did not leaves a partial sum,
+	// which no reader can tell from a complete one, so the family is withheld
+	// from that entry for good rather than published short.
+	BytesMeasured   bool
+	PacketsMeasured bool
+}
+
+// reading is one record's contribution to an entry, and what the device
+// measured of it.
+type reading struct {
+	bytes, packets, flows          uint64
+	bytesMeasured, packetsMeasured bool
 }
 
 // entry carries one key's counters. The counters are atomic so the ingest
@@ -21,6 +34,13 @@ type entry struct {
 	packets  atomic.Uint64
 	flows    atomic.Uint64
 	lastSeen atomic.Int64
+
+	// bytesUnmeasured and packetsUnmeasured latch on the first record that
+	// carried no such count. They never clear: an entry whose sum is missing
+	// a contribution stays short of the traffic it names however many
+	// complete records follow.
+	bytesUnmeasured   atomic.Bool
+	packetsUnmeasured atomic.Bool
 
 	// born orders entries the byte counts cannot separate. Two entries
 	// carrying the same bytes compare equal, and the snapshot arrives in map
@@ -32,19 +52,27 @@ type entry struct {
 }
 
 // add accumulates one record into the entry.
-func (e *entry) add(bytes, packets, flows uint64, now int64) {
-	e.bytes.Add(bytes)
-	e.packets.Add(packets)
-	e.flows.Add(flows)
+func (e *entry) add(r reading, now int64) {
+	e.bytes.Add(r.bytes)
+	e.packets.Add(r.packets)
+	e.flows.Add(r.flows)
+	if !r.bytesMeasured && !e.bytesUnmeasured.Load() {
+		e.bytesUnmeasured.Store(true)
+	}
+	if !r.packetsMeasured && !e.packetsUnmeasured.Load() {
+		e.packetsUnmeasured.Store(true)
+	}
 	e.lastSeen.Store(now)
 }
 
 // totals reads the entry.
 func (e *entry) totals() Totals {
 	return Totals{
-		Bytes:   e.bytes.Load(),
-		Packets: e.packets.Load(),
-		Flows:   e.flows.Load(),
+		Bytes:           e.bytes.Load(),
+		Packets:         e.packets.Load(),
+		Flows:           e.flows.Load(),
+		BytesMeasured:   !e.bytesUnmeasured.Load(),
+		PacketsMeasured: !e.packetsUnmeasured.Load(),
 	}
 }
 
@@ -86,11 +114,11 @@ func newTable[K comparable](maxEntries int) *table[K] {
 // The accumulation happens under the lock rather than after releasing it: a
 // sweep taking the write lock in that window would evict the entry, and the
 // record would then land on a map nobody reads any more.
-func (t *table[K]) add(key K, bytes, packets, flows uint64, now int64) {
+func (t *table[K]) add(key K, r reading, now int64) {
 	t.mu.RLock()
 	e, ok := t.entries[key]
 	if ok {
-		e.add(bytes, packets, flows, now)
+		e.add(r, now)
 	}
 	t.mu.RUnlock()
 
@@ -98,9 +126,9 @@ func (t *table[K]) add(key K, bytes, packets, flows uint64, now int64) {
 		return
 	}
 
-	if !t.insert(key, bytes, packets, flows, now) {
+	if !t.insert(key, r, now) {
 		t.capacityFolds.Add(1)
-		t.overflow.add(bytes, packets, flows, now)
+		t.overflow.add(r, now)
 	}
 }
 
@@ -108,12 +136,12 @@ func (t *table[K]) add(key K, bytes, packets, flows uint64, now int64) {
 // the write lock, reporting false at the bound. Seeding the entry and
 // accumulating into it are one step so a concurrent sweep cannot evict it
 // between the two, which would lose the record that created it.
-func (t *table[K]) insert(key K, bytes, packets, flows uint64, now int64) bool {
+func (t *table[K]) insert(key K, r reading, now int64) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	if e, ok := t.entries[key]; ok {
-		e.add(bytes, packets, flows, now)
+		e.add(r, now)
 		return true
 	}
 	if len(t.entries) >= t.maxEntries {
@@ -122,7 +150,7 @@ func (t *table[K]) insert(key K, bytes, packets, flows uint64, now int64) bool {
 
 	t.nextBorn++
 	e := &entry{born: t.nextBorn}
-	e.add(bytes, packets, flows, now)
+	e.add(r, now)
 	t.entries[key] = e
 	return true
 }
