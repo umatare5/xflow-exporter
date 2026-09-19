@@ -152,7 +152,7 @@ This section covers technical considerations and best practices for development,
 
 **Exporter Behaviors**: `xflow_exporter_*` sums domains (e.g., NetFlow v8 methods, v9 Source IDs). Summing across `odid` counts traffic once per cache view. `_flows_total` relies on cache-reported counts for v8 aggregates, which differ from underlying flows.
 
-**Measured Counts**: `_bytes_total` and `_packets_total` appear only for entries every record of which carried that count. A device keeping its counters in elements this decoder does not read leaves the family absent rather than zero, permanently for that entry, while `_flows_total` is published throughout. Such an entry ranks last, both cuts being by byte volume, so Top-K or `--aggregation.min-bytes` withholds it whole, the packet count it did measure included. The `other` fold is exempt, being a lower bound already. The `bytes_measured` and `packets_measured` fields of `/entries` say which entries are affected.
+**Measured Counts**: `_bytes_total` and `_packets_total` appear only for entries every record of which carried that count, a template keeping its counters in unread elements leaving that family absent for good. Both cuts rank by byte volume, so such an entry ranks last and is withheld whole, the measured packet count included. The `other` fold is exempt, being a lower bound already.
 
 **Observation Points**: `direction` carries IE 61 on v9 and IPFIX, and is derived on sFlow. It separates the two readings a device gives for a path it watches at both ends without correcting their sum, so summing across the label returns the doubled figure and selecting one direction the measured one. The two flow distributions carry no such label and double the same way.
 
