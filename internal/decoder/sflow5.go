@@ -29,8 +29,11 @@ const (
 	sflowSampledIPv4     = 3
 	sflowSampledIPv6     = 4
 
-	// Header protocols of the raw packet header record.
+	// Header protocols of the raw packet header record. The enum runs to
+	// fourteen; the rest name link layers this exporter does not walk.
 	sflowHeaderEthernet = 1
+	sflowHeaderIPv4     = 11
+	sflowHeaderIPv6     = 12
 
 	// A pre-parsed record states the IP packet length, which its own protocol
 	// carries in sixteen bits: IPv4 counts the header with it, IPv6 counts
@@ -197,6 +200,15 @@ func (d *Decoder) decodeSFlowFlowSample(
 	}
 	d.templates.trackSamplerLocked(domain, source, sequence, samplingRate, pool, drops)
 
+	// Every packet-describing record in one sample describes the same sampled
+	// packet, so the sample yields one record. The specification prefers the
+	// raw header and allows the pre-parsed forms only where the header is not
+	// available, so the header wins where a device sends both.
+	var (
+		chosen     []byte
+		chosenKind uint32
+		haveChosen bool
+	)
 	for range numRecords {
 		recordType, okType := r.uint32()
 		recordLen, okLen := r.uint32()
@@ -210,36 +222,64 @@ func (d *Decoder) decodeSFlowFlowSample(
 			return dst
 		}
 
-		dst = d.appendSFlowRecord(exporter, recordType, record, samplingRate, inputIf, outputIf, dst, issue)
+		kind, ok := sflowPacketRecordKind(recordType)
+		if !ok {
+			continue
+		}
+		if !haveChosen || (kind == sflowRawPacketHeader && chosenKind != sflowRawPacketHeader) {
+			chosen, chosenKind, haveChosen = record, kind, true
+		}
 	}
 
-	return dst
+	if !haveChosen {
+		return dst
+	}
+	return d.appendSFlowRecord(exporter, chosenKind, chosen, samplingRate, inputIf, outputIf, dst, issue)
 }
 
-// appendSFlowRecord decodes one flow record where a format this exporter
-// reads carries the packet; other formats were skipped by their length.
-func (d *Decoder) appendSFlowRecord(
-	exporter netip.Addr, recordType uint32, record []byte,
-	samplingRate, inputIf, outputIf uint32, dst []flow.Record, issue func(reason string),
-) []flow.Record {
+// sflowPacketRecordKind reports the format of a flow record that describes the
+// sampled packet. An extended-data record annotates the sample rather than
+// carrying the packet, and an enterprise record is another vendor's.
+func sflowPacketRecordKind(recordType uint32) (uint32, bool) {
 	const formatMask = 0xFFF
 
 	if recordType>>12 != 0 {
-		return dst
+		return 0, false
 	}
+	switch format := recordType & formatMask; format {
+	case sflowRawPacketHeader, sflowSampledIPv4, sflowSampledIPv6:
+		return format, true
+	default:
+		return 0, false
+	}
+}
 
+// appendSFlowRecord decodes the one record a sample chose to describe its
+// packet. The caller has already refused the formats this exporter does not
+// read.
+func (d *Decoder) appendSFlowRecord(
+	exporter netip.Addr, kind uint32, record []byte,
+	samplingRate, inputIf, outputIf uint32, dst []flow.Record, issue func(reason string),
+) []flow.Record {
 	var read func([]byte, *flow.Record) bool
-	switch recordType & formatMask {
+	switch kind {
 	case sflowRawPacketHeader:
-		read = readSFlowRawHeader
+		protocol, ok := sflowHeaderProtocol(record)
+		if !ok {
+			issue(ReasonMalformed)
+			return dst
+		}
+		switch protocol {
+		case sflowHeaderEthernet, sflowHeaderIPv4, sflowHeaderIPv6:
+			read = readSFlowRawHeader
+		default:
+			issue(ReasonUnsupportedHeaderProtocol)
+			return dst
+		}
 	case sflowSampledIPv4:
 		read = readSFlowSampledIPv4
 	case sflowSampledIPv6:
 		read = readSFlowSampledIPv6
-	default:
-		// An extended-data record annotates the sample rather than carrying
-		// the packet; skipping it is the design, not a failure.
-		return dst
 	}
 
 	dst = append(dst, flow.Record{
@@ -273,7 +313,7 @@ func readSFlowRawHeader(record []byte, r *flow.Record) bool {
 	frameLength, _ := br.uint32()
 	br.skip(4) // stripped bytes
 	headerLen, ok := br.uint32()
-	if !ok || headerProtocol != sflowHeaderEthernet {
+	if !ok {
 		return false
 	}
 	header, ok := br.take(int(headerLen))
@@ -282,7 +322,23 @@ func readSFlowRawHeader(record []byte, r *flow.Record) bool {
 	}
 
 	r.Bytes = uint64(frameLength)
-	return readEthernetFrame(header, r)
+	if headerProtocol == sflowHeaderEthernet {
+		return readEthernetFrame(header, r)
+	}
+
+	// The caller admitted only the protocols below, and both start the header
+	// at the IP layer, which is the walk a packet section takes.
+	readIPPacket(header, r)
+	return true
+}
+
+// sflowHeaderProtocol peeks the link layer a raw packet header names, so the
+// caller can separate a layer it does not walk from a broken record.
+func sflowHeaderProtocol(record []byte) (uint32, bool) {
+	if len(record) < 4 {
+		return 0, false
+	}
+	return binary.BigEndian.Uint32(record[:4]), true
 }
 
 // sampledFieldsFit reports whether the words a sampled record narrows can be

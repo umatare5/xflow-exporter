@@ -64,7 +64,7 @@ The ratio between `xflow_receiver_queue_length` and `xflow_receiver_queue_capaci
 
 **`xflow_decode_errors_total`**
 
-Accounts for rejections based on version compatibility, aggregation methods, template validation, and domain limits.
+Accounts for rejections based on version compatibility, aggregation methods, template validation, domain limits, and link layers the decoder does not walk.
 
 **`xflow_last_*_timestamp_seconds`**
 

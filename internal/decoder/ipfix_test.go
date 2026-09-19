@@ -466,6 +466,46 @@ func TestDecodeIPFIX_VariableLengthOverrunIsCounted(t *testing.T) {
 	}
 }
 
+// RFC 7011 section 2 defines a Data Set as one or more Data Records, so a set
+// whose template is known and whose body holds none is malformed. The padding
+// rule cannot decide it: a body shorter than a record satisfies "shorter than
+// any record in the Set" and would pass as padding.
+func TestDecodeIPFIX_ShortDataSetIsCounted(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		body []byte
+	}{
+		{name: "empty body"},
+		{name: "one octet short", body: fixtureIPFIXRecord()[:len(fixtureIPFIXRecord())-1]},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			message := ipfixMessage(0, fixtureIPFIXTemplate(),
+				flowSet(fixtureIPFIXTemplateID, tt.body))
+
+			records, err := d.Decode(testExporter, message, nil)
+			if err != nil {
+				t.Fatalf("Decode() error = %v, want the message tolerated", err)
+			}
+			if len(records) != 0 {
+				t.Errorf("Decode() returned %d records, want 0", len(records))
+			}
+			if got := errorCountFor(d, flow.VersionIPFIX, ReasonMalformed); got != 1 {
+				t.Errorf("malformed count = %d, want 1", got)
+			}
+			if got := errorCountFor(d, flow.VersionIPFIX, ReasonMissingTemplate); got != 0 {
+				t.Errorf("missing_template count = %d, want 0 for a known template", got)
+			}
+		})
+	}
+}
+
 // errorCountFor reads one error counter for a version.
 func errorCountFor(d *Decoder, version flow.Version, reason string) uint64 {
 	for _, snap := range d.Stats().Snapshot() {
@@ -607,7 +647,10 @@ func TestDecodeIPFIX_PSAMPSamplingPairWins(t *testing.T) {
 	}
 }
 
-func TestDecodeIPFIX_TemplateWithdrawal(t *testing.T) {
+// RFC 7011 section 8.4 tells a collector over UDP to ignore a withdrawal: the
+// transport gives no order, so honoring one would drop a template a
+// re-announcement had already replaced.
+func TestDecodeIPFIX_IgnoresTemplateWithdrawal(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()
@@ -628,8 +671,8 @@ func TestDecodeIPFIX_TemplateWithdrawal(t *testing.T) {
 		t.Fatalf("withdraw error = %v, want nil", err)
 	}
 
-	if got := d.Domains()[0].Templates; got != 0 {
-		t.Errorf("Templates = %d, want 0 after the withdrawal", got)
+	if got := d.Domains()[0].Templates; got != 1 {
+		t.Errorf("Templates = %d, want the template kept over UDP", got)
 	}
 }
 
@@ -737,15 +780,12 @@ func ipfixWithdrawal(setID uint16, templateIDs ...uint16) []byte {
 	return flowSet(setID, body)
 }
 
-// TestDecodeIPFIX_HonoursOptionsTemplateWithdrawal pins RFC 7011 section 8.1.
-// A withdrawal record is four octets, the template id and a field count of
-// zero, and carries no scope field count -- figure T, and figure V for the
-// all-options form, whose set length is 8. The options reader claimed six
-// octets per record, so a set carrying one withdrawal fell short of its own
-// loop guard and was skipped whole, and a set carrying several advanced six
-// octets per record instead of four. The data template reader, which is the
-// same shape, has always been right.
-func TestDecodeIPFIX_HonoursOptionsTemplateWithdrawal(t *testing.T) {
+// TestDecodeIPFIX_IgnoresOptionsTemplateWithdrawal pins both halves of the
+// rule. Section 8.4 keeps the templates, and the reader must still step four
+// octets per withdrawal record -- figure T gives it no scope field count -- so
+// an announcement sharing the set is read. Stepping six would take the next
+// record's id for a scope count and abandon the rest of the set.
+func TestDecodeIPFIX_IgnoresOptionsTemplateWithdrawal(t *testing.T) {
 	t.Parallel()
 
 	optionsHeld := func(t *testing.T, d *Decoder) int {
@@ -757,35 +797,45 @@ func TestDecodeIPFIX_HonoursOptionsTemplateWithdrawal(t *testing.T) {
 		return domains[0].OptionsTemplates
 	}
 
+	optionsBody := func(id uint16) []byte {
+		body := be16(be16(be16(nil, id), 2), 1)
+		body = append(body, ipfixSpec(fieldApplicationID, 4, 0)...)
+		return append(body, ipfixSpec(fieldApplicationName, 8, 0)...)
+	}
+
 	announce := func() []byte {
 		return ipfixMessage(0,
-			ipfixOptionsTemplate(700,
-				ipfixSpec(fieldApplicationID, 4, 0),
-				ipfixSpec(fieldApplicationName, 8, 0)),
-			ipfixOptionsTemplate(701,
-				ipfixSpec(fieldApplicationID, 4, 0),
-				ipfixSpec(fieldApplicationName, 8, 0)))
+			flowSet(ipfixOptionsTemplateSetID, optionsBody(700)),
+			flowSet(ipfixOptionsTemplateSetID, optionsBody(701)))
 	}
 
 	tests := []struct {
-		name     string
-		withdraw []byte
-		want     int
+		name string
+		set  []byte
+		want int
 	}{
 		{
-			name:     "one template id",
-			withdraw: ipfixWithdrawal(ipfixOptionsTemplateSetID, 700),
-			want:     1,
+			name: "one template id",
+			set:  ipfixWithdrawal(ipfixOptionsTemplateSetID, 700),
+			want: 2,
 		},
 		{
-			name:     "several in one set",
-			withdraw: ipfixWithdrawal(ipfixOptionsTemplateSetID, 700, 701),
-			want:     0,
+			name: "several in one set",
+			set:  ipfixWithdrawal(ipfixOptionsTemplateSetID, 700, 701),
+			want: 2,
 		},
 		{
-			name:     "all options templates",
-			withdraw: ipfixWithdrawal(ipfixOptionsTemplateSetID, ipfixOptionsTemplateSetID),
-			want:     0,
+			name: "all options templates",
+			set:  ipfixWithdrawal(ipfixOptionsTemplateSetID, ipfixOptionsTemplateSetID),
+			want: 2,
+		},
+		{
+			// The announcement sits behind the withdrawal in one set, so it
+			// is read only when the reader steps the right four octets.
+			name: "announcement behind a withdrawal",
+			set: flowSet(ipfixOptionsTemplateSetID,
+				append(be16(be16(nil, 700), 0), optionsBody(702)...)),
+			want: 3,
 		},
 	}
 
@@ -801,8 +851,8 @@ func TestDecodeIPFIX_HonoursOptionsTemplateWithdrawal(t *testing.T) {
 				t.Fatalf("options templates held = %d, want 2 before the withdrawal", got)
 			}
 
-			if _, err := d.Decode(testExporter, ipfixMessage(1, tt.withdraw), nil); err != nil {
-				t.Fatalf("Decode() error = %v, want the withdrawal accepted", err)
+			if _, err := d.Decode(testExporter, ipfixMessage(1, tt.set), nil); err != nil {
+				t.Fatalf("Decode() error = %v, want the set accepted", err)
 			}
 			if got := optionsHeld(t, d); got != tt.want {
 				t.Errorf("options templates held = %d, want %d", got, tt.want)
@@ -957,10 +1007,12 @@ func TestDecodeIPFIX_BytesReported(t *testing.T) {
 		},
 		{
 			// RFC 7011 section 6.2 allows any width from one to eight
-			// octets, and beUint takes only 1, 2, 4 and 8.
-			name:   "octetDeltaCount in three octets",
-			specs:  [][]byte{ipfixSpec(fieldInBytes, 3, 0)},
-			record: []byte{0, 0x02, 0xBC},
+			// octets, so the odd widths carry a reading like the rest.
+			name:         "octetDeltaCount in three octets",
+			specs:        [][]byte{ipfixSpec(fieldInBytes, 3, 0)},
+			record:       []byte{0, 0x02, 0xBC},
+			wantBytes:    700,
+			wantReported: true,
 		},
 		{
 			name:         "postOctetDeltaCount alone",
@@ -982,9 +1034,11 @@ func TestDecodeIPFIX_BytesReported(t *testing.T) {
 			wantReported: true,
 		},
 		{
-			name:   "postOctetDeltaCount in three octets",
-			specs:  [][]byte{ipfixSpec(fieldOutBytes, 3, 0)},
-			record: []byte{0, 0x02, 0xBC},
+			name:         "postOctetDeltaCount in three octets",
+			specs:        [][]byte{ipfixSpec(fieldOutBytes, 3, 0)},
+			record:       []byte{0, 0x02, 0xBC},
+			wantBytes:    700,
+			wantReported: true,
 		},
 	}
 

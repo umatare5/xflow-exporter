@@ -2,6 +2,7 @@ package decoder
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net/netip"
 	"testing"
 	"time"
@@ -602,6 +603,48 @@ func TestDecodeNetFlowV9_AbsoluteClocksWinOverUptime(t *testing.T) {
 	}
 	if got := records[0].End; !got.Equal(time.UnixMilli(1_756_300_160_000)) {
 		t.Errorf("End = %v, want the absolute clock", got)
+	}
+}
+
+// A reduced dateTime is malformed rather than a small number: four octets of
+// milliseconds land in 1970 and one octet lands on the epoch, so the element
+// is skipped and the uptime pair stays the record's clock.
+func TestDecodeNetFlowV9_RejectsReducedAbsoluteClocks(t *testing.T) {
+	t.Parallel()
+
+	widths := []uint16{1, 2, 4}
+	for _, width := range widths {
+		t.Run(fmt.Sprintf("%d octets", width), func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+
+			tpl := flowSet(templateFlowSetID, templateSpec(fixtureV9TemplateID,
+				[2]uint16{fieldInBytes, 4},
+				[2]uint16{fieldFirstSwitched, 4},
+				[2]uint16{fieldLastSwitched, 4},
+				[2]uint16{fieldFlowStartMilliseconds, width},
+				[2]uint16{fieldFlowEndMilliseconds, width},
+			))
+
+			record := be32(be32(be32(nil, 100), 30_000), 45_000)
+			record = append(record, make([]byte, 2*width)...)
+
+			records, err := d.Decode(testExporter,
+				v9Packet(1, fixtureV9ODID, tpl, flowSet(fixtureV9TemplateID, record)), nil)
+			if err != nil {
+				t.Fatalf("Decode() error = %v, want nil", err)
+			}
+			if len(records) != 1 {
+				t.Fatalf("Decode() returned %d records, want 1", len(records))
+			}
+			if got := records[0].Start.Year(); got == 1970 {
+				t.Errorf("Start = %v, want the uptime clock rather than the epoch", records[0].Start)
+			}
+			if got := records[0].End.Year(); got == 1970 {
+				t.Errorf("End = %v, want the uptime clock rather than the epoch", records[0].End)
+			}
+		})
 	}
 }
 

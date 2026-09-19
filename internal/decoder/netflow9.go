@@ -67,10 +67,14 @@ const (
 	fieldSamplerRandomInterval = 50
 )
 
-// ipv4Len and ipv6Len guard the address field reads.
+// ipv4Len and ipv6Len guard the address field reads. The dateTime lengths are
+// the native widths RFC 7011 section 6.2 forbids reducing.
 const (
 	ipv4Len = 4
 	ipv6Len = 16
+
+	dateTimeSecondsLen      = 4
+	dateTimeMillisecondsLen = 8
 )
 
 // decodeNetFlowV9 parses one v9 datagram. Per-flowset problems are counted

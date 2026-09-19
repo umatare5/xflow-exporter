@@ -388,9 +388,10 @@ func addrFrom16(value [16]byte) netip.Addr {
 	return netip.AddrFrom16(value).Unmap()
 }
 
-// beUint reads a big-endian unsigned integer of 1, 2, 4 or 8 bytes. Any other
-// width reports false: the value cannot be represented, and guessing would
-// publish a number the device did not send.
+// beUint reads a big-endian unsigned integer of one to eight bytes. RFC 7011
+// section 6.2 lets an exporter carry an integer element in any width its value
+// fits, so the odd widths are as conformant as the powers of two. A wider or
+// empty field reports false rather than a number the device did not send.
 func beUint(value []byte) (uint64, bool) {
 	switch len(value) {
 	case 1:
@@ -401,6 +402,12 @@ func beUint(value []byte) (uint64, bool) {
 		return uint64(binary.BigEndian.Uint32(value)), true
 	case 8:
 		return binary.BigEndian.Uint64(value), true
+	case 3, 5, 6, 7:
+		var v uint64
+		for _, b := range value {
+			v = v<<8 | uint64(b)
+		}
+		return v, true
 	default:
 		return 0, false
 	}
@@ -435,19 +442,23 @@ func beUint32(value []byte) (uint32, bool) {
 }
 
 // unixSeconds and unixMilliseconds read an absolute flow clock. An epoch past
-// the signed range is garbage rather than an instant.
-
+// the signed range is garbage rather than an instant, and the dateTime types
+// take no reduced-size encoding (RFC 7011 section 6.2), so each reader holds
+// its element to the native width: four octets of milliseconds land in 1970
+// and one octet lands on the epoch itself.
 func unixSeconds(value []byte) (time.Time, bool) {
-	v, ok := beUint(value)
-	if !ok || v > math.MaxInt64 {
+	if len(value) != dateTimeSecondsLen {
 		return time.Time{}, false
 	}
-	return time.Unix(int64(v), 0), true
+	return time.Unix(int64(binary.BigEndian.Uint32(value)), 0), true
 }
 
 func unixMilliseconds(value []byte) (time.Time, bool) {
-	v, ok := beUint(value)
-	if !ok || v > math.MaxInt64 {
+	if len(value) != dateTimeMillisecondsLen {
+		return time.Time{}, false
+	}
+	v := binary.BigEndian.Uint64(value)
+	if v > math.MaxInt64 {
 		return time.Time{}, false
 	}
 	return time.UnixMilli(int64(v)), true

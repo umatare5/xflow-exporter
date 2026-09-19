@@ -475,32 +475,6 @@ func (d *domainState) pruneExpiredLocked(now time.Time, ttl time.Duration) {
 	}
 }
 
-// remove withdraws one template.
-func (s *templateStore) remove(key domainKey, id uint16) {
-	d := s.domain(key)
-	if d == nil {
-		return
-	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	delete(d.templates, id)
-}
-
-// removeAll withdraws every template of one kind in the domain.
-func (s *templateStore) removeAll(key domainKey, options bool) {
-	d := s.domain(key)
-	if d == nil {
-		return
-	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	for id, t := range d.templates {
-		if t.options == options {
-			delete(d.templates, id)
-		}
-	}
-}
-
 // lookup returns one template, treating a template past the TTL as absent:
 // an orphaned template decoding new records would trust a schema the device
 // may have replaced.
