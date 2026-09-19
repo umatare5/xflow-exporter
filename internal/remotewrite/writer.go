@@ -4,6 +4,7 @@ package remotewrite
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -55,7 +56,7 @@ func New(cfg config.RemoteWrite, gatherer prometheus.Gatherer) (*Writer, error) 
 
 	api, err := remote.NewAPI(base, options...)
 	if err != nil {
-		return nil, fmt.Errorf("building the remote write client for %q: %w", cfg.URL, err)
+		return nil, fmt.Errorf("building the remote write client: %w", withoutURL(err))
 	}
 
 	return &Writer{
@@ -68,12 +69,24 @@ func New(cfg config.RemoteWrite, gatherer prometheus.Gatherer) (*Writer, error) 
 	}, nil
 }
 
+// withoutURL returns an error's reason without the endpoint a url.Error
+// repeats. The configured URL may carry userinfo, and the transport wraps
+// every failed write in one, so an unredacted error reaches the log on each
+// interval the endpoint is unreachable rather than once at start-up.
+func withoutURL(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return urlErr.Err
+	}
+	return err
+}
+
 // splitEndpoint separates the configured URL into the base the client dials
 // and the path it posts to.
 func splitEndpoint(endpoint string) (base, path string, err error) {
 	parsed, err := url.Parse(endpoint)
 	if err != nil {
-		return "", "", fmt.Errorf("invalid remote write URL %q: %w", endpoint, err)
+		return "", "", fmt.Errorf("invalid remote write URL: %w", withoutURL(err))
 	}
 
 	path = parsed.Path
@@ -99,7 +112,7 @@ func (w *Writer) Run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := w.send(ctx); err != nil {
-				slog.Error("Failed to ship metrics to the remote endpoint", "error", err)
+				slog.Error("Failed to ship metrics to the remote endpoint", "error", withoutURL(err))
 			}
 		}
 	}

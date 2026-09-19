@@ -364,7 +364,11 @@ func (c *Config) validateRemoteWrite() error {
 
 	parsed, err := url.Parse(r.URL)
 	if err != nil {
-		return fmt.Errorf("invalid remote write URL %q: %w", r.URL, err)
+		// A url.Error repeats the string it failed on, and the configured
+		// endpoint may carry userinfo, so only the reason inside it is safe
+		// to report. Nothing here can redact the string: the parse that
+		// would have separated its parts is the one that failed.
+		return fmt.Errorf("invalid remote write URL: %w", errors.Unwrap(err))
 	}
 
 	validationRules := []struct {
@@ -373,11 +377,11 @@ func (c *Config) validateRemoteWrite() error {
 	}{
 		{
 			parsed.Scheme != "http" && parsed.Scheme != "https",
-			"remote write URL must be http or https: " + r.URL,
+			"remote write URL must be http or https: " + parsed.Redacted(),
 		},
 		{
 			parsed.Host == "",
-			"remote write URL must carry a host: " + r.URL,
+			"remote write URL must carry a host: " + parsed.Redacted(),
 		},
 		{
 			r.Interval <= 0,

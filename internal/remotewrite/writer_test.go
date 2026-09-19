@@ -2,9 +2,11 @@ package remotewrite
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -104,11 +106,11 @@ func testRegistry(t *testing.T) *prometheus.Registry {
 }
 
 // newTestWriter builds a writer aimed at the stub with a pinned clock.
-func newTestWriter(t *testing.T, url string, reg prometheus.Gatherer) *Writer {
+func newTestWriter(t *testing.T, endpoint string, reg prometheus.Gatherer) *Writer {
 	t.Helper()
 
 	w, err := New(config.RemoteWrite{
-		URL:      url,
+		URL:      endpoint,
 		Interval: time.Minute,
 		Timeout:  5 * time.Second,
 	}, reg)
@@ -382,5 +384,35 @@ func TestNew_RejectsABrokenURL(t *testing.T) {
 
 	if _, err := New(config.RemoteWrite{URL: "://not a url"}, prometheus.NewRegistry()); err == nil {
 		t.Error("New() error = nil for a malformed URL, want it refused")
+	}
+}
+
+// TestNew_KeepsTheCredentialOutOfItsErrors pins the redaction. A url.Error
+// repeats the string it failed on, so an endpoint configured with userinfo
+// put the password into the start-up error, and the transport puts it into a
+// log line on every interval the endpoint is unreachable.
+func TestNew_KeepsTheCredentialOutOfItsErrors(t *testing.T) {
+	t.Parallel()
+
+	const secret = "s3cr3t"
+
+	_, err := New(config.RemoteWrite{URL: "://user:" + secret + "@example.test/write"},
+		prometheus.NewRegistry())
+	if err == nil {
+		t.Fatal("New() error = nil for a malformed URL, want it refused")
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Errorf("New() error = %q, want the credential redacted", err)
+	}
+
+	// The same shape reaches the log through every failed write, the client
+	// wrapping its transport error in a url.Error of its own.
+	wrapped := &url.Error{
+		Op:  "Post",
+		URL: "https://user:" + secret + "@example.test/write",
+		Err: errors.New("connection refused"),
+	}
+	if got := withoutURL(wrapped).Error(); strings.Contains(got, secret) {
+		t.Errorf("withoutURL() = %q, want the credential redacted", got)
 	}
 }
