@@ -44,6 +44,7 @@ type DecoderCollector struct {
 	clockInversionsDesc    *prometheus.Desc
 	samplingDesc           *prometheus.Desc
 	samplerRateDesc        *prometheus.Desc
+	samplerChangesDesc     *prometheus.Desc
 	declRefusedDesc        *prometheus.Desc
 	domainsRefusedDesc     *prometheus.Desc
 	exportersRefusedDesc   *prometheus.Desc
@@ -102,7 +103,7 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		),
 		samplingUnresolvedDesc: prometheus.NewDesc(
 			"xflow_sampling_unresolved_flows_total",
-			"Records on v9 and IPFIX no declaration settled a sampling rate for, taken uncorrected, per domain",
+			"Records no declaration settled a sampling rate for, taken uncorrected, per domain",
 			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
 		clockInversionsDesc: prometheus.NewDesc(
@@ -118,7 +119,12 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		samplerRateDesc: prometheus.NewDesc(
 			"xflow_sampler_rate",
 			"Packet sampling rate a device declared for one named sampler",
-			[]string{labelExporter, labelVersion, labelSampler}, nil,
+			[]string{labelExporter, labelVersion, labelODID, labelSampler}, nil,
+		),
+		samplerChangesDesc: prometheus.NewDesc(
+			"xflow_sampler_rate_changes_total",
+			"Declarations that gave a sampler a rate differing from the one the domain held for it",
+			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
 		declRefusedDesc: prometheus.NewDesc(
 			"xflow_sampling_declarations_refused_total",
@@ -163,6 +169,7 @@ func (c *DecoderCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.clockInversionsDesc
 	ch <- c.samplingDesc
 	ch <- c.samplerRateDesc
+	ch <- c.samplerChangesDesc
 	ch <- c.declRefusedDesc
 	ch <- c.domainsRefusedDesc
 	ch <- c.stringsRefusedDesc
@@ -238,8 +245,27 @@ func (c *DecoderCollector) collectSamplers(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			c.samplerRateDesc, prometheus.GaugeValue, float64(sampler.Rate),
 			sampler.Exporter.String(), sampler.Version.String(),
+			strconv.FormatUint(uint64(sampler.ODID), 10),
 			strconv.FormatUint(uint64(sampler.Sampler), 10))
 	}
+}
+
+// collectSampling reports one domain's correction accounting. A device that
+// never declared and never named a sampler reads no differently from one
+// sampling at 1:1, so only a sampling device gets the series.
+func (c *DecoderCollector) collectSampling(
+	ch chan<- prometheus.Metric, domain decoder.DomainSnapshot, exporter, version, odid string,
+) {
+	if !domain.Sampled {
+		return
+	}
+
+	ch <- prometheus.MustNewConstMetric(
+		c.samplingUnresolvedDesc, prometheus.CounterValue,
+		float64(domain.SamplingUnresolved), exporter, version, odid)
+	ch <- prometheus.MustNewConstMetric(
+		c.samplerChangesDesc, prometheus.CounterValue,
+		float64(domain.SamplerRateChanges), exporter, version, odid)
 }
 
 // collectDomains reports the per-observation-domain state.
@@ -262,13 +288,7 @@ func (c *DecoderCollector) collectDomains(ch chan<- prometheus.Metric) {
 				c.templatesDesc, prometheus.GaugeValue,
 				float64(domain.OptionsTemplates), exporter, version, odid, templateKindOptions)
 
-			// A device that never declared reads no differently from one
-			// sampling at 1:1, so only a sampling device gets the series.
-			if domain.Sampled {
-				ch <- prometheus.MustNewConstMetric(
-					c.samplingUnresolvedDesc, prometheus.CounterValue,
-					float64(domain.SamplingUnresolved), exporter, version, odid)
-			}
+			c.collectSampling(ch, domain, exporter, version, odid)
 		case flow.VersionSFlowV5:
 			if domain.PoolMeasured {
 				ch <- prometheus.MustNewConstMetric(
@@ -280,7 +300,12 @@ func (c *DecoderCollector) collectDomains(ch chan<- prometheus.Metric) {
 					c.samplesDroppedDesc, prometheus.CounterValue,
 					float64(domain.SamplesDropped), exporter, version, odid)
 			}
-		case flow.VersionNetFlowV5, flow.VersionNetFlowV8, flow.VersionUnknown:
+		case flow.VersionNetFlowV5:
+			// No templates, and the sampler a record names is one v5 can
+			// never declare a rate for. The correction counters are what say
+			// so; the sequence below is the rest of what the domain is for.
+			c.collectSampling(ch, domain, exporter, version, odid)
+		case flow.VersionNetFlowV8, flow.VersionUnknown:
 			// Neither templates nor samplers; the sequence below is all these
 			// domains are opened for.
 		}

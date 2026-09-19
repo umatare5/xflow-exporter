@@ -48,8 +48,8 @@ func TestDecoderCollector_Describe(t *testing.T) {
 	for range ch {
 		count++
 	}
-	if count != 18 {
-		t.Errorf("Describe() emitted %d descriptors, want 18", count)
+	if count != 19 {
+		t.Errorf("Describe() emitted %d descriptors, want 19", count)
 	}
 }
 
@@ -564,8 +564,8 @@ func TestDecoderCollector_ADomainOfSeveralSamplersAuditsThemIndividually(t *test
 	expected := `
 # HELP xflow_sampler_rate Packet sampling rate a device declared for one named sampler
 # TYPE xflow_sampler_rate gauge
-xflow_sampler_rate{exporter_address="192.0.2.21",sampler="1",version="netflow_v9"} 32
-xflow_sampler_rate{exporter_address="192.0.2.21",sampler="2",version="netflow_v9"} 64
+xflow_sampler_rate{exporter_address="192.0.2.21",odid="256",sampler="1",version="netflow_v9"} 32
+xflow_sampler_rate{exporter_address="192.0.2.21",odid="256",sampler="2",version="netflow_v9"} 64
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "xflow_sampler_rate"); err != nil {
 		t.Errorf("CollectAndCompare() mismatch: %v", err)
@@ -575,31 +575,47 @@ xflow_sampler_rate{exporter_address="192.0.2.21",sampler="2",version="netflow_v9
 	}
 }
 
-// TestDecoderCollector_UnresolvedRidesTheSamplingDevicesAlone pins the gate on
-// the audit counter. A device that never declared is not sampling, so a zero
+// TestDecoderCollector_CorrectionAuditRidesTheSamplingDevicesAlone pins the
+// gate on the audit counters. A device that never declared is not sampling, so a zero
 // on it would copy xflow_flows_total across the fleet and read as a fault
 // where there is none.
-func TestDecoderCollector_UnresolvedRidesTheSamplingDevicesAlone(t *testing.T) {
+func TestDecoderCollector_CorrectionAuditRidesTheSamplingDevicesAlone(t *testing.T) {
 	t.Parallel()
 
 	c := NewDecoderCollector(stubDecoderSource{domainList: []decoder.DomainSnapshot{
 		{
 			Exporter: netip.MustParseAddr("192.0.2.1"), ODID: 1,
-			Version: flow.VersionNetFlowV9, SamplingUnresolved: 3, Sampled: true,
+			Version: flow.VersionNetFlowV9, SamplingUnresolved: 3, SamplerRateChanges: 2, Sampled: true,
 		},
 		{
 			Exporter: netip.MustParseAddr("192.0.2.2"), ODID: 2,
-			Version: flow.VersionNetFlowV9, SamplingUnresolved: 7, Sampled: false,
+			Version: flow.VersionNetFlowV9, SamplingUnresolved: 7, SamplerRateChanges: 4, Sampled: false,
+		},
+		{
+			// v5 declares no rate anywhere, so its records reach the end of
+			// the precedence by construction. The series is the only place
+			// that shows it.
+			Exporter: netip.MustParseAddr("192.0.2.3"), ODID: 0,
+			Version: flow.VersionNetFlowV5, SamplingUnresolved: 5, Sampled: true,
+		},
+		{
+			Exporter: netip.MustParseAddr("192.0.2.4"), ODID: 0,
+			Version: flow.VersionNetFlowV8, SamplingUnresolved: 9, Sampled: true,
 		},
 	}})
 
-	const want = `# HELP xflow_sampling_unresolved_flows_total Records on v9 and IPFIX no declaration settled a sampling rate for, taken uncorrected, per domain
+	const want = `# HELP xflow_sampling_unresolved_flows_total Records no declaration settled a sampling rate for, taken uncorrected, per domain
 # TYPE xflow_sampling_unresolved_flows_total counter
 xflow_sampling_unresolved_flows_total{exporter_address="192.0.2.1",odid="1",version="netflow_v9"} 3
+xflow_sampling_unresolved_flows_total{exporter_address="192.0.2.3",odid="0",version="netflow_v5"} 5
+# HELP xflow_sampler_rate_changes_total Declarations that gave a sampler a rate differing from the one the domain held for it
+# TYPE xflow_sampler_rate_changes_total counter
+xflow_sampler_rate_changes_total{exporter_address="192.0.2.1",odid="1",version="netflow_v9"} 2
+xflow_sampler_rate_changes_total{exporter_address="192.0.2.3",odid="0",version="netflow_v5"} 0
 `
 
 	if err := testutil.CollectAndCompare(c, strings.NewReader(want),
-		"xflow_sampling_unresolved_flows_total"); err != nil {
+		"xflow_sampling_unresolved_flows_total", "xflow_sampler_rate_changes_total"); err != nil {
 		t.Errorf("CollectAndCompare() error = %v", err)
 	}
 }

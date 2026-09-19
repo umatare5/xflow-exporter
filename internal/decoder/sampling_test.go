@@ -20,6 +20,12 @@ const (
 // samplingOptionsTemplate announces a system-scoped sampler table, with or
 // without the samplerId a data record names.
 func samplingOptionsTemplate(named bool) []byte {
+	return samplingOptionsTemplateOf(fieldSamplerID, named)
+}
+
+// samplingOptionsTemplateOf announces the same table keyed by whichever
+// element names the declaration, the samplerId or PSAMP's selectorId.
+func samplingOptionsTemplateOf(idField uint16, named bool) []byte {
 	body := make([]byte, 6)
 	binary.BigEndian.PutUint16(body[0:2], samplingOptionsID)
 	binary.BigEndian.PutUint16(body[2:4], 4)
@@ -31,7 +37,7 @@ func samplingOptionsTemplate(named bool) []byte {
 	body = be16(body, 1) // scope: system
 	body = be16(body, 4)
 	if named {
-		body = be16(body, fieldSamplerID)
+		body = be16(body, idField)
 		body = be16(body, 4)
 	}
 	body = be16(body, fieldSamplerRandomInterval)
@@ -42,9 +48,17 @@ func samplingOptionsTemplate(named bool) []byte {
 // samplingDeclaration builds one options datagram declaring rates, each entry
 // a samplerId and its rate when named.
 func samplingDeclaration(sequence uint32, named bool, entries ...[2]uint32) []byte {
+	return samplingDeclarationOn(samplingODID, fieldSamplerID, sequence, named, entries...)
+}
+
+// samplingDeclarationOn builds the same datagram for one observation domain,
+// naming its entries by whichever element the template announced.
+func samplingDeclarationOn(
+	odid uint32, idField uint16, sequence uint32, named bool, entries ...[2]uint32,
+) []byte {
 	sets := make([][]byte, 0, len(entries)+1)
 	if sequence == 1 {
-		sets = append(sets, samplingOptionsTemplate(named))
+		sets = append(sets, samplingOptionsTemplateOf(idField, named))
 	}
 	for _, entry := range entries {
 		record := be32(make([]byte, 0, 12), 9) // scope value
@@ -53,13 +67,19 @@ func samplingDeclaration(sequence uint32, named bool, entries ...[2]uint32) []by
 		}
 		sets = append(sets, flowSet(samplingOptionsID, be32(record, entry[1])))
 	}
-	return v9Packet(sequence, samplingODID, sets...)
+	return v9Packet(sequence, odid, sets...)
 }
 
 func samplingTemplate(named bool) []byte {
+	return samplingTemplateOf(fieldSamplerID, named)
+}
+
+// samplingTemplateOf announces a flow template naming its selection process
+// by the given element.
+func samplingTemplateOf(idField uint16, named bool) []byte {
 	fields := [][2]uint16{{fieldIPv4SrcAddr, 4}, {fieldIPv4DstAddr, 4}, {fieldInBytes, 4}}
 	if named {
-		fields = append(fields, [2]uint16{fieldSamplerID, 4})
+		fields = append(fields, [2]uint16{idField, 4})
 	}
 	return flowSet(templateFlowSetID, templateSpec(samplingTemplateID, fields...))
 }
@@ -178,6 +198,20 @@ func TestSamplingRate_ResolvesTheRateThatMeasuredTheRecord(t *testing.T) {
 				samplingDeclaration(2, named, [2]uint32{1, 64}),
 			},
 			odid: options, named: true, samplerID: 1, wantRate: 64, wantSeries: 64,
+		},
+		{
+			// Cisco gives an unsampled cache sampler 0, so inheriting the one
+			// rate the device declared corrects counts nothing measured.
+			name:    "sampler 0 the device never declared",
+			declare: [][]byte{samplingDeclaration(1, named, [2]uint32{1, 32})},
+			odid:    options, named: true, samplerID: 0, wantRate: 0, wantSeries: 32,
+		},
+		{
+			// The convention is the absence of a declaration. A device that
+			// declares 0 is sampling at what it says.
+			name:    "sampler 0 the device declared",
+			declare: [][]byte{samplingDeclaration(1, named, [2]uint32{0, 32})},
+			odid:    options, named: true, samplerID: 0, wantRate: 32, wantSeries: 32,
 		},
 	}
 
@@ -409,7 +443,7 @@ func TestSamplerTable_StaysSampledAfterItsDeclarationsExpire(t *testing.T) {
 	t.Parallel()
 
 	table := &samplerTable{}
-	if !table.declare(0, 0, false, 32, 100) {
+	if ok, _ := table.declare(0, 0, false, 32, 100); !ok {
 		t.Fatal("declare() = false, want the first declaration held")
 	}
 
@@ -472,5 +506,240 @@ func TestSamplingUnresolved_RidesTheDeviceNotTheDomain(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("unresolved = %d, want the record taken uncorrected counted", count)
+	}
+}
+
+// TestSamplingUnresolved_LeavesTheUnsampledCacheUncounted pins the counter to
+// records a rate is owed to. A router exporting one sampled cache and one
+// unsampled names sampler 0 for every record of the second, so counting them
+// would leave the series rising for as long as that cache ran.
+func TestSamplingUnresolved_LeavesTheUnsampledCacheUncounted(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	decodeSampling(t, d, samplingDeclaration(1, true, [2]uint32{1, 32}))
+	decodeSampling(t, d, v9Packet(2, samplingODID, samplingTemplate(true)))
+	decodeSampling(t, d, v9Packet(3, samplingODID,
+		flowSet(samplingTemplateID, samplingRecord(0, true), samplingRecord(0, true))))
+
+	count, sampled := domainSampling(d, samplingODID)
+	if !sampled {
+		t.Fatal("sampled = false, want the declaration still known")
+	}
+	if count != 0 {
+		t.Errorf("xflow_sampling_unresolved_flows_total = %d, want the unsampled cache uncounted", count)
+	}
+}
+
+// TestSamplerRate_KeepsEachDomainsDeclarationApart pins the table's key. A
+// samplerId is numbered per export process, so a chassis renumbering one per
+// linecard declares the same id at two rates: keying by the id alone left the
+// second announcement overwriting the first, and every record of the first
+// domain corrected by its sibling's rate.
+func TestSamplerRate_KeepsEachDomainsDeclarationApart(t *testing.T) {
+	t.Parallel()
+
+	const sibling = 258
+
+	d := newTestDecoder()
+	decodeSampling(t, d, samplingDeclarationOn(samplingODID, fieldSamplerID, 1, true, [2]uint32{1, 32}))
+	decodeSampling(t, d, samplingDeclarationOn(sibling, fieldSamplerID, 1, true, [2]uint32{1, 1024}))
+
+	for _, odid := range []uint32{samplingODID, sibling, samplingDataODID} {
+		decodeSampling(t, d, v9Packet(10, odid, samplingTemplate(true)))
+	}
+
+	tests := []struct {
+		odid     uint32
+		wantRate uint32
+		wantOwed uint64
+	}{
+		{odid: samplingODID, wantRate: 32},
+		{odid: sibling, wantRate: 1024},
+		// A domain that declared nothing reaches across the device, where the
+		// two disagree. Correcting by either is a wrong reading.
+		{odid: samplingDataODID, wantRate: 0, wantOwed: 1},
+	}
+
+	for _, tc := range tests {
+		records := decodeSampling(t, d, v9Packet(11, tc.odid,
+			flowSet(samplingTemplateID, samplingRecord(1, true))))
+		if got := records[0].SamplingRate; got != tc.wantRate {
+			t.Errorf("odid %d: SamplingRate = %d, want %d", tc.odid, got, tc.wantRate)
+		}
+		if count, _ := domainSampling(d, tc.odid); count != tc.wantOwed {
+			t.Errorf("odid %d: xflow_sampling_unresolved_flows_total = %d, want %d",
+				tc.odid, count, tc.wantOwed)
+		}
+	}
+}
+
+// domainSamplerChanges reads what the change counter is built from.
+func domainSamplerChanges(d *Decoder, odid uint32) uint64 {
+	for _, snapshot := range d.Domains() {
+		if snapshot.ODID == odid {
+			return snapshot.SamplerRateChanges
+		}
+	}
+	return 0
+}
+
+// TestSamplerRateChanges_CountsTheRateADomainReplaced pins the audit trail a
+// re-declaration leaves. The table holds one rate per identifier, so a device
+// that changes a sampler's rate mid-flight corrects the records either side
+// of the announcement differently with nothing else saying when.
+func TestSamplerRateChanges_CountsTheRateADomainReplaced(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	decodeSampling(t, d, samplingDeclaration(1, true, [2]uint32{1, 32}))
+	if got := domainSamplerChanges(d, samplingODID); got != 0 {
+		t.Errorf("xflow_sampler_rate_changes_total = %d after the first declaration, want 0", got)
+	}
+
+	decodeSampling(t, d, samplingDeclaration(2, true, [2]uint32{1, 32}))
+	if got := domainSamplerChanges(d, samplingODID); got != 0 {
+		t.Errorf("xflow_sampler_rate_changes_total = %d after a re-announcement, want 0", got)
+	}
+
+	decodeSampling(t, d, samplingDeclaration(3, true, [2]uint32{1, 64}))
+	if got := domainSamplerChanges(d, samplingODID); got != 1 {
+		t.Errorf("xflow_sampler_rate_changes_total = %d after a changed rate, want 1", got)
+	}
+}
+
+// TestSelectorRate_ResolvesWithinItsObservationDomain pins PSAMP's scope.
+// IANA numbers a selectorId within the domain, so the same value elsewhere is
+// another selector: reaching for it would correct a record by a rate no
+// process tied to it. Two selectors go unread altogether until IE 302 is,
+// each record taking whichever declaration landed last.
+func TestSelectorRate_ResolvesWithinItsObservationDomain(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	decodeSampling(t, d, samplingDeclarationOn(samplingODID, fieldSelectorID, 1, true,
+		[2]uint32{1, 32}, [2]uint32{2, 1024}))
+	for _, odid := range []uint32{samplingODID, samplingDataODID} {
+		decodeSampling(t, d, v9Packet(10, odid, samplingTemplateOf(fieldSelectorID, true)))
+	}
+
+	records := decodeSampling(t, d, v9Packet(11, samplingODID,
+		flowSet(samplingTemplateID, samplingRecord(1, true), samplingRecord(2, true))))
+	if records[0].SamplingRate != 32 || records[1].SamplingRate != 1024 {
+		t.Errorf("SamplingRate = %d and %d, want each selector's own 32 and 1024",
+			records[0].SamplingRate, records[1].SamplingRate)
+	}
+
+	sibling := decodeSampling(t, d, v9Packet(12, samplingDataODID,
+		flowSet(samplingTemplateID, samplingRecord(1, true))))
+	if got := sibling[0].SamplingRate; got != 0 {
+		t.Errorf("SamplingRate = %d in a domain that declared nothing, want the selector out of reach", got)
+	}
+	if count, _ := domainSampling(d, samplingDataODID); count != 1 {
+		t.Errorf("xflow_sampling_unresolved_flows_total = %d, want the record counted", count)
+	}
+}
+
+// TestSamplingUnresolved_OwesTheExpiredZeroWithoutInheriting pins what a
+// device that declared a rate for samplerId 0 gets once that declaration ages
+// out. Naming a rate for 0 takes the identifier out of Cisco's
+// unsampled-cache convention, so its records are owed one afterwards rather
+// than complete as they stand.
+//
+// They inherit nothing. The rate another sampler still declares measured a
+// different cache, and handing it over would multiply an unsampled count by
+// that sampler's rate.
+//
+// The domain has to be fed before the sweep: a domain idle past the TTL is
+// evicted whole, and its device's table goes with it.
+func TestSamplingUnresolved_OwesTheExpiredZeroWithoutInheriting(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	at := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+	d.now = func() time.Time { return at }
+	d.templates.now = func() time.Time { return at }
+
+	decodeSampling(t, d, samplingDeclaration(1, true, [2]uint32{unsampledSamplerID, 32}, [2]uint32{5, 1024}))
+	decodeSampling(t, d, v9Packet(2, samplingODID, samplingTemplate(true)))
+
+	read := func(sequence uint32) uint32 {
+		records := decodeSampling(t, d, v9Packet(sequence, samplingODID,
+			flowSet(samplingTemplateID, samplingRecord(unsampledSamplerID, true))))
+		return records[0].SamplingRate
+	}
+	if got := read(3); got != 32 {
+		t.Fatalf("SamplingRate = %d, want 32 while the device stands by its declaration", got)
+	}
+	before, _ := domainSampling(d, samplingODID)
+
+	// Sampler 5 keeps being announced; only the declaration for 0 goes idle.
+	at = at.Add(config.DefaultParserTemplateTTL + time.Minute)
+	decodeSampling(t, d, samplingDeclaration(4, true, [2]uint32{5, 1024}))
+	decodeSampling(t, d, v9Packet(5, samplingODID, samplingTemplate(true)))
+	d.SweepDomains()
+
+	if got := read(6); got != 0 {
+		t.Errorf("SamplingRate = %d, want 0 rather than the rate sampler 5 declares", got)
+	}
+	if count, _ := domainSampling(d, samplingODID); count != before+1 {
+		t.Errorf("xflow_sampling_unresolved_flows_total = %d, want %d", count, before+1)
+	}
+}
+
+// TestSamplerTable_ReadsWhatTheDeviceSaidAboutItsSelection pins what the
+// table concludes from a declaration and from the identifier a record names.
+//
+// Naming a selection process is the device saying it samples, which v5 states
+// the only way it can and v9 and IPFIX state before their first options
+// record arrives -- a window a switch spends a minute or more in after every
+// restart. Naming nothing is not that evidence: a device that never samples
+// would otherwise publish a counter rising once per record.
+//
+// Naming samplerId 0 is not that evidence either. Cisco marks a cache it did
+// not sample that way, and a declaration that named no sampler says nothing
+// about 0, so the convention stands and the record is complete.
+func TestSamplerTable_ReadsWhatTheDeviceSaidAboutItsSelection(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		plainRate      uint32
+		named          bool
+		sampler        uint32
+		wantSampled    bool
+		wantUnresolved uint64
+	}{
+		"a record naming an undeclared sampler": {
+			named: true, sampler: 7, wantSampled: true, wantUnresolved: 1,
+		},
+		"a record naming nothing": {
+			wantUnresolved: 1,
+		},
+		"a record naming the unsampled cache": {
+			named: true, sampler: unsampledSamplerID,
+		},
+		"a rate declared for the domain, and a record naming the unsampled cache": {
+			plainRate: 32, named: true, sampler: unsampledSamplerID, wantSampled: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			if tc.plainRate != 0 {
+				decodeSampling(t, d, samplingDeclaration(1, false, [2]uint32{0, tc.plainRate}))
+			}
+			decodeSampling(t, d, v9Packet(2, samplingODID, samplingTemplate(tc.named)))
+			decodeSampling(t, d, v9Packet(3, samplingODID,
+				flowSet(samplingTemplateID, samplingRecord(tc.sampler, tc.named))))
+
+			count, sampled := domainSampling(d, samplingODID)
+			if sampled != tc.wantSampled {
+				t.Errorf("sampled = %v, want %v", sampled, tc.wantSampled)
+			}
+			if count != tc.wantUnresolved {
+				t.Errorf("xflow_sampling_unresolved_flows_total = %d, want %d", count, tc.wantUnresolved)
+			}
+		})
 	}
 }

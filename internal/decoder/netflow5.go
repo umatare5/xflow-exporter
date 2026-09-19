@@ -72,6 +72,27 @@ func (d *Decoder) decodeNetFlowV5(
 	return dst, nil
 }
 
+// netflowV5SamplerRate resolves the sampler a record names in the second pad
+// field. The format reserves those two bytes, and a Cisco router sampling its
+// main cache writes the sampler's export id there while leaving the header's
+// own sampling field zero -- so the identifier reaches a collector and the
+// rate never does. Resolving it against the device's table settles nothing on
+// v5, which has no options record to declare with, and the domain counts the
+// record as uncorrected instead.
+//
+// A device at its domain budget loses that accounting rather than the record.
+func netflowV5SamplerRate(domain *domainState, samplerID uint32) uint32 {
+	if domain == nil || samplerID == unsampledSamplerID {
+		return 0
+	}
+
+	rate, owed := domain.correctionFor(samplerID, true)
+	if owed {
+		domain.samplingUnresolved.Add(1)
+	}
+	return rate
+}
+
 // netflowV5Record reads one 48-byte record. The slice is at least that long,
 // which decodeNetFlowV5 has established.
 func netflowV5Record(
@@ -80,6 +101,10 @@ func netflowV5Record(
 	start, end, ok := clock.anchorPair(
 		binary.BigEndian.Uint32(record[24:28]), binary.BigEndian.Uint32(record[28:32]))
 	domain.countClockPair(!ok)
+
+	if samplingRate == 0 {
+		samplingRate = netflowV5SamplerRate(domain, uint32(binary.BigEndian.Uint16(record[46:48])))
+	}
 
 	return flow.Record{
 		Exporter: exporter,

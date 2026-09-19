@@ -111,46 +111,75 @@ type samplerEntry struct {
 	lastSeen int64
 }
 
+// samplerRef names one declaration inside a device's table. Both identifiers
+// are stored per domain, and how far a lookup reaches is the record's to
+// decide: a samplerId announced under Cisco's Scope System describes the
+// device, while IANA scopes a selectorId to the observation domain.
+type samplerRef struct {
+	odid uint32
+	id   uint32
+}
+
 // samplerTable holds one device's sampling declarations for one protocol.
-// rates is keyed by the samplerId (IE 48) a data record names; plain holds
-// the rate a domain declared without naming one, keyed by that domain.
+// named is keyed by the samplerId (IE 48) or selectorId (IE 302) a data
+// record names; plain holds the rate a domain declared without naming one,
+// keyed by that domain.
 type samplerTable struct {
 	mu    sync.RWMutex
-	rates map[uint32]samplerEntry
+	named map[samplerRef]samplerEntry
 	plain map[uint32]samplerEntry
 	// inherited is the one rate every declaration on this device agrees on,
 	// and zero where they carry more than one. A record whose own domain
 	// declared nothing takes it rather than a rate the device never tied
 	// to it.
 	inherited atomic.Uint32
-	// sampled marks a device that has declared at least once. It never
-	// clears, so an expiry that empties the table still reads as sampling.
+	// sampled marks a device known to sample, by a declaration or by a
+	// record naming its selection process. It never clears, so an expiry
+	// that empties the table still reads as sampling.
 	sampled atomic.Bool
+	// declaredZero marks a device that declared a rate for samplerId 0,
+	// which takes the identifier out of Cisco's unsampled-cache convention
+	// for good. It never clears either: a declaration the device stops
+	// announcing leaves its records owed a rate rather than complete.
+	declaredZero atomic.Bool
 }
 
-// declare records one announcement, reporting false where the device is at
-// its budget. A refusal leaves the table as it stood: evicting an entry the
+// declare records one announcement, reporting whether the table took it and
+// whether it replaced a rate the same domain had declared for the same
+// identifier. A refusal leaves the table as it stood: evicting an entry the
 // records still name would correct them by another sampler's rate.
-func (t *samplerTable) declare(odid, samplerID uint32, named bool, rate uint32, at int64) bool {
+func (t *samplerTable) declare(odid, id uint32, named bool, rate uint32, at int64) (ok, changed bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	key, target := odid, &t.plain
+	ref := samplerRef{odid: odid, id: id}
+	previous, held := t.plain[odid]
 	if named {
-		key, target = samplerID, &t.rates
+		previous, held = t.named[ref]
 	}
-	if _, held := (*target)[key]; !held {
-		if len(t.rates)+len(t.plain) >= maxSamplersPerExporter {
-			return false
-		}
-		if *target == nil {
-			*target = make(map[uint32]samplerEntry)
-		}
+	if !held && len(t.named)+len(t.plain) >= maxSamplersPerExporter {
+		return false, false
 	}
-	(*target)[key] = samplerEntry{rate: rate, lastSeen: at}
-	t.inherited.Store(soleRate(t.rates, t.plain))
+
+	entry := samplerEntry{rate: rate, lastSeen: at}
+	if named {
+		if t.named == nil {
+			t.named = make(map[samplerRef]samplerEntry)
+		}
+		t.named[ref] = entry
+	} else {
+		if t.plain == nil {
+			t.plain = make(map[uint32]samplerEntry)
+		}
+		t.plain[odid] = entry
+	}
+
+	t.inherited.Store(t.soleRateLocked())
 	t.sampled.Store(true)
-	return true
+	if named && id == unsampledSamplerID {
+		t.declaredZero.Store(true)
+	}
+	return true, held && previous.rate != rate
 }
 
 // expire drops every declaration the device stopped announcing before cutoff.
@@ -158,22 +187,49 @@ func (t *samplerTable) expire(cutoff int64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	for _, set := range []map[uint32]samplerEntry{t.rates, t.plain} {
-		for key, entry := range set {
-			if entry.lastSeen < cutoff {
-				delete(set, key)
-			}
+	for ref, entry := range t.named {
+		if entry.lastSeen < cutoff {
+			delete(t.named, ref)
 		}
 	}
-	t.inherited.Store(soleRate(t.rates, t.plain))
+	for odid, entry := range t.plain {
+		if entry.lastSeen < cutoff {
+			delete(t.plain, odid)
+		}
+	}
+	t.inherited.Store(t.soleRateLocked())
 }
 
-func (t *samplerTable) rateFor(samplerID uint32) (uint32, bool) {
+// declaredRate resolves what a record naming one identifier takes, reporting
+// whether the table settled the question at all.
+//
+// The record's own domain answers first. A samplerId then reaches across the
+// device's domains and stops undecided where those disagree, correcting by
+// one of several being a wrong reading rather than a missing one. A
+// selectorId does not reach: IANA numbers it within the domain, so the same
+// value elsewhere is a different selector.
+func (t *samplerTable) declaredRate(odid, id uint32, deviceWide bool) (rate uint32, decided bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	entry, ok := t.rates[samplerID]
-	return entry.rate, ok
+	if entry, held := t.named[samplerRef{odid: odid, id: id}]; held {
+		return entry.rate, true
+	}
+	if !deviceWide {
+		return 0, false
+	}
+
+	var sole uint32
+	for ref, entry := range t.named {
+		if ref.id != id {
+			continue
+		}
+		if sole != 0 && entry.rate != sole {
+			return 0, true
+		}
+		sole = entry.rate
+	}
+	return sole, sole != 0
 }
 
 // plainRate returns what one domain declared without naming a sampler.
@@ -184,18 +240,32 @@ func (t *samplerTable) plainRate(odid uint32) uint32 {
 	return t.plain[odid].rate
 }
 
-// soleRate returns the one rate every declaration agrees on, and zero where
-// they carry none or more than one. Zero is never stored, so it doubles as
-// the absent value.
-func soleRate(sets ...map[uint32]samplerEntry) uint32 {
+// markSampled records that the device samples on evidence other than a
+// declaration: a record naming a sampler or a selector. NetFlow v5 has
+// nothing else to give, declaring no rate anywhere, and a v9 or IPFIX device
+// reads as sampling before its first announcement arrives.
+func (t *samplerTable) markSampled() {
+	if !t.sampled.Load() {
+		t.sampled.Store(true)
+	}
+}
+
+// soleRateLocked returns the one rate every declaration agrees on, and zero
+// where they carry none or more than one. Zero is never stored, so it doubles
+// as the absent value. The table lock is held by the caller.
+func (t *samplerTable) soleRateLocked() uint32 {
 	var sole uint32
-	for _, set := range sets {
-		for _, entry := range set {
-			if sole != 0 && entry.rate != sole {
-				return 0
-			}
-			sole = entry.rate
+	for _, entry := range t.named {
+		if sole != 0 && entry.rate != sole {
+			return 0
 		}
+		sole = entry.rate
+	}
+	for _, entry := range t.plain {
+		if sole != 0 && entry.rate != sole {
+			return 0
+		}
+		sole = entry.rate
 	}
 	return sole
 }
@@ -205,6 +275,10 @@ func soleRate(sets ...map[uint32]samplerEntry) uint32 {
 type domainState struct {
 	mu        sync.RWMutex
 	templates map[uint16]*template
+
+	// odid is the observation domain this state was opened for, held so the
+	// record path reaches it without the store's key.
+	odid uint32
 
 	// lastSeen is when a datagram last named this domain, which the idle
 	// sweep reads to free the exporter's budget again.
@@ -246,6 +320,10 @@ type domainState struct {
 	// samplingUnresolved counts the records that reached the end of the
 	// correction precedence with nothing to apply.
 	samplingUnresolved atomic.Uint64
+	// samplerRateChanges counts the declarations that gave an identifier this
+	// domain had already declared a different rate. Every record decoded
+	// between the two was corrected by the rate then in force.
+	samplerRateChanges atomic.Uint64
 
 	// samplePool and samplesDropped accumulate the differences between one
 	// sampler's readings. The agent restarts its own counters on its terms,
@@ -282,8 +360,42 @@ func (d *domainState) countClockPair(inverted bool) {
 	}
 }
 
-// rateInForce is the rate a record carrying no samplerId takes: the domain's
+// correctionFor settles the rate that measured one record naming id, and
+// reports whether a rate is still owed to it. NetFlow's samplerId is the
+// device's and PSAMP's selectorId the domain's, which isSampler separates.
+//
+// Cisco names an unsampled cache with samplerId 0 rather than leaving the
+// element out, so a record naming an undeclared 0 is complete as it stands
+// and inherits nothing. A device that does declare 0 is taken at its word,
+// neither RFC 5477 nor IANA reserving the value, and an expiry then owes
+// those records a rate rather than handing them one the device never tied to
+// that cache.
+//
+// Naming any other identifier is the device saying it samples, which every
+// protocol states the same way while only v9 and IPFIX can also declare it.
+func (d *domainState) correctionFor(id uint32, isSampler bool) (rate uint32, owed bool) {
+	unsampled := isSampler && id == unsampledSamplerID
+	if !unsampled {
+		d.declared.markSampled()
+	}
+
+	if rate, decided := d.declared.declaredRate(d.odid, id, isSampler); decided {
+		return rate, rate == 0
+	}
+	if unsampled {
+		return 0, d.declared.declaredZero.Load()
+	}
+	return d.inheritedCorrection()
+}
+
+// inheritedCorrection is what a record naming no sampler takes: the domain's
 // own declaration, then the one rate the whole device agrees on.
+func (d *domainState) inheritedCorrection() (rate uint32, owed bool) {
+	rate = d.rateInForce()
+	return rate, rate == 0
+}
+
+// rateInForce is the rate in force for the domain itself.
 func (d *domainState) rateInForce() uint32 {
 	if rate := d.samplingRate.Load(); rate != 0 {
 		return rate
@@ -438,7 +550,7 @@ func (s *templateStore) domain(key domainKey) *domainState {
 		s.samplerTables[tk] = table
 	}
 
-	d = &domainState{templates: make(map[uint16]*template), declared: table}
+	d = &domainState{templates: make(map[uint16]*template), odid: key.odid, declared: table}
 	d.lastSeen.Store(now)
 	s.domains[key] = d
 	s.perExporter[key.exporter]++
@@ -500,9 +612,13 @@ func (s *templateStore) sweepSamplerTablesLocked(cutoff int64) {
 
 // declareSampler records one options announcement onto the device's table,
 // counting a refusal where the table is at its budget.
-func (s *templateStore) declareSampler(d *domainState, odid, samplerID uint32, named bool, rate uint32) {
-	if !d.declared.declare(odid, samplerID, named, rate, d.lastSeen.Load()) {
+func (s *templateStore) declareSampler(d *domainState, odid, id uint32, named bool, rate uint32) {
+	ok, changed := d.declared.declare(odid, id, named, rate, d.lastSeen.Load())
+	if !ok {
 		s.declarationsRefused.Add(1)
+	}
+	if changed {
+		d.samplerRateChanges.Add(1)
 	}
 }
 
@@ -780,9 +896,12 @@ type DomainSnapshot struct {
 	OptionsTemplates int
 	SequenceMissed   uint64
 	// SamplingUnresolved counts the records taken uncorrected, and Sampled
-	// carries whether the device ever declared, which a zero cannot.
+	// carries whether the device is known to sample, which a zero cannot.
 	SamplingUnresolved uint64
 	Sampled            bool
+	// SamplerRateChanges counts the declarations that replaced a rate this
+	// domain had already declared for the same identifier.
+	SamplerRateChanges uint64
 	// SamplingRate is the rate in force for the domain, declared by its own
 	// options or inherited from the device's single declaration. It is zero
 	// where neither settles on one.
@@ -805,6 +924,7 @@ type DomainSnapshot struct {
 type SamplerSnapshot struct {
 	Exporter netip.Addr
 	Version  flow.Version
+	ODID     uint32
 	Sampler  uint32
 	Rate     uint32
 }
@@ -818,11 +938,12 @@ func (s *templateStore) samplerSnapshot() []SamplerSnapshot {
 	snapshots := make([]SamplerSnapshot, 0, len(s.samplerTables))
 	for key, table := range s.samplerTables {
 		table.mu.RLock()
-		for sampler, entry := range table.rates {
+		for ref, entry := range table.named {
 			snapshots = append(snapshots, SamplerSnapshot{
 				Exporter: key.exporter,
 				Version:  key.proto,
-				Sampler:  sampler,
+				ODID:     ref.odid,
+				Sampler:  ref.id,
 				Rate:     entry.rate,
 			})
 		}
@@ -849,6 +970,7 @@ func (s *templateStore) snapshot() []DomainSnapshot {
 			SequenceMissed:     d.sequenceMissed.Load(),
 			SamplingUnresolved: d.samplingUnresolved.Load(),
 			Sampled:            d.declared.sampled.Load(),
+			SamplerRateChanges: d.samplerRateChanges.Load(),
 			SamplingRate:       d.rateInForce(),
 			SamplePool:         d.samplePool.Load(),
 			SamplesDropped:     d.samplesDropped.Load(),
