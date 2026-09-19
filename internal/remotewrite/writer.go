@@ -42,13 +42,13 @@ type Writer struct {
 // it whole silently posts to the client's own default path, which answers 404
 // on every endpoint that expects the configured one.
 func New(cfg config.RemoteWrite, gatherer prometheus.Gatherer) (*Writer, error) {
-	base, path, err := splitEndpoint(cfg.URL)
+	base, path, credential, err := splitEndpoint(cfg.URL)
 	if err != nil {
 		return nil, err
 	}
 
 	options := []remote.APIOption{
-		remote.WithAPIHTTPClient(newHTTPClient(cfg)),
+		remote.WithAPIHTTPClient(newHTTPClient(cfg, credential)),
 		remote.WithAPILogger(slog.Default()),
 	}
 	if path != "" {
@@ -57,7 +57,7 @@ func New(cfg config.RemoteWrite, gatherer prometheus.Gatherer) (*Writer, error) 
 
 	api, err := remote.NewAPI(base, options...)
 	if err != nil {
-		return nil, fmt.Errorf("building the remote write client: %w", withoutURL(err))
+		return nil, fmt.Errorf("building the remote write client: %w", err)
 	}
 
 	return &Writer{
@@ -71,9 +71,10 @@ func New(cfg config.RemoteWrite, gatherer prometheus.Gatherer) (*Writer, error) 
 }
 
 // withoutURL returns an error's reason without the endpoint a url.Error
-// repeats. The configured URL may carry userinfo, and the transport wraps
-// every failed write in one, so an unredacted error reaches the log on each
-// interval the endpoint is unreachable rather than once at start-up.
+// repeats. It reaches only the parse below: the client wraps a transport
+// failure in a type of its own that carries no Unwrap, so nothing downstream
+// can be walked. What the endpoint holds is kept out of those errors by
+// leaving the credential out of the URL instead.
 func withoutURL(err error) error {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
@@ -82,19 +83,26 @@ func withoutURL(err error) error {
 	return err
 }
 
-// splitEndpoint separates the configured URL into the base the client dials
-// and the path it posts to.
-func splitEndpoint(endpoint string) (base, path string, err error) {
+// splitEndpoint separates the configured URL into the base the client dials,
+// the path it posts to, and the credential it carried.
+//
+// The credential leaves the base here rather than being redacted downstream.
+// The client logs the URL it was handed once per retry, ten times to a send
+// by default, and wraps a transport failure in a type carrying no Unwrap --
+// so every one of those is out of reach. The request carries the same
+// Authorization header either way, newHTTPClient applying what the URL held.
+func splitEndpoint(endpoint string) (base, path string, credential *url.Userinfo, err error) {
 	parsed, err := url.Parse(endpoint)
 	if err != nil {
-		return "", "", fmt.Errorf("invalid remote write URL: %w", withoutURL(err))
+		return "", "", nil, fmt.Errorf("invalid remote write URL: %w", withoutURL(err))
 	}
 
-	path = parsed.Path
+	credential, path = parsed.User, parsed.Path
+	parsed.User = nil
 	parsed.Path = ""
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
-	return parsed.String(), path, nil
+	return parsed.String(), path, credential, nil
 }
 
 // Stats returns the send statistics for the metrics collector.

@@ -525,6 +525,11 @@ func cutOf[K comparable](
 // selectLargest moves the k entries that order first to the front, leaving
 // them unordered among themselves for the caller to sort. It is the half of
 // a sort the cut actually needs.
+//
+// Selection is quadratic on an order chosen against its pivot, and the guard
+// is that no such order reaches it: a snapshot is filled by ranging a map, so
+// the arrangement is the runtime's rather than a sender's. Anything that
+// caches or pre-sorts that slice before the cut hands the choice back.
 func selectLargest[K comparable](entries []aggregator.EntrySnapshot[K], k int) {
 	lo, hi := 0, len(entries)-1
 	for lo < hi {

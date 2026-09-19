@@ -298,6 +298,13 @@ func (d *domainState) rateInForce() uint32 {
 // every alternation between them as loss.
 type session struct {
 	lastSeq uint32
+	// lastSeen is when a datagram last arrived on this port, which the sweep
+	// measures against the template TTL. Without it a device that renumbers
+	// its source port on restart would spend a slot per restart and, past the
+	// bound, leave its own sequence untracked for the life of the process --
+	// silently, because a datagram on an untracked port still refreshes the
+	// domain and keeps it from aging out.
+	lastSeen int64
 	// engine is the switching engine the position belongs to. A v5 or v8
 	// device numbers a sequence per engine inside one session, and the odid a
 	// domain is keyed by does not carry which one, so a change rebases.
@@ -310,9 +317,11 @@ type session struct {
 // sessionLocked returns one session's position, opening it on first use. A
 // domain at its bound keeps the sessions it has rather than replacing them:
 // an established position is worth more than the one a spoofed port would
-// open. The domain lock is held by the caller.
-func (d *domainState) sessionLocked(port uint16) *session {
+// open, and the idle ones leave on the sweep. The domain lock is held by the
+// caller.
+func (d *domainState) sessionLocked(port uint16, at int64) *session {
 	if s, ok := d.sessions[port]; ok {
+		s.lastSeen = at
 		return s
 	}
 	if len(d.sessions) >= maxSessionsPerDomain {
@@ -322,9 +331,19 @@ func (d *domainState) sessionLocked(port uint16) *session {
 	if d.sessions == nil {
 		d.sessions = make(map[uint16]*session, 1)
 	}
-	s := &session{}
+	s := &session{lastSeen: at}
 	d.sessions[port] = s
 	return s
+}
+
+// pruneIdleSessionsLocked drops the sessions no datagram has arrived on since
+// the cutoff, returning their slots. The domain lock is held by the caller.
+func (d *domainState) pruneIdleSessionsLocked(cutoff int64) {
+	for port, s := range d.sessions {
+		if s.lastSeen < cutoff {
+			delete(d.sessions, port)
+		}
+	}
 }
 
 // samplerState is one sampler's last reading, which the next one is measured
@@ -444,6 +463,14 @@ func (s *templateStore) sweepDomains(cutoff int64) int {
 			delete(s.perExporter, key.exporter)
 		}
 		evicted++
+	}
+
+	// A domain a device still speaks to survives the sweep whole, so its own
+	// idle state is freed here rather than with it.
+	for _, d := range s.domains {
+		d.mu.Lock()
+		d.pruneIdleSessionsLocked(cutoff)
+		d.mu.Unlock()
 	}
 	s.sweepSamplerTablesLocked(cutoff)
 	return evicted
@@ -568,7 +595,7 @@ func (d *domainState) trackSequence(port uint16, seq uint32) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	s := d.sessionLocked(port)
+	s := d.sessionLocked(port, d.lastSeen.Load())
 	if s == nil {
 		return
 	}
@@ -694,7 +721,7 @@ func (d *domainState) trackRecordSequence(port uint16, seq, records uint32, engi
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	s := d.sessionLocked(port)
+	s := d.sessionLocked(port, d.lastSeen.Load())
 	if s == nil {
 		return
 	}

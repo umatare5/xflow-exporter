@@ -257,6 +257,11 @@ func TestProtocolName(t *testing.T) {
 	}
 }
 
+// TestDistributions_ObserveWithholdsAbsentDurations pins the duration
+// histogram to the absence rule: a record that carried no instants is not
+// observed, so no family appears for it. Reading the count of a family that
+// is present is the weaker check -- a vector publishes a child on the first
+// ask, so a count of zero is exactly what the fabricated series looks like.
 func TestDistributions_ObserveWithholdsAbsentDurations(t *testing.T) {
 	t.Parallel()
 
@@ -281,11 +286,8 @@ func TestDistributions_ObserveWithholdsAbsentDurations(t *testing.T) {
 					h.GetSampleCount(), h.GetSampleSum())
 			}
 		case "xflow_flow_duration_seconds":
-			h := family.GetMetric()[0].GetHistogram()
-			if h.GetSampleCount() != 0 {
-				t.Errorf("duration histogram count = %d, want 0 for a record with no instants",
-					h.GetSampleCount())
-			}
+			t.Errorf("duration histogram published %v for a record with no instants, want no family",
+				family.GetMetric())
 		}
 	}
 }
@@ -309,11 +311,9 @@ func TestDistributions_ObserveWithholdsAbsentBytes(t *testing.T) {
 	}
 
 	for _, family := range families {
-		if family.GetName() != "xflow_flow_bytes" {
-			continue
-		}
-		if got := family.GetMetric()[0].GetHistogram().GetSampleCount(); got != 0 {
-			t.Errorf("flow bytes histogram count = %d, want 0 for a record with no byte count", got)
+		if family.GetName() == "xflow_flow_bytes" {
+			t.Errorf("flow bytes histogram published %v for a record with no byte count, want no family",
+				family.GetMetric())
 		}
 	}
 }

@@ -69,9 +69,16 @@ func (d *Distributions) Register(reg *prometheus.Registry) {
 // is read datagram by datagram and a datagram carries one device, so the
 // records of one device arrive together and the address renders once for the
 // run rather than once for each of its records.
+//
+// Each is resolved on its own first reading rather than with the address. A
+// vector publishes a child the moment it is asked for one, so asking before
+// the reading exists would give a device that measures no duration -- every
+// sFlow agent, and any template carrying no flow clock -- a count of zero
+// that reads as a measurement.
 func (d *Distributions) Observe(records []flow.Record) {
 	var (
 		current             netip.Addr
+		label               string
 		bytesOf, durationOf prometheus.Observer
 	)
 
@@ -83,16 +90,17 @@ func (d *Distributions) Observe(records []flow.Record) {
 			continue
 		}
 
-		if bytesOf == nil || r.Exporter != current {
-			exporter := r.Exporter.String()
-			current = r.Exporter
-			bytesOf = d.flowBytes.WithLabelValues(exporter)
-			durationOf = d.flowDuration.WithLabelValues(exporter)
+		if label == "" || r.Exporter != current {
+			current, label = r.Exporter, r.Exporter.String()
+			bytesOf, durationOf = nil, nil
 		}
 
 		// A record whose counters rode elements the decoder does not read has
 		// no byte count, and a zero would claim an empty flow nobody measured.
 		if r.BytesReported {
+			if bytesOf == nil {
+				bytesOf = d.flowBytes.WithLabelValues(label)
+			}
 			bytes, _ := r.Corrected()
 			bytesOf.Observe(float64(bytes))
 		}
@@ -100,6 +108,9 @@ func (d *Distributions) Observe(records []flow.Record) {
 		// A record without both instants has no duration, and observing a
 		// zero would claim an instant flow the device never measured.
 		if duration, ok := r.Duration(); ok {
+			if durationOf == nil {
+				durationOf = d.flowDuration.WithLabelValues(label)
+			}
 			durationOf.Observe(duration.Seconds())
 		}
 	}
