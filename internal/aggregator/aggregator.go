@@ -61,7 +61,7 @@ type HostKey struct {
 }
 
 // ServiceKey keys the address-pair-with-service aggregation. Port is the
-// port a service table names, and Side says which end of the conversation it
+// port a service table names, and Endpoint says which end of the flow it
 // came from.
 type ServiceKey struct {
 	Exporter  netip.Addr
@@ -69,27 +69,30 @@ type ServiceKey struct {
 	Dst       netip.Addr
 	Protocol  uint8
 	Direction flow.Direction
-	Side      Side
+	Endpoint  Endpoint
 	Port      uint16
 	InputIf   uint32
 	OutputIf  uint32
 }
 
-// Side is the end of a conversation a keyed value was taken from. The zero
-// value is the destination, which is the service side as a device exports it
-// and the answer wherever no table names either port.
-type Side uint8
+// Endpoint is the end of a flow a keyed value was taken from. RFC 5103
+// section 2 calls a Directional Key Field one "specifically associated with a
+// single endpoint of the Flow", and names the two by the element prefixes
+// source and destination. The zero value is the destination, which is the
+// service end as a device exports it and the answer wherever no table names
+// either port.
+type Endpoint uint8
 
 // The two ends. One vocabulary covers the port a service table named and the
 // address a reputation list flagged.
 const (
-	SideDst Side = iota
-	SideSrc
+	EndpointDst Endpoint = iota
+	EndpointSrc
 )
 
-// String returns the `side` label value.
-func (s Side) String() string {
-	if s == SideSrc {
+// String returns the `endpoint` label value.
+func (e Endpoint) String() string {
+	if e == EndpointSrc {
 		return "src"
 	}
 	return "dst"
@@ -130,7 +133,7 @@ type DestinationKey struct {
 	Dst       netip.Addr
 	Protocol  uint8
 	Direction flow.Direction
-	Side      Side
+	Endpoint  Endpoint
 	Port      uint16
 }
 
@@ -160,7 +163,7 @@ type CountryKey struct {
 type ThreatKey struct {
 	Exporter  netip.Addr
 	Address   netip.Addr
-	Side      Side
+	Endpoint  Endpoint
 	InputIf   uint32
 	OutputIf  uint32
 	Direction flow.Direction
@@ -205,7 +208,7 @@ type Aggregator struct {
 	vlans        *table[VLANKey]
 
 	// isService decides which port of a conversation names a service, which
-	// is what Side keys on. It is the built-in table until the server hands
+	// is what Endpoint keys on. It is the built-in table until the server hands
 	// over one that reads the operator's mapping file first.
 	isService func(protocol uint8, port uint16) bool
 
@@ -293,19 +296,19 @@ func readingOf(r *flow.Record) reading {
 }
 
 // servicePort chooses the port that names the service and the end it came
-// from. The destination is tried first, being the service side as a device
+// from. The destination is tried first, being the service end as a device
 // exports it, then the source, which is where a device exporting the return
 // leg reports it. A conversation neither table names keys on the destination
 // as it always has -- a client's own port names no service, so the reply leg
 // of a named service is what moves and nothing is fabricated.
-func (a *Aggregator) servicePort(r *flow.Record) (uint16, Side) {
+func (a *Aggregator) servicePort(r *flow.Record) (uint16, Endpoint) {
 	if a.isService == nil || a.isService(r.Protocol, r.DstPort) {
-		return r.DstPort, SideDst
+		return r.DstPort, EndpointDst
 	}
 	if a.isService(r.Protocol, r.SrcPort) {
-		return r.SrcPort, SideSrc
+		return r.SrcPort, EndpointSrc
 	}
-	return r.DstPort, SideDst
+	return r.DstPort, EndpointDst
 }
 
 // ingestOne feeds the enabled tables that have a key for this record. A
@@ -337,7 +340,7 @@ func (a *Aggregator) ingestOne(r *flow.Record, read reading, now int64) {
 		}, read, now)
 	}
 
-	port, side := a.servicePort(r)
+	port, endpoint := a.servicePort(r)
 
 	if a.services != nil && r.SrcAddr.IsValid() && r.DstAddr.IsValid() && r.Protocol != 0 {
 		a.services.add(ServiceKey{
@@ -346,7 +349,7 @@ func (a *Aggregator) ingestOne(r *flow.Record, read reading, now int64) {
 			Dst:       r.DstAddr,
 			Protocol:  r.Protocol,
 			Port:      port,
-			Side:      side,
+			Endpoint:  endpoint,
 			InputIf:   r.InputIf,
 			OutputIf:  r.OutputIf,
 			Direction: r.Direction,
@@ -361,7 +364,7 @@ func (a *Aggregator) ingestOne(r *flow.Record, read reading, now int64) {
 			Dst:       r.DstAddr,
 			Protocol:  r.Protocol,
 			Port:      port,
-			Side:      side,
+			Endpoint:  endpoint,
 			Direction: r.Direction,
 		}, read, now)
 	}
@@ -416,8 +419,8 @@ func (a *Aggregator) ingestOne(r *flow.Record, read reading, now int64) {
 	a.ingestThreats(r, read, now)
 }
 
-// ingestThreats records the flagged sides of one record. A record with
-// neither side flagged feeds nothing, which is what keeps the table to the
+// ingestThreats records the flagged ends of one record. A record with
+// neither end flagged feeds nothing, which is what keeps the table to the
 // addresses worth acting on.
 func (a *Aggregator) ingestThreats(r *flow.Record, read reading, now int64) {
 	if a.threats == nil {
@@ -428,7 +431,7 @@ func (a *Aggregator) ingestThreats(r *flow.Record, read reading, now int64) {
 		a.threats.add(ThreatKey{
 			Exporter:  r.Exporter,
 			Address:   r.SrcAddr,
-			Side:      SideSrc,
+			Endpoint:  EndpointSrc,
 			InputIf:   r.InputIf,
 			OutputIf:  r.OutputIf,
 			Direction: r.Direction,
@@ -438,7 +441,7 @@ func (a *Aggregator) ingestThreats(r *flow.Record, read reading, now int64) {
 		a.threats.add(ThreatKey{
 			Exporter:  r.Exporter,
 			Address:   r.DstAddr,
-			Side:      SideDst,
+			Endpoint:  EndpointDst,
 			InputIf:   r.InputIf,
 			OutputIf:  r.OutputIf,
 			Direction: r.Direction,

@@ -17,7 +17,7 @@ const (
 	labelSrc         = "src"            // Source address
 	labelDst         = "dst"            // Destination address
 	labelProto       = "proto"          // IP protocol name or number
-	labelPort        = "port"           // Destination port, the service side
+	labelPort        = "port"           // Port a service table named, or the destination
 	labelFlags       = "flags"          // TCP control bits a flow ORed together
 	labelDSCP        = "dscp"           // Differentiated-services code point name or number
 	labelSrcASN      = "src_asn"        // Source AS number
@@ -26,7 +26,7 @@ const (
 	labelOrg         = "organization"   // What a database calls that AS
 	labelApplication = "application"    // Resolved application name or engine:selector
 	labelAddress     = "address"        // A single address a series is keyed by
-	labelSide        = "side"           // Side of the conversation an address was seen on
+	labelEndpoint    = "endpoint"       // End of the flow the keyed value was taken from
 	labelDirection   = "direction"      // Observation point the device took the reading at
 	labelSrcCountry  = "src_country"    // ISO country code of the source address
 	labelDstCountry  = "dst_country"    // ISO country code of the destination address

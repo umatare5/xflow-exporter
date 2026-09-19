@@ -77,7 +77,7 @@ Every traffic family is labeled with `exporter_address` (except `xflow_asn_info`
 | `src` / `dst`                    | Flow addresses                                                          |
 | `proto`                          | Protocol name or number                                                 |
 | `port`                           | Port a service table names, or the destination where neither does       |
-| `side`                           | End the keyed value came from (`src`/`dst`)                             |
+| `endpoint`                       | End of the flow the keyed value came from (`src`/`dst`)                 |
 | `input_ifindex`/`output_ifindex` | SNMP ifIndex, or `0` if unknown                                         |
 | `flags`                          | Cumulative TCP control bits (e.g., `syn,ack`), or `none`                |
 | `dscp`                           | DSCP class name (e.g. `ef`), or the code point where none names it      |
@@ -112,7 +112,7 @@ The inclusion of interface pairs keeps asymmetrical paths distinct. Unrecorded p
 
 **`xflow_destination_*`**
 
-Unidirectional aggregate for destinations independent of sources. States total received volume per service. It is directional; the two directions of a conversation are keyed separately whichever points observed them. `side` says which end the `port` came from, a reply leg folding onto the service's port rather than taking an entry under a client's number.
+Unidirectional aggregate for destinations independent of sources. States total received volume per service. It is directional; the two directions of a conversation are keyed separately whichever points observed them. `endpoint` says which end the `port` came from, a reply leg folding onto the service's port rather than taking an entry under a client's number.
 
 **`xflow_tcp_flags_*`**
 

@@ -144,8 +144,8 @@ func TestAggregatorOptions_OperatorPortsReachTheAggregation(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("Destinations() = %d entries, want 1", len(entries))
 	}
-	if entries[0].Key.Port != 9100 || entries[0].Key.Side != aggregator.SideSrc {
-		t.Errorf("keyed on port %d side %s, want the file's 9100 as the source side",
-			entries[0].Key.Port, entries[0].Key.Side)
+	if entries[0].Key.Port != 9100 || entries[0].Key.Endpoint != aggregator.EndpointSrc {
+		t.Errorf("keyed on port %d endpoint %s, want the file's 9100 as the source end",
+			entries[0].Key.Port, entries[0].Key.Endpoint)
 	}
 }

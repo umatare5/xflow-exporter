@@ -190,8 +190,8 @@ xflow_asn_pair_bytes_total{direction="unknown",dst_asn="64501",exporter_address=
 xflow_asn_pair_bytes_total{direction="other",dst_asn="other",exporter_address="other",src_asn="other"} 0
 # HELP xflow_service_bytes_total Sampling-corrected bytes per source-destination service, other carries the entry-bound fold
 # TYPE xflow_service_bytes_total counter
-xflow_service_bytes_total{direction="unknown",dst="10.0.0.2",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",port="443",proto="tcp",side="dst",src="10.0.0.1"} 700
-xflow_service_bytes_total{direction="other",dst="other",exporter_address="other",input_ifindex="other",output_ifindex="other",port="other",proto="other",side="other",src="other"} 0
+xflow_service_bytes_total{direction="unknown",dst="10.0.0.2",endpoint="dst",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",port="443",proto="tcp",src="10.0.0.1"} 700
+xflow_service_bytes_total{direction="other",dst="other",endpoint="other",exporter_address="other",input_ifindex="other",output_ifindex="other",port="other",proto="other",src="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_service_bytes_total", "xflow_asn_pair_bytes_total",
@@ -541,8 +541,8 @@ func TestFlowCollector_DestinationLabels(t *testing.T) {
 	expected := `
 # HELP xflow_destination_bytes_total Sampling-corrected bytes per destination service, other carries the entry-bound fold
 # TYPE xflow_destination_bytes_total counter
-xflow_destination_bytes_total{direction="unknown",dst="10.0.0.2",exporter_address="192.0.2.1",port="443",proto="tcp",side="dst"} 1000
-xflow_destination_bytes_total{direction="other",dst="other",exporter_address="other",port="other",proto="other",side="other"} 0
+xflow_destination_bytes_total{direction="unknown",dst="10.0.0.2",endpoint="dst",exporter_address="192.0.2.1",port="443",proto="tcp"} 1000
+xflow_destination_bytes_total{direction="other",dst="other",endpoint="other",exporter_address="other",port="other",proto="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_destination_bytes_total"); err != nil {
@@ -1111,9 +1111,9 @@ func TestFlowCollector_ThreatLabels(t *testing.T) {
 	expected := `
 # HELP xflow_threat_bytes_total Sampling-corrected bytes per flagged address, other carries the entry-bound fold
 # TYPE xflow_threat_bytes_total counter
-xflow_threat_bytes_total{address="10.0.0.1",direction="unknown",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",side="src"} 700
-xflow_threat_bytes_total{address="10.0.0.2",direction="unknown",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4",side="dst"} 700
-xflow_threat_bytes_total{address="other",direction="other",exporter_address="other",input_ifindex="other",output_ifindex="other",side="other"} 0
+xflow_threat_bytes_total{address="10.0.0.1",direction="unknown",endpoint="src",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4"} 700
+xflow_threat_bytes_total{address="10.0.0.2",direction="unknown",endpoint="dst",exporter_address="192.0.2.1",input_ifindex="3",output_ifindex="4"} 700
+xflow_threat_bytes_total{address="other",direction="other",endpoint="other",exporter_address="other",input_ifindex="other",output_ifindex="other"} 0
 `
 	if err := testutil.CollectAndCompare(c, strings.NewReader(expected),
 		"xflow_threat_bytes_total"); err != nil {

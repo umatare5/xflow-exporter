@@ -396,12 +396,12 @@ func BenchmarkAggregator_Ingest(b *testing.B) {
 	}
 }
 
-// TestAggregator_ThreatsKeepTheSideTheHitWasSeenOn pins the dimension the
+// TestAggregator_ThreatsKeepTheEndpointTheHitWasSeenOn pins the dimension the
 // flagged-address table exists for. A hit on the source is an outside address
 // probing the perimeter, and a hit on the destination is an inside host that
-// reached a listed one -- the two read as different events, so the side has to
+// reached a listed one -- the two read as different events, so the end has to
 // survive into the key rather than being folded into one address series.
-func TestAggregator_ThreatsKeepTheSideTheHitWasSeenOn(t *testing.T) {
+func TestAggregator_ThreatsKeepTheEndpointTheHitWasSeenOn(t *testing.T) {
 	t.Parallel()
 
 	a := New(testConfig(), Modules{Threats: true})
@@ -420,15 +420,15 @@ func TestAggregator_ThreatsKeepTheSideTheHitWasSeenOn(t *testing.T) {
 		t.Fatalf("Threats() = %d entries, want one per side", len(entries))
 	}
 
-	seen := make(map[Side]ThreatKey, len(entries))
+	seen := make(map[Endpoint]ThreatKey, len(entries))
 	for _, e := range entries {
-		seen[e.Key.Side] = e.Key
+		seen[e.Key.Endpoint] = e.Key
 	}
 
-	if key, ok := seen[SideSrc]; !ok || key.Address != testSrc {
+	if key, ok := seen[EndpointSrc]; !ok || key.Address != testSrc {
 		t.Errorf("source-side entry = %+v, want the source address keyed as src", key)
 	}
-	if key, ok := seen[SideDst]; !ok || key.Address != testDst {
+	if key, ok := seen[EndpointDst]; !ok || key.Address != testDst {
 		t.Errorf("destination-side entry = %+v, want the destination address keyed as dst", key)
 	}
 }
@@ -790,22 +790,22 @@ func TestAggregator_KeysTheServiceSideOfTheConversation(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		src, dst uint16
-		wantPort uint16
-		wantSide Side
+		name         string
+		src, dst     uint16
+		wantPort     uint16
+		wantEndpoint Endpoint
 	}{
-		{name: "the destination names it", src: 51234, dst: 443, wantPort: 443, wantSide: SideDst},
-		{name: "the source names it", src: 443, dst: 51234, wantPort: 443, wantSide: SideSrc},
+		{name: "the destination names it", src: 51234, dst: 443, wantPort: 443, wantEndpoint: EndpointDst},
+		{name: "the source names it", src: 443, dst: 51234, wantPort: 443, wantEndpoint: EndpointSrc},
 		{
 			// Where both ends name a service the destination wins, being the
 			// side a device exports as the service.
-			name: "both name one", src: 53, dst: 123, wantPort: 123, wantSide: SideDst,
+			name: "both name one", src: 53, dst: 123, wantPort: 123, wantEndpoint: EndpointDst,
 		},
 		{
 			// A client's own port names no service, so nothing is fabricated
 			// and the destination keys it as it always has.
-			name: "neither names one", src: 51234, dst: 60001, wantPort: 60001, wantSide: SideDst,
+			name: "neither names one", src: 51234, dst: 60001, wantPort: 60001, wantEndpoint: EndpointDst,
 		},
 	}
 
@@ -822,18 +822,18 @@ func TestAggregator_KeysTheServiceSideOfTheConversation(t *testing.T) {
 			if len(services) != 1 {
 				t.Fatalf("Services() = %d entries, want 1", len(services))
 			}
-			if services[0].Key.Port != tc.wantPort || services[0].Key.Side != tc.wantSide {
-				t.Errorf("service keyed on port %d side %s, want %d and %s",
-					services[0].Key.Port, services[0].Key.Side, tc.wantPort, tc.wantSide)
+			if services[0].Key.Port != tc.wantPort || services[0].Key.Endpoint != tc.wantEndpoint {
+				t.Errorf("service keyed on port %d endpoint %s, want %d and %s",
+					services[0].Key.Port, services[0].Key.Endpoint, tc.wantPort, tc.wantEndpoint)
 			}
 
 			destinations, _ := a.Destinations()
 			if len(destinations) != 1 {
 				t.Fatalf("Destinations() = %d entries, want 1", len(destinations))
 			}
-			if destinations[0].Key.Port != tc.wantPort || destinations[0].Key.Side != tc.wantSide {
-				t.Errorf("destination keyed on port %d side %s, want %d and %s",
-					destinations[0].Key.Port, destinations[0].Key.Side, tc.wantPort, tc.wantSide)
+			if destinations[0].Key.Port != tc.wantPort || destinations[0].Key.Endpoint != tc.wantEndpoint {
+				t.Errorf("destination keyed on port %d endpoint %s, want %d and %s",
+					destinations[0].Key.Port, destinations[0].Key.Endpoint, tc.wantPort, tc.wantEndpoint)
 			}
 		})
 	}
@@ -874,18 +874,18 @@ func TestAggregator_FoldsTheClientsEphemeralPortOntoTheServicesPort(t *testing.T
 		t.Errorf("Destinations() = %d entries, want one per client plus the service", len(entries))
 	}
 
-	sides := map[Side]int{}
+	endpoints := map[Endpoint]int{}
 	for _, e := range entries {
 		if e.Key.Port != 443 {
 			t.Errorf("entry keyed on port %d, want the service both legs name", e.Key.Port)
 		}
-		sides[e.Key.Side]++
-		if e.Key.Side == SideSrc && e.Key.Dst == testDst {
+		endpoints[e.Key.Endpoint]++
+		if e.Key.Endpoint == EndpointSrc && e.Key.Dst == testDst {
 			t.Error("a reply leg keyed on the service's address, want the client it answered")
 		}
 	}
-	if sides[SideDst] != 1 || sides[SideSrc] != clients {
-		t.Errorf("sides = %v, want one destination entry and one source entry per client", sides)
+	if endpoints[EndpointDst] != 1 || endpoints[EndpointSrc] != clients {
+		t.Errorf("endpoints = %v, want one destination entry and one source entry per client", endpoints)
 	}
 }
 
@@ -911,8 +911,8 @@ func TestAggregator_ServiceLookupReadsTheOperatorsOwnPorts(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("Destinations() = %d entries, want 1", len(entries))
 	}
-	if entries[0].Key.Port != internal || entries[0].Key.Side != SideSrc {
-		t.Errorf("keyed on port %d side %s, want the declared %d as the source side",
-			entries[0].Key.Port, entries[0].Key.Side, internal)
+	if entries[0].Key.Port != internal || entries[0].Key.Endpoint != EndpointSrc {
+		t.Errorf("keyed on port %d endpoint %s, want the declared %d as the source side",
+			entries[0].Key.Port, entries[0].Key.Endpoint, internal)
 	}
 }
