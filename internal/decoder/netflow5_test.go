@@ -107,6 +107,7 @@ func TestDecodeNetFlowV5_ReadsEveryField(t *testing.T) {
 		Bytes:            512000,
 		Packets:          1000,
 		BytesReported:    true,
+		PacketsReported:  true,
 		Flows:            1,
 		SrcAS:            64500,
 		DstAS:            64501,

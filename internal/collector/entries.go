@@ -12,11 +12,16 @@ var aggregationNames = []string{
 	"asns", "applications", "countries", "threats", "vlans",
 }
 
-// EntryTotals is one bucket's counters as the listing reports them.
+// EntryTotals is one bucket's counters as the listing reports them. The two
+// measured flags say whether /metrics carries that count at all: an entry a
+// device reported without one holds a partial sum, which is withheld there
+// and reported here so the gap has somewhere to be read from.
 type EntryTotals struct {
-	Bytes   uint64 `json:"bytes"`
-	Packets uint64 `json:"packets"`
-	Flows   uint64 `json:"flows"`
+	Bytes           uint64 `json:"bytes"`
+	Packets         uint64 `json:"packets"`
+	Flows           uint64 `json:"flows"`
+	BytesMeasured   bool   `json:"bytes_measured"`
+	PacketsMeasured bool   `json:"packets_measured"`
 }
 
 // EntryRow is one entry. Labels carries the values LabelNames names, in that
@@ -124,7 +129,8 @@ func report[K comparable](
 	fold aggregator.Totals, labels func(K) []string,
 ) AggregationEntries {
 	rows := make([]EntryRow, 0, len(entries))
-	var withheld EntryTotals
+	// The tail's sum is complete until one of its entries is not.
+	withheld := EntryTotals{BytesMeasured: true, PacketsMeasured: true}
 
 	for i, e := range entries {
 		rows = append(rows, EntryRow{Rank: i + 1, Labels: labels(e.Key), EntryTotals: totalsOf(e.Totals)})
@@ -134,6 +140,8 @@ func report[K comparable](
 		withheld.Bytes += e.Bytes
 		withheld.Packets += e.Packets
 		withheld.Flows += e.Flows
+		withheld.BytesMeasured = withheld.BytesMeasured && e.BytesMeasured
+		withheld.PacketsMeasured = withheld.PacketsMeasured && e.PacketsMeasured
 	}
 
 	return AggregationEntries{
@@ -141,12 +149,15 @@ func report[K comparable](
 		Published:      len(cut),
 		Withheld:       len(entries) - len(cut),
 		WithheldTotals: withheld,
-		Other:          totalsOf(fold),
+		Other:          totalsOf(whole(fold)),
 		LabelNames:     descs.labels,
 		Rows:           rows,
 	}
 }
 
 func totalsOf(t aggregator.Totals) EntryTotals {
-	return EntryTotals{Bytes: t.Bytes, Packets: t.Packets, Flows: t.Flows}
+	return EntryTotals{
+		Bytes: t.Bytes, Packets: t.Packets, Flows: t.Flows,
+		BytesMeasured: t.BytesMeasured, PacketsMeasured: t.PacketsMeasured,
+	}
 }

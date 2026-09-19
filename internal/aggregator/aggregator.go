@@ -278,8 +278,17 @@ func (a *Aggregator) Ingest(records []flow.Record) {
 
 	for i := range records {
 		r := &records[i]
-		bytes, packets := r.Corrected()
-		a.ingestOne(r, bytes, packets, now)
+		a.ingestOne(r, readingOf(r), now)
+	}
+}
+
+// readingOf corrects one record's counts and carries what the device
+// measured of them alongside.
+func readingOf(r *flow.Record) reading {
+	bytes, packets := r.Corrected()
+	return reading{
+		bytes: bytes, packets: packets, flows: r.Flows,
+		bytesMeasured: r.BytesReported, packetsMeasured: r.PacketsReported,
 	}
 }
 
@@ -302,12 +311,12 @@ func (a *Aggregator) servicePort(r *flow.Record) (uint16, Side) {
 // ingestOne feeds the enabled tables that have a key for this record. A
 // record lacking an aggregation's dimensions is absent from that
 // aggregation rather than keyed by fabricated zeros.
-func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64) {
+func (a *Aggregator) ingestOne(r *flow.Record, read reading, now int64) {
 	if a.exporters != nil {
 		a.exporters.add(ExporterKey{
 			Exporter: r.Exporter, Version: r.Version, ODID: r.ODID, Direction: r.Direction,
 		},
-			bytes, packets, r.Flows, now)
+			read, now)
 	}
 
 	// An aggregate is the device's own re-reading of traffic its main cache
@@ -325,7 +334,7 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 			InputIf:   r.InputIf,
 			OutputIf:  r.OutputIf,
 			Direction: r.Direction,
-		}, bytes, packets, r.Flows, now)
+		}, read, now)
 	}
 
 	port, side := a.servicePort(r)
@@ -341,7 +350,7 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 			InputIf:   r.InputIf,
 			OutputIf:  r.OutputIf,
 			Direction: r.Direction,
-		}, bytes, packets, r.Flows, now)
+		}, read, now)
 	}
 
 	// The source is not read here, so a record whose source never resolved
@@ -354,7 +363,7 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 			Port:      port,
 			Side:      side,
 			Direction: r.Direction,
-		}, bytes, packets, r.Flows, now)
+		}, read, now)
 	}
 
 	// Keyed on whether the device reported the bits, not on their value: a
@@ -362,27 +371,27 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 	// and a breakdown of control bits is where that has to be visible.
 	if a.tcpFlags != nil && r.Protocol == protocolTCP && r.TCPFlagsReported {
 		a.tcpFlags.add(TCPFlagsKey{Exporter: r.Exporter, Flags: r.TCPFlags, Direction: r.Direction},
-			bytes, packets, r.Flows, now)
+			read, now)
 	}
 
 	// Keyed on whether the device reported the byte, not on its value: a
 	// code point of zero is best-effort traffic and belongs in the table.
 	if a.dscp != nil && r.TOSReported {
 		a.dscp.add(DSCPKey{Exporter: r.Exporter, DSCP: r.TOS >> ecnBits, Direction: r.Direction},
-			bytes, packets, r.Flows, now)
+			read, now)
 	}
 
 	if a.asns != nil && (r.SrcAS != 0 || r.DstAS != 0) {
 		a.asns.add(ASNKey{
 			Exporter: r.Exporter, SrcAS: r.SrcAS, DstAS: r.DstAS, Direction: r.Direction,
 		},
-			bytes, packets, r.Flows, now)
+			read, now)
 	}
 
 	if a.apps != nil {
 		if name := applicationName(r); name != "" {
 			a.apps.add(AppKey{Exporter: r.Exporter, Name: name, Direction: r.Direction},
-				bytes, packets, r.Flows, now)
+				read, now)
 		}
 	}
 
@@ -392,7 +401,7 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 		a.countries.add(CountryKey{
 			Exporter: r.Exporter, Src: r.SrcCountry, Dst: r.DstCountry, Direction: r.Direction,
 		},
-			bytes, packets, r.Flows, now)
+			read, now)
 	}
 
 	// A record neither side of which sits on a mapped prefix feeds nothing:
@@ -401,16 +410,16 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 		a.vlans.add(VLANKey{
 			Exporter: r.Exporter, Src: r.SrcVLAN, Dst: r.DstVLAN, Direction: r.Direction,
 		},
-			bytes, packets, r.Flows, now)
+			read, now)
 	}
 
-	a.ingestThreats(r, bytes, packets, now)
+	a.ingestThreats(r, read, now)
 }
 
 // ingestThreats records the flagged sides of one record. A record with
 // neither side flagged feeds nothing, which is what keeps the table to the
 // addresses worth acting on.
-func (a *Aggregator) ingestThreats(r *flow.Record, bytes, packets uint64, now int64) {
+func (a *Aggregator) ingestThreats(r *flow.Record, read reading, now int64) {
 	if a.threats == nil {
 		return
 	}
@@ -423,7 +432,7 @@ func (a *Aggregator) ingestThreats(r *flow.Record, bytes, packets uint64, now in
 			InputIf:   r.InputIf,
 			OutputIf:  r.OutputIf,
 			Direction: r.Direction,
-		}, bytes, packets, r.Flows, now)
+		}, read, now)
 	}
 	if r.DstFlagged {
 		a.threats.add(ThreatKey{
@@ -433,7 +442,7 @@ func (a *Aggregator) ingestThreats(r *flow.Record, bytes, packets uint64, now in
 			InputIf:   r.InputIf,
 			OutputIf:  r.OutputIf,
 			Direction: r.Direction,
-		}, bytes, packets, r.Flows, now)
+		}, read, now)
 	}
 }
 

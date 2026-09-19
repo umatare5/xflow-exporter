@@ -135,6 +135,7 @@ func fixtureV9Want() flow.Record {
 		Bytes:            512000,
 		Packets:          1000,
 		BytesReported:    true,
+		PacketsReported:  true,
 		Flows:            1,
 		SrcAS:            64500,
 		DstAS:            64501,

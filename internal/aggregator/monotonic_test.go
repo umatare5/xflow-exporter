@@ -41,7 +41,7 @@ func TestAggregator_EvictionLeavesTheOverflowAlone(t *testing.T) {
 	if len(entries) != 0 {
 		t.Fatalf("entries = %d after the sweep, want 0", len(entries))
 	}
-	if after != (Totals{}) {
+	if after.Bytes != 0 || after.Packets != 0 || after.Flows != 0 {
 		t.Errorf("overflow = %+v after the eviction, want it untouched", after)
 	}
 }
@@ -105,7 +105,10 @@ func TestTable_AddUnderSweepLosesNothing(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := range rounds {
-				tbl.add(w, perAdd, 1, 1, int64(i))
+				tbl.add(w, reading{
+					bytes: perAdd, packets: 1, flows: 1,
+					bytesMeasured: true, packetsMeasured: true,
+				}, int64(i))
 			}
 		}()
 	}

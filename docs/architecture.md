@@ -79,6 +79,8 @@ Memory reclamation operates asynchronously via sweeps. Idle domains, sampler dec
 
 ## Absence
 
-The aggregation engine strictly omits unsupplied dimensions rather than fabricating `0` or `false` values. This guarantees mathematical purity in downstream Prometheus aggregations. For example, NetFlow v8 aggregates strictly feed their respective domains, completely bypassing downstream volumetric tables.
+The aggregation engine strictly omits unsupplied dimensions rather than fabricating `0` or `false` values. This guarantees mathematical purity in downstream Prometheus aggregations. For example, an aggregated cache strictly feeds its own domain, completely bypassing downstream volumetric tables.
+
+The same rule covers the counts. A record whose template keeps its byte or packet total in elements this decoder does not read carries no such count, and an entry holding one of those publishes no `_bytes_total` or `_packets_total` series — a partial sum reads exactly like a complete one. The withholding is permanent for that entry: complete records arriving after make the shortfall harder to see rather than smaller. `_flows_total` is published throughout, every record carrying a flow count, and the `other` fold publishes whatever it holds as the lower bound it already is. `/entries` reports both flags per row, so a withheld family has somewhere to be read from.
 
 Memory pressure is managed via temporal eviction strategies. Entries idling beyond configured TTLs are purged alongside their associated metrics series. Timestamps and rates are strictly generated at the point of decode, ensuring absolute temporal accuracy.

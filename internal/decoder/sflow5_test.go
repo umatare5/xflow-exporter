@@ -128,6 +128,7 @@ func TestDecodeSFlowV5_RawEthernetTCP(t *testing.T) {
 		Bytes:            1518,
 		Packets:          1,
 		BytesReported:    true,
+		PacketsReported:  true,
 		Flows:            1,
 		SamplingRate:     1000,
 	}
@@ -223,6 +224,7 @@ func TestDecodeSFlowV5_SampledIPv4Record(t *testing.T) {
 		Bytes:            700,
 		Packets:          1,
 		BytesReported:    true,
+		PacketsReported:  true,
 		Flows:            1,
 		SamplingRate:     100,
 	}
@@ -269,6 +271,7 @@ func TestDecodeSFlowV5_SampledIPv6RecordUnmapsIPv4(t *testing.T) {
 		Bytes:            700,
 		Packets:          1,
 		BytesReported:    true,
+		PacketsReported:  true,
 		Flows:            1,
 		SamplingRate:     100,
 	}
