@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"sort"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/exp/api/remote"
@@ -197,6 +198,6 @@ func labelsOf(name string, metric *dto.Metric) []labelPair {
 		pairs = append(pairs, labelPair{name: label.GetName(), value: label.GetValue()})
 	}
 
-	sort.Slice(pairs, func(i, j int) bool { return pairs[i].name < pairs[j].name })
+	slices.SortFunc(pairs, func(a, b labelPair) int { return strings.Compare(a.name, b.name) })
 	return pairs
 }

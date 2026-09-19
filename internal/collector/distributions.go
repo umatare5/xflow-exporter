@@ -64,7 +64,17 @@ func (d *Distributions) Register(reg *prometheus.Registry) {
 }
 
 // Observe accounts one batch of decoded records.
+//
+// The two observers are resolved per device rather than per record. A batch
+// is read datagram by datagram and a datagram carries one device, so the
+// records of one device arrive together and the address renders once for the
+// run rather than once for each of its records.
 func (d *Distributions) Observe(records []flow.Record) {
+	var (
+		current             netip.Addr
+		bytesOf, durationOf prometheus.Observer
+	)
+
 	for i := range records {
 		r := &records[i]
 		// An aggregate holds several flows, so its size is not a flow size
@@ -72,19 +82,25 @@ func (d *Distributions) Observe(records []flow.Record) {
 		if r.Aggregated() {
 			continue
 		}
-		exporter := r.Exporter.String()
+
+		if bytesOf == nil || r.Exporter != current {
+			exporter := r.Exporter.String()
+			current = r.Exporter
+			bytesOf = d.flowBytes.WithLabelValues(exporter)
+			durationOf = d.flowDuration.WithLabelValues(exporter)
+		}
 
 		// A record whose counters rode elements the decoder does not read has
 		// no byte count, and a zero would claim an empty flow nobody measured.
 		if r.BytesReported {
 			bytes, _ := r.Corrected()
-			d.flowBytes.WithLabelValues(exporter).Observe(float64(bytes))
+			bytesOf.Observe(float64(bytes))
 		}
 
 		// A record without both instants has no duration, and observing a
 		// zero would claim an instant flow the device never measured.
 		if duration, ok := r.Duration(); ok {
-			d.flowDuration.WithLabelValues(exporter).Observe(duration.Seconds())
+			durationOf.Observe(duration.Seconds())
 		}
 	}
 }

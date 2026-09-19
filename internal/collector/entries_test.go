@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -235,5 +236,43 @@ func allCollectors() config.Collectors {
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
 		TCPFlags: true, DSCP: true, ASNs: true, Applications: true,
 		Countries: true, Threats: true, VLANs: true,
+	}
+}
+
+// TestFlowCollector_EntriesRankTheWithheldTail pins the listing's own order.
+// A scrape orders a table only as far as its cut reaches, the entries past it
+// being folded into one row, so the ranking of the tail is this route's to
+// produce rather than something it inherits.
+//
+// The table is large enough that a partitioned tail is not an ordered one by
+// chance, which a five-entry fixture cannot tell apart.
+func TestFlowCollector_EntriesRankTheWithheldTail(t *testing.T) {
+	t.Parallel()
+
+	const entries = 64
+	cfg := aggConfig()
+	cfg.TopK = 5
+
+	agg := aggregator.New(cfg, aggregator.Modules{Hosts: true})
+	records := make([]flow.Record, 0, entries)
+	for i := range entries {
+		records = append(records, flowRecord("10.0.0."+strconv.Itoa(i+1), "10.0.1.1", uint64(i+1)*10))
+	}
+	agg.Ingest(records)
+
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil, nil)
+	table, ok := c.Entries("hosts")
+	if !ok {
+		t.Fatal(`Entries("hosts") reported the table absent, want it read`)
+	}
+	if len(table.Rows) != entries {
+		t.Fatalf("rows = %d, want every entry listed", len(table.Rows))
+	}
+
+	for i := 1; i < len(table.Rows); i++ {
+		if table.Rows[i].Bytes > table.Rows[i-1].Bytes {
+			t.Fatalf("rows[%d].bytes = %d above rows[%d].bytes = %d, want the whole listing ranked",
+				i, table.Rows[i].Bytes, i-1, table.Rows[i-1].Bytes)
+		}
 	}
 }
