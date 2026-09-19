@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/umatare5/xflow-exporter/internal/config"
+	"github.com/umatare5/xflow-exporter/internal/enrich"
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
@@ -60,16 +61,38 @@ type HostKey struct {
 }
 
 // ServiceKey keys the address-pair-with-service aggregation. Port is the
-// destination port: the service side of the conversation as exported.
+// port a service table names, and Side says which end of the conversation it
+// came from.
 type ServiceKey struct {
 	Exporter  netip.Addr
 	Src       netip.Addr
 	Dst       netip.Addr
 	Protocol  uint8
 	Direction flow.Direction
+	Side      Side
 	Port      uint16
 	InputIf   uint32
 	OutputIf  uint32
+}
+
+// Side is the end of a conversation a keyed value was taken from. The zero
+// value is the destination, which is the service side as a device exports it
+// and the answer wherever no table names either port.
+type Side uint8
+
+// The two ends. One vocabulary covers the port a service table named and the
+// address a reputation list flagged.
+const (
+	SideDst Side = iota
+	SideSrc
+)
+
+// String returns the `side` label value.
+func (s Side) String() string {
+	if s == SideSrc {
+		return "src"
+	}
+	return "dst"
 }
 
 // protocolTCP is the only protocol whose control bits a record can carry.
@@ -107,6 +130,7 @@ type DestinationKey struct {
 	Dst       netip.Addr
 	Protocol  uint8
 	Direction flow.Direction
+	Side      Side
 	Port      uint16
 }
 
@@ -136,18 +160,11 @@ type CountryKey struct {
 type ThreatKey struct {
 	Exporter  netip.Addr
 	Address   netip.Addr
-	Side      string
+	Side      Side
 	InputIf   uint32
 	OutputIf  uint32
 	Direction flow.Direction
 }
-
-// The sides of a conversation a flagged address was seen on, which is a
-// different question from the observation point the reading was taken at.
-const (
-	SideSrc = "src"
-	SideDst = "dst"
-)
 
 // VLANKey keys the VLAN-pair aggregation. The identifiers are what a mapping
 // file puts each address on, so the table needs that file to hold anything,
@@ -187,16 +204,35 @@ type Aggregator struct {
 	threats      *table[ThreatKey]
 	vlans        *table[VLANKey]
 
+	// isService decides which port of a conversation names a service, which
+	// is what Side keys on. It is the built-in table until the server hands
+	// over one that reads the operator's mapping file first.
+	isService func(protocol uint8, port uint16) bool
+
 	// now is pinned by tests.
 	now func() time.Time
 }
 
+// Option configures an aggregator at construction.
+type Option func(*Aggregator)
+
+// WithServiceLookup replaces the predicate that decides which port names a
+// service. A file the operator wrote knows the ports the built-in table
+// deliberately does not.
+func WithServiceLookup(isService func(protocol uint8, port uint16) bool) Option {
+	return func(a *Aggregator) { a.isService = isService }
+}
+
 // New creates an aggregator with the enabled modules' tables.
-func New(cfg config.Aggregation, modules Modules) *Aggregator {
+func New(cfg config.Aggregation, modules Modules, options ...Option) *Aggregator {
 	a := &Aggregator{
-		modules: modules,
-		cfg:     cfg,
-		now:     time.Now,
+		modules:   modules,
+		cfg:       cfg,
+		isService: enrich.IsService,
+		now:       time.Now,
+	}
+	for _, option := range options {
+		option(a)
 	}
 	if modules.Exporters {
 		a.exporters = newTable[ExporterKey](cfg.MaxEntries)
@@ -247,6 +283,22 @@ func (a *Aggregator) Ingest(records []flow.Record) {
 	}
 }
 
+// servicePort chooses the port that names the service and the end it came
+// from. The destination is tried first, being the service side as a device
+// exports it, then the source, which is where a device exporting the return
+// leg reports it. A conversation neither table names keys on the destination
+// as it always has -- a client's own port names no service, so the reply leg
+// of a named service is what moves and nothing is fabricated.
+func (a *Aggregator) servicePort(r *flow.Record) (uint16, Side) {
+	if a.isService == nil || a.isService(r.Protocol, r.DstPort) {
+		return r.DstPort, SideDst
+	}
+	if a.isService(r.Protocol, r.SrcPort) {
+		return r.SrcPort, SideSrc
+	}
+	return r.DstPort, SideDst
+}
+
 // ingestOne feeds the enabled tables that have a key for this record. A
 // record lacking an aggregation's dimensions is absent from that
 // aggregation rather than keyed by fabricated zeros.
@@ -276,13 +328,16 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 		}, bytes, packets, r.Flows, now)
 	}
 
+	port, side := a.servicePort(r)
+
 	if a.services != nil && r.SrcAddr.IsValid() && r.DstAddr.IsValid() && r.Protocol != 0 {
 		a.services.add(ServiceKey{
 			Exporter:  r.Exporter,
 			Src:       r.SrcAddr,
 			Dst:       r.DstAddr,
 			Protocol:  r.Protocol,
-			Port:      r.DstPort,
+			Port:      port,
+			Side:      side,
 			InputIf:   r.InputIf,
 			OutputIf:  r.OutputIf,
 			Direction: r.Direction,
@@ -296,7 +351,8 @@ func (a *Aggregator) ingestOne(r *flow.Record, bytes, packets uint64, now int64)
 			Exporter:  r.Exporter,
 			Dst:       r.DstAddr,
 			Protocol:  r.Protocol,
-			Port:      r.DstPort,
+			Port:      port,
+			Side:      side,
 			Direction: r.Direction,
 		}, bytes, packets, r.Flows, now)
 	}

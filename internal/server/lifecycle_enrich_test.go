@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/umatare5/xflow-exporter/internal/aggregator"
 	"github.com/umatare5/xflow-exporter/internal/config"
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
@@ -110,5 +112,40 @@ func TestValidateEnrichment(t *testing.T) {
 				t.Errorf("ValidateEnrichment() error = %v, want error %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// TestAggregatorOptions_OperatorPortsReachTheAggregation pins the hand-off
+// only this function makes. The built-in table names no internal service, so
+// without it a site's own listener names an application and still leaves
+// every reply leg keyed on the client's own port.
+func TestAggregatorOptions_OperatorPortsReachTheAggregation(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "mapping.yml")
+	if err := os.WriteFile(path, []byte("services:\n  9100/tcp: node-exporter\n"), 0o600); err != nil {
+		t.Fatalf("writing the mapping file: %v", err)
+	}
+
+	_, _, _, mapping, err := buildEnrichmentChain(config.Enrichment{MappingFile: path})
+	if err != nil {
+		t.Fatalf("buildEnrichmentChain() error = %v, want nil", err)
+	}
+
+	agg := aggregator.New(config.Aggregation{MaxEntries: 16, EntryTTL: time.Minute},
+		aggregator.Modules{Destinations: true}, aggregatorOptions(mapping)...)
+	agg.Ingest([]flow.Record{{
+		Exporter: netip.MustParseAddr("192.0.2.1"),
+		Protocol: 6, SrcPort: 9100, DstPort: 51234,
+		DstAddr: netip.MustParseAddr("10.0.0.2"), Bytes: 100, Flows: 1,
+	}})
+
+	entries, _ := agg.Destinations()
+	if len(entries) != 1 {
+		t.Fatalf("Destinations() = %d entries, want 1", len(entries))
+	}
+	if entries[0].Key.Port != 9100 || entries[0].Key.Side != aggregator.SideSrc {
+		t.Errorf("keyed on port %d side %s, want the file's 9100 as the source side",
+			entries[0].Key.Port, entries[0].Key.Side)
 	}
 }

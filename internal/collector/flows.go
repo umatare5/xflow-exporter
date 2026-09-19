@@ -169,13 +169,13 @@ func NewFlowCollector(
 	if modules.Services {
 		c.services = newFamilyDescs("xflow_service", "source-destination service",
 			[]string{
-				labelExporter, labelSrc, labelDst, labelProto, labelPort,
+				labelExporter, labelSrc, labelDst, labelProto, labelPort, labelSide,
 				labelInputIf, labelOutputIf, labelDirection,
 			})
 	}
 	if modules.Destinations {
 		c.destinations = newFamilyDescs("xflow_destination", "destination service",
-			[]string{labelExporter, labelDst, labelProto, labelPort, labelDirection})
+			[]string{labelExporter, labelDst, labelProto, labelPort, labelSide, labelDirection})
 	}
 	if modules.TCPFlags {
 		c.tcpFlags = newFamilyDescs("xflow_tcp_flags", "TCP control-bit profile",
@@ -620,7 +620,7 @@ func hostLabels(k aggregator.HostKey) []string {
 func serviceLabels(k aggregator.ServiceKey) []string {
 	return []string{
 		k.Exporter.String(), k.Src.String(), k.Dst.String(),
-		protocolName(k.Protocol), strconv.Itoa(int(k.Port)),
+		protocolName(k.Protocol), strconv.Itoa(int(k.Port)), k.Side.String(),
 		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf), k.Direction.String(),
 	}
 }
@@ -628,7 +628,7 @@ func serviceLabels(k aggregator.ServiceKey) []string {
 func destinationLabels(k aggregator.DestinationKey) []string {
 	return []string{
 		k.Exporter.String(), k.Dst.String(),
-		protocolName(k.Protocol), strconv.Itoa(int(k.Port)), k.Direction.String(),
+		protocolName(k.Protocol), strconv.Itoa(int(k.Port)), k.Side.String(), k.Direction.String(),
 	}
 }
 
@@ -715,7 +715,7 @@ func countryLabels(k aggregator.CountryKey) []string {
 // was seen on and the point the reading was taken at.
 func threatLabels(k aggregator.ThreatKey) []string {
 	return []string{
-		k.Exporter.String(), k.Address.String(), k.Side,
+		k.Exporter.String(), k.Address.String(), k.Side.String(),
 		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf), k.Direction.String(),
 	}
 }

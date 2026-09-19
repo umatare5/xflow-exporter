@@ -289,3 +289,37 @@ func TestMapping_UnknownPortsAreCounted(t *testing.T) {
 		t.Errorf("Snapshot() = %+v, want one unknown", got)
 	}
 }
+
+// TestMapping_IsServiceReadsTheFileAheadOfTheBuiltInTable pins the order the
+// aggregation keys on, which is the order the naming path already takes. The
+// built-in table names no internal service by policy, so a file is the only
+// way those ports reach the service side of a key at all -- including one
+// inside the ephemeral range, where a rejection would refuse the very port
+// that motivated the file, WireGuard's 51820 having been retired into it.
+func TestMapping_IsServiceReadsTheFileAheadOfTheBuiltInTable(t *testing.T) {
+	t.Parallel()
+
+	m := loadMapping(t, "services:\n  9100/tcp: node-exporter\n  51820/udp: wireguard\n")
+
+	tests := []struct {
+		name     string
+		protocol uint8
+		port     uint16
+		want     bool
+	}{
+		{name: "a port the file declares", protocol: protocolTCP, port: 9100, want: true},
+		{
+			name:     "a port the file declares inside the ephemeral range",
+			protocol: protocolUDP, port: 51820, want: true,
+		},
+		{name: "a port the built-in table names", protocol: protocolTCP, port: 443, want: true},
+		{name: "a port neither names", protocol: protocolTCP, port: 51234, want: false},
+		{name: "the file's port on the other transport", protocol: protocolUDP, port: 9100, want: false},
+	}
+
+	for _, tc := range tests {
+		if got := m.IsService(tc.protocol, tc.port); got != tc.want {
+			t.Errorf("%s: IsService(%d, %d) = %t, want %t", tc.name, tc.protocol, tc.port, got, tc.want)
+		}
+	}
+}

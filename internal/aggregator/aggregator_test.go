@@ -416,7 +416,7 @@ func TestAggregator_ThreatsKeepTheSideTheHitWasSeenOn(t *testing.T) {
 		t.Fatalf("Threats() = %d entries, want one per side", len(entries))
 	}
 
-	seen := make(map[string]ThreatKey, len(entries))
+	seen := make(map[Side]ThreatKey, len(entries))
 	for _, e := range entries {
 		seen[e.Key.Side] = e.Key
 	}
@@ -773,5 +773,142 @@ func TestAggregator_PartsTheTwoObservationPointsOfOnePath(t *testing.T) {
 			t.Errorf("host entry at %s = %d bytes, want the one reading it carried",
 				e.Key.Direction, e.Totals.Bytes)
 		}
+	}
+}
+
+// TestAggregator_KeysTheServiceSideOfTheConversation pins the port the two
+// service families key on. A device exporting the return leg of a named
+// service reports that service as the source port, so keying the destination
+// unconditionally gave every reply its own entry under a client's ephemeral
+// number -- a table of tens of thousands of rows naming nothing, with the
+// service's own traffic split across them.
+func TestAggregator_KeysTheServiceSideOfTheConversation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		src, dst uint16
+		wantPort uint16
+		wantSide Side
+	}{
+		{name: "the destination names it", src: 51234, dst: 443, wantPort: 443, wantSide: SideDst},
+		{name: "the source names it", src: 443, dst: 51234, wantPort: 443, wantSide: SideSrc},
+		{
+			// Where both ends name a service the destination wins, being the
+			// side a device exports as the service.
+			name: "both name one", src: 53, dst: 123, wantPort: 123, wantSide: SideDst,
+		},
+		{
+			// A client's own port names no service, so nothing is fabricated
+			// and the destination keys it as it always has.
+			name: "neither names one", src: 51234, dst: 60001, wantPort: 60001, wantSide: SideDst,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			a := New(testConfig(), Modules{Services: true, Destinations: true})
+			r := testRecord()
+			r.SrcPort, r.DstPort = tc.src, tc.dst
+			a.Ingest([]flow.Record{r})
+
+			services, _ := a.Services()
+			if len(services) != 1 {
+				t.Fatalf("Services() = %d entries, want 1", len(services))
+			}
+			if services[0].Key.Port != tc.wantPort || services[0].Key.Side != tc.wantSide {
+				t.Errorf("service keyed on port %d side %s, want %d and %s",
+					services[0].Key.Port, services[0].Key.Side, tc.wantPort, tc.wantSide)
+			}
+
+			destinations, _ := a.Destinations()
+			if len(destinations) != 1 {
+				t.Fatalf("Destinations() = %d entries, want 1", len(destinations))
+			}
+			if destinations[0].Key.Port != tc.wantPort || destinations[0].Key.Side != tc.wantSide {
+				t.Errorf("destination keyed on port %d side %s, want %d and %s",
+					destinations[0].Key.Port, destinations[0].Key.Side, tc.wantPort, tc.wantSide)
+			}
+		})
+	}
+}
+
+// TestAggregator_FoldsTheClientsEphemeralPortOntoTheServicesPort pins what
+// the rule is for, and what it leaves alone. The two legs of one exchange
+// name the same service, so the reply leg keys on that service's port rather
+// than on the client's own -- which is the whole of it. The address the
+// device reported the traffic to is untouched, so a reply leg still names the
+// client it went to and does not join the entry the requests built.
+func TestAggregator_FoldsTheClientsEphemeralPortOntoTheServicesPort(t *testing.T) {
+	t.Parallel()
+
+	a := New(testConfig(), Modules{Destinations: true})
+
+	const clients = 10
+	records := make([]flow.Record, 0, clients*2)
+	for client := range uint16(clients) {
+		host := netip.AddrFrom4([4]byte{10, 0, 1, byte(client)})
+
+		request := testRecord()
+		request.SrcAddr, request.DstAddr = host, testDst
+		request.SrcPort, request.DstPort = 51000+client, 443
+
+		// The reply carries the exchange the other way round, which is how a
+		// device reporting both directions exports it.
+		reply := testRecord()
+		reply.SrcAddr, reply.DstAddr = testDst, host
+		reply.SrcPort, reply.DstPort = 443, 51000+client
+
+		records = append(records, request, reply)
+	}
+	a.Ingest(records)
+
+	entries, _ := a.Destinations()
+	if len(entries) != clients+1 {
+		t.Errorf("Destinations() = %d entries, want one per client plus the service", len(entries))
+	}
+
+	sides := map[Side]int{}
+	for _, e := range entries {
+		if e.Key.Port != 443 {
+			t.Errorf("entry keyed on port %d, want the service both legs name", e.Key.Port)
+		}
+		sides[e.Key.Side]++
+		if e.Key.Side == SideSrc && e.Key.Dst == testDst {
+			t.Error("a reply leg keyed on the service's address, want the client it answered")
+		}
+	}
+	if sides[SideDst] != 1 || sides[SideSrc] != clients {
+		t.Errorf("sides = %v, want one destination entry and one source entry per client", sides)
+	}
+}
+
+// TestAggregator_ServiceLookupReadsTheOperatorsOwnPorts pins the hand-off the
+// server makes. The built-in table deliberately names no internal service, so
+// without the mapping file the rule would reach only the fifty-odd ports it
+// does carry.
+func TestAggregator_ServiceLookupReadsTheOperatorsOwnPorts(t *testing.T) {
+	t.Parallel()
+
+	const internal = 9100
+
+	a := New(testConfig(), Modules{Destinations: true},
+		WithServiceLookup(func(protocol uint8, port uint16) bool {
+			return protocol == 6 && port == internal
+		}))
+
+	r := testRecord()
+	r.SrcPort, r.DstPort = internal, 51234
+	a.Ingest([]flow.Record{r})
+
+	entries, _ := a.Destinations()
+	if len(entries) != 1 {
+		t.Fatalf("Destinations() = %d entries, want 1", len(entries))
+	}
+	if entries[0].Key.Port != internal || entries[0].Key.Side != SideSrc {
+		t.Errorf("keyed on port %d side %s, want the declared %d as the source side",
+			entries[0].Key.Port, entries[0].Key.Side, internal)
 	}
 }

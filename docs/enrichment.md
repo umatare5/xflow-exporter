@@ -43,6 +43,10 @@ See [examples/mapping.yml](../examples/mapping.yml) for the example with the det
 
 `--enrich.services` maps standard protocol ports to application names using the internal tables.
 
+The same two tables also decide which port keys `xflow_service_*` and `xflow_destination_*`, whether or not `--enrich.services` is set. A port the mapping file declares moves that service's reply leg onto its own entry, from the next entry created.
+
+The built-in table names around fifty ports and no internal service, so a site's own listeners reach the service side through the mapping file alone. A symmetric pair keys on its destination, and a port declared inside 1024–4999 takes the service side off a client that reused it.
+
 Resolution order is first match wins.
 
 1. Use name on the flow record itself

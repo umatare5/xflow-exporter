@@ -63,6 +63,9 @@ type NameSet struct {
 	devices    map[netip.Addr]string
 	interfaces map[interfaceKey]string
 	services   map[servicePort]string
+	// serviceBits answers the aggregation's question about the same set the
+	// map above answers the naming question about.
+	serviceBits [2][serviceBitsWords]uint64
 	// vlans resolves an address to a VLAN, per device. vlanNames holds what
 	// those VLANs were called, which is the smaller set: a VLAN carries
 	// prefixes to be useful and a name only to be readable.
@@ -265,6 +268,7 @@ func buildNameSet(doc *mappingFile) (*NameSet, error) {
 		}
 	}
 
+	ephemeral := make([]string, 0, len(doc.Services))
 	for spelling, name := range doc.Services {
 		port, err := mappingService(spelling)
 		if err != nil {
@@ -274,6 +278,20 @@ func buildNameSet(doc *mappingFile) (*NameSet, error) {
 			return nil, fmt.Errorf("the name of service %q %w", spelling, err)
 		}
 		set.services[port] = name
+		if i, ok := serviceTransport(port.protocol); ok {
+			set.serviceBits[i][port.port>>6] |= 1 << (port.port & 63)
+		}
+		if port.port >= firstEphemeralPort {
+			ephemeral = append(ephemeral, spelling)
+		}
+	}
+
+	// The file still wins those ports, the operator knowing their own network
+	// better than a range does -- WireGuard's own 51820 sits inside it. One
+	// line says which, so a mis-sided series has somewhere to be traced to.
+	if len(ephemeral) > 0 {
+		slog.Warn("Mapping declares services inside the ephemeral port range",
+			"services", strings.Join(ephemeral, ","))
 	}
 
 	return set, nil
@@ -417,6 +435,27 @@ func mappingPrefix(spelling string) (netip.Prefix, error) {
 		return netip.Prefix{}, fmt.Errorf("prefix %q covers every address, which no VLAN does", spelling)
 	}
 	return prefix, nil
+}
+
+// firstEphemeralPort is where Linux starts picking a client's own port by
+// default, the low end of ip_local_port_range. A service declared at or above
+// it takes the service side off records that merely reused the number.
+const firstEphemeralPort = 32768
+
+// IsService reports whether this file names a service at that port.
+func (s *NameSet) IsService(protocol uint8, port uint16) bool {
+	i, ok := serviceTransport(protocol)
+	return ok && s.serviceBits[i][port>>6]&(1<<(port&63)) != 0
+}
+
+// IsService reports whether the file in force, or the built-in table behind
+// it, names a service at that port. The order is the naming order: the
+// operator's own file first.
+func (m *Mapping) IsService(protocol uint8, port uint16) bool {
+	if set := m.set.Load(); set != nil && set.IsService(protocol, port) {
+		return true
+	}
+	return IsService(protocol, port)
 }
 
 // mappingService reads one services key, a port and a transport spelled
