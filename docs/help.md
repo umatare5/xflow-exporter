@@ -10,7 +10,7 @@ USAGE:
    xflow-exporter [global options]
 
 VERSION:
-   0.11.0
+   0.12.0
 
 GLOBAL OPTIONS:
    --dry-run                         Validate configuration without starting the server
