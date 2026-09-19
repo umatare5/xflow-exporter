@@ -43,7 +43,13 @@ func TestWriter_AuthorizationHeaderIsUnchanged(t *testing.T) {
 
 			seen := make(chan *http.Request, 1)
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				seen <- r.Clone(context.Background())
+				// The receive runs only once send() has returned, and the
+				// client retries ten times on any transport error -- so a
+				// blocking send here holds srv.Close() open with it.
+				select {
+				case seen <- r.Clone(context.Background()):
+				default:
+				}
 				// The client reads its own statistics back, and a write it
 				// reads as refused would retry past the one request pinned here.
 				w.Header().Set("X-Prometheus-Remote-Write-Samples-Written", "2")
