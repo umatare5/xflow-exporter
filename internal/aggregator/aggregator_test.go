@@ -418,13 +418,13 @@ func TestAggregator_ThreatsKeepTheSideTheHitWasSeenOn(t *testing.T) {
 
 	seen := make(map[string]ThreatKey, len(entries))
 	for _, e := range entries {
-		seen[e.Key.Direction] = e.Key
+		seen[e.Key.Side] = e.Key
 	}
 
-	if key, ok := seen[DirectionSrc]; !ok || key.Address != testSrc {
+	if key, ok := seen[SideSrc]; !ok || key.Address != testSrc {
 		t.Errorf("source-side entry = %+v, want the source address keyed as src", key)
 	}
-	if key, ok := seen[DirectionDst]; !ok || key.Address != testDst {
+	if key, ok := seen[SideDst]; !ok || key.Address != testDst {
 		t.Errorf("destination-side entry = %+v, want the destination address keyed as dst", key)
 	}
 }
@@ -713,5 +713,65 @@ func TestAggregator_IngestSaturatesAnUnrepresentableProduct(t *testing.T) {
 	}
 	if exporters[0].Packets != math.MaxUint64 {
 		t.Errorf("Exporters() packets = %d, want %d", exporters[0].Packets, uint64(math.MaxUint64))
+	}
+}
+
+// TestAggregator_PartsTheTwoObservationPointsOfOnePath pins the dimension
+// every table gained. A device watching one transit path at its entry and its
+// exit exports each flow twice with the same addresses, ports and interfaces,
+// so without the point the two readings share a key and every table reports
+// one flow of twice the traffic. Keying them apart does not correct the sum:
+// summing across the label gives today's doubled figure back, and reading one
+// direction is what gives the measured one.
+func TestAggregator_PartsTheTwoObservationPointsOfOnePath(t *testing.T) {
+	t.Parallel()
+
+	a := New(testConfig(), allModules())
+
+	base := flow.Record{
+		Exporter:         testExporter,
+		Version:          flow.VersionNetFlowV9,
+		SrcAddr:          testSrc,
+		DstAddr:          testDst,
+		Protocol:         6,
+		DstPort:          443,
+		TOSReported:      true,
+		TCPFlags:         2,
+		TCPFlagsReported: true,
+		SrcAS:            64500,
+		SrcVLAN:          800,
+		SrcCountry:       "JP",
+		AppName:          "https",
+		SrcFlagged:       true,
+		InputIf:          3,
+		OutputIf:         4,
+		Bytes:            1000,
+		Packets:          10,
+		Flows:            1,
+	}
+	ingress, egress := base, base
+	ingress.Direction = flow.DirectionIngress
+	egress.Direction = flow.DirectionEgress
+	a.Ingest([]flow.Record{ingress, egress})
+
+	for name, entries := range map[string]int{
+		"exporters": lengthOf(a.Exporters()), "hosts": lengthOf(a.Hosts()),
+		"services": lengthOf(a.Services()), "destinations": lengthOf(a.Destinations()),
+		"tcp_flags": lengthOf(a.TCPFlags()), "dscp": lengthOf(a.DSCP()),
+		"asns": lengthOf(a.ASNs()), "applications": lengthOf(a.Applications()),
+		"countries": lengthOf(a.Countries()), "threats": lengthOf(a.Threats()),
+		"vlans": lengthOf(a.VLANs()),
+	} {
+		if entries != 2 {
+			t.Errorf("%s = %d entries, want one per observation point", name, entries)
+		}
+	}
+
+	hosts, _ := a.Hosts()
+	for _, e := range hosts {
+		if e.Totals.Bytes != 1000 {
+			t.Errorf("host entry at %s = %d bytes, want the one reading it carried",
+				e.Key.Direction, e.Totals.Bytes)
+		}
 	}
 }

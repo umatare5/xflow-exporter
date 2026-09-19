@@ -9,6 +9,10 @@ import (
 	"time"
 )
 
+// labelUnknown is the label value of an answer the wire did not give. It is
+// what `src_country` already spells, so one vocabulary covers every absence.
+const labelUnknown = "unknown"
+
 // Version identifies the wire protocol a record arrived in. The values are the
 // `version` label of the decode metrics, so they must not drift.
 type Version uint8
@@ -38,9 +42,38 @@ func (v Version) String() string {
 	case VersionSFlowV5:
 		return "sflow_v5"
 	case VersionUnknown:
-		return "unknown"
+		return labelUnknown
 	default:
-		return "unknown"
+		return labelUnknown
+	}
+}
+
+// Direction is the observation point a record was taken at, as IE 61 numbers
+// it. RFC 7011 makes the point part of a flow's identity, so a device
+// watching one path at both ends reports the same traffic twice and only the
+// point tells the two readings apart.
+type Direction uint8
+
+// The observation points. DirectionUnknown is the zero value and carries the
+// absence of an answer: a protocol with no such element, or a source no one
+// interface owns.
+const (
+	DirectionUnknown Direction = iota
+	DirectionIngress
+	DirectionEgress
+)
+
+// String returns the `direction` label value.
+func (d Direction) String() string {
+	switch d {
+	case DirectionIngress:
+		return "ingress"
+	case DirectionEgress:
+		return "egress"
+	case DirectionUnknown:
+		return labelUnknown
+	default:
+		return labelUnknown
 	}
 }
 
@@ -66,7 +99,10 @@ type Record struct {
 	DstPort uint16
 	// Protocol is the IP protocol number.
 	Protocol uint8
-	TOS      uint8
+	// Direction is the observation point the device took the reading at,
+	// which separates the two readings a path watched at both ends gives.
+	Direction Direction
+	TOS       uint8
 	// TOSReported records that a device carried the TOS byte, which its value
 	// cannot: a DSCP of zero is best-effort traffic, not a field left unset,
 	// and the two would otherwise be one series.

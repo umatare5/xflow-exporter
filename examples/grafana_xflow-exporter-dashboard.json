@@ -842,7 +842,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "The same pairs a line chart would carry, sorted instead of overlaid, and ranked in bits rather than packets so a chatty small-packet flow does not outrank one filling the uplink. Observation is ingress-only, so the two directions of one conversation are separate rows and must not be read as a bidirectional total. Ranks rather than totals. Sampled estimate. Narrowed by the focus variable, which the tables' address links set.",
+      "description": "The same pairs a line chart would carry, sorted instead of overlaid, and ranked in bits rather than packets so a chatty small-packet flow does not outrank one filling the uplink. The two directions of one conversation are separate rows and must not be read as a bidirectional total, and each row folds the observation points the device reported it from. Ranks rather than totals. Sampled estimate. Narrowed by the focus variable, which the tables' address links set.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1014,7 +1014,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Where the LAN's traffic goes, named by the AS organization database. The local side of the pair is AS 0 under ingress-only observation, so collapsing the pair to the one AS that exists halves the label and doubles the signal. An AS no lookup resolved keeps its bar under its bare number rather than being dropped by the join. Ranks rather than totals: the tail below the Top-K cut is withheld, not folded. Sampled estimate.",
+      "description": "Where the LAN's traffic goes, named by the AS organization database. The local side of the pair is AS 0 wherever the device resolves no AS for it, so collapsing the pair to the one AS that exists halves the label and doubles the signal. An AS no lookup resolved keeps its bar under its bare number rather than being dropped by the join. Ranks rather than totals: the tail below the Top-K cut is withheld, not folded. Sampled estimate.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1095,7 +1095,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "The mirror of the egress ranking, and its own panel rather than a second series: under ingress-only observation the two directions are different measurements, and a peer that is large inbound while absent outbound is the interesting case -- a CDN pushing, or somebody probing. Placed beside egress so an asymmetry is a visual comparison. Ranks rather than totals. Sampled estimate.",
+      "description": "The mirror of the egress ranking, and its own panel rather than a second series: the two directions are different measurements, and a peer that is large inbound while absent outbound is the interesting case -- a CDN pushing, or somebody probing. Placed beside egress so an asymmetry is a visual comparison. Ranks rather than totals. Sampled estimate.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1176,7 +1176,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Three label dimensions no legend string can carry, as one sortable column each: sorting by port groups every 443 row together and separates QUIC from TCP. The protocol lives here as a column, which is why there is no separate protocol-mix panel -- a share of this family would be fabricated while the family is truncated. Directional and ingress-only: this is what a service received on the observed direction. Ranks rather than totals. Sampled estimate.",
+      "description": "Three label dimensions no legend string can carry, as one sortable column each: sorting by port groups every 443 row together and separates QUIC from TCP. The protocol lives here as a column, which is why there is no separate protocol-mix panel -- a share of this family would be fabricated while the family is truncated. Directional: this is what a service received, folded across the observation points the device reported it from. Ranks rather than totals. Sampled estimate.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2232,7 +2232,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "A SYN flood is SYN records rising while SYN,ACK records do not follow. Two separate series rather than a quotient: a quotient renders as no data whenever either side is absent, and an absent flag combination must not be shown as a measured zero. The selectors match the ECN-negotiating variants a modern stack sends. Flow records, not sampling-multiplied. SYN,ACK exceeding bare SYN is expected under ingress-only observation.",
+          "description": "A SYN flood is SYN records rising while SYN,ACK records do not follow. Two separate series rather than a quotient: a quotient renders as no data whenever either side is absent, and an absent flag combination must not be shown as a measured zero. The selectors match the ECN-negotiating variants a modern stack sends. Flow records, not sampling-multiplied. SYN,ACK exceeding bare SYN is expected where a device watches one end of a path.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2380,7 +2380,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "A country here is where the prefix is registered, not where the traffic went: a lab in Japan reaching an anycast prefix measures whichever continent that prefix is registered in. Not a figure to reconcile with a transit bill or a data-residency question. The union excludes private-to-private so LAN traffic does not occupy a panel about geography, and the ranked-bar form makes the per-country inbound and outbound asymmetry legible. Both directions appear as separate bars because observation is ingress-only. Packets are sampling-corrected.",
+          "description": "A country here is where the prefix is registered, not where the traffic went: a lab in Japan reaching an anycast prefix measures whichever continent that prefix is registered in. Not a figure to reconcile with a transit bill or a data-residency question. The union excludes private-to-private so LAN traffic does not occupy a panel about geography, and the ranked-bar form makes the per-country inbound and outbound asymmetry legible. Both directions appear as separate bars, the country pair keying them apart. Packets are sampling-corrected.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2816,7 +2816,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "A threat hit is a discrete item to read and act on rather than a shape on a chart. The direction is the finding -- src is an inbound origin most lists name, dst means an inside host reached a listed destination, which is materially more serious. This family carries no address pair, so the address links through to the conversation tables. An empty table means no listed address was seen, which is not the same as clean.",
+          "description": "A threat hit is a discrete item to read and act on rather than a shape on a chart. The side is the finding -- src is an inbound origin most lists name, dst means an inside host reached a listed destination, which is materially more serious. This family carries no address pair, so the address links through to the conversation tables. An empty table means no listed address was seen, which is not the same as clean.",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -2918,7 +2918,7 @@
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "direction"
+                  "options": "side"
                 },
                 "properties": [
                   {
@@ -2980,7 +2980,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(20, sum by (address, direction) (rate(xflow_threat_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",address!=\"other\",address=~\"$focus\"}[$rollup_interval])) * 8)",
+              "expr": "topk(20, sum by (address, side) (rate(xflow_threat_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",address!=\"other\",address=~\"$focus\"}[$rollup_interval])) * 8)",
               "format": "table",
               "instant": true,
               "range": false,
@@ -2992,7 +2992,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "sum by (address, direction) (rate(xflow_threat_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",address!=\"other\",address=~\"$focus\"}[$rollup_interval]))",
+              "expr": "sum by (address, side) (rate(xflow_threat_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",address!=\"other\",address=~\"$focus\"}[$rollup_interval]))",
               "format": "table",
               "instant": true,
               "range": false,
@@ -3015,7 +3015,7 @@
                   "Bitrate": 2,
                   "Records/s": 3,
                   "address": 0,
-                  "direction": 1
+                  "side": 1
                 },
                 "renameByName": {
                   "Value #A": "Bitrate",
@@ -3193,7 +3193,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "The classic reflection vectors, one row per destination and port, so a host answering these from outside is visible before it is conscripted into somebody else's attack. In a healthy network most of these ports produce no series at all, and that absence is the intended reading rather than a zero. Ranked by flow records, which are not sampling-multiplied. Observation is ingress-only: a row whose destination is inside the LAN is inbound traffic toward that service.",
+          "description": "The classic reflection vectors, one row per destination and port, so a host answering these from outside is visible before it is conscripted into somebody else's attack. In a healthy network most of these ports produce no series at all, and that absence is the intended reading rather than a zero. Ranked by flow records, which are not sampling-multiplied. A row whose destination is inside the LAN is inbound traffic toward that service.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3683,7 +3683,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Which counterparties carry enough traffic, in a balanced enough ratio, to be worth peering with directly instead of paying transit for. Read the ratio against the one a prospective peer publishes; most open policies accept roughly one to two. The guard on the ratio's denominator is load-bearing -- without it an AS seen inbound only renders as infinity. Joined rather than arithmetic: an AS seen in one direction only leaves a blank cell rather than a fabricated zero, and that asymmetry is real under ingress-only observation. Ranked from a Top-K bounded family, so this is the top of the peering picture rather than all of it.",
+          "description": "Which counterparties carry enough traffic, in a balanced enough ratio, to be worth peering with directly instead of paying transit for. Read the ratio against the one a prospective peer publishes; most open policies accept roughly one to two. The guard on the ratio's denominator is load-bearing -- without it an AS seen inbound only renders as infinity. Joined rather than arithmetic: an AS seen in one direction only leaves a blank cell rather than a fabricated zero, and that asymmetry is real where a device watches one end of a path. Ranked from a Top-K bounded family, so this is the top of the peering picture rather than all of it.",
           "fieldConfig": {
             "defaults": {
               "custom": {
