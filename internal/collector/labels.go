@@ -26,7 +26,8 @@ const (
 	labelOrg         = "organization"   // What a database calls that AS
 	labelApplication = "application"    // Resolved application name or engine:selector
 	labelAddress     = "address"        // A single address a series is keyed by
-	labelDirection   = "direction"      // Side of the flow an address was seen on
+	labelSide        = "side"           // Side of the conversation an address was seen on
+	labelDirection   = "direction"      // Observation point the device took the reading at
 	labelSrcCountry  = "src_country"    // ISO country code of the source address
 	labelDstCountry  = "dst_country"    // ISO country code of the destination address
 	labelInputIf     = "input_ifindex"  // ifIndex the flow entered the device on

@@ -191,6 +191,8 @@ The template-based record format. It supports dynamic field definitions utilizin
 
 The template cache key is strictly evaluated as `(exporter_address, protocol, observation_domain_id)`.
 
+IE 61 carries the observation point, `0` for ingress and `1` for egress. RFC 5102 defines no other value, so anything else leaves the point unknown, as does a template omitting the element.
+
 ```text
 +------------------------+
 |     Packet Header      |  20 bytes
@@ -410,6 +412,8 @@ A field count of zero is a template withdrawal. UDP gives no ordering, so a with
 The packet-sampling based record format. It relies on standard XDR encoding for all fields.
 
 Flow samples decode from the raw Ethernet header up to transport layers, alongside pre-parsed IPv4/IPv6 records.
+
+The observation point is derived rather than exported. A sample whose interface data source matches the input alone was seen entering the device, one matching the output alone leaving it, and anything else leaves the point unknown.
 
 ```text
 sFlow v5 datagram

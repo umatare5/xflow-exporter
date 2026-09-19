@@ -71,6 +71,8 @@ Every map keyed by wire data takes a bound, because a push protocol cannot choos
 | Devices with decode statistics    | [65536](../internal/decoder/stats.go#L29)    | Decode on, but publish no decode counters        |
 | AS names cached from the database | [65536](../internal/enrich/mmdb.go#L86)      | Leave the AS unnamed; a join finds no name       |
 
+A device reporting both observation points of one path keys each conversation twice, so the aggregation entry bound covers roughly half as many of them. A device reporting one point, or none, is unaffected.
+
 The six `_refused_total` counters track attempts rather than entities, acting as capacity saturation indicators. Application bounds safely accommodate ten times the capacity of a standard NBAR2 pack. Aggregation tables are bounded by `--aggregation.max-entries`, histograms by their bucket cap and the device budget.
 
 Memory reclamation operates asynchronously via sweeps. Idle domains, sampler declarations and application tables are garbage-collected via TTL expiry, while devices are reclaimed only upon reaching fleet budgets. Refused devices keep decoding and feeding aggregation tables, losing their decode counters and timestamps alone, and the two domain budgets bound a product: a full fleet holds 256 domains per device.

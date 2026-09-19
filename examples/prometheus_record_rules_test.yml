@@ -196,20 +196,21 @@ tests:
             value: 0.5
 
   # The address and the interfaces crossed are what the reduction drops; the
-  # side of the flow the address was seen on is what it keeps.
+  # side of the conversation the address was seen on is what it keeps, and the
+  # observation point rides through as it does on every rule.
   - interval: 1m
     input_series:
-      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.5",direction="dst",input_ifindex="3",output_ifindex="4"}'
+      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.5",side="dst",direction="unknown",input_ifindex="3",output_ifindex="4"}'
         values: "0+6000x10"
-      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.6",direction="dst",input_ifindex="5",output_ifindex="4"}'
+      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.6",side="dst",direction="unknown",input_ifindex="5",output_ifindex="4"}'
         values: "0+6000x10"
-      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.7",direction="src",input_ifindex="4",output_ifindex="3"}'
+      - series: 'xflow_threat_bytes_total{job="xflow",instance="localhost:10053",exporter_address="192.0.2.1",address="203.0.113.7",side="src",direction="unknown",input_ifindex="4",output_ifindex="3"}'
         values: "0+3000x10"
     promql_expr_test:
-      - expr: exporter_direction:xflow_threat_bytes:rate5m
+      - expr: exporter_side:xflow_threat_bytes:rate5m
         eval_time: 10m
         exp_samples:
-          - labels: 'exporter_direction:xflow_threat_bytes:rate5m{direction="dst", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter_side:xflow_threat_bytes:rate5m{direction="unknown", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow", side="dst"}'
             value: 200
-          - labels: 'exporter_direction:xflow_threat_bytes:rate5m{direction="src", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow"}'
+          - labels: 'exporter_side:xflow_threat_bytes:rate5m{direction="unknown", exporter_address="192.0.2.1", instance="localhost:10053", job="xflow", side="src"}'
             value: 50

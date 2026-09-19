@@ -65,6 +65,41 @@ func sflowIfIndex(format, value uint32) uint32 {
 	return value
 }
 
+// sflowSourceIfIndex is the data source type that names an interface. The
+// others name a VLAN or an entity, neither of which one observation point.
+const sflowSourceIfIndex = 0
+
+// sflowDirection derives the observation point from the data source the
+// sample was taken on. sFlow section 2.1 has a packet crossing two sampled
+// sources yield a record from each, so the source is what separates the two
+// readings: one matching the input alone was seen entering the device and one
+// matching the output alone leaving it.
+//
+// A source matching both is a hairpin, one matching neither belongs to
+// another reading, and index zero is every port on the agent. None of those
+// names one point, so the direction stays unknown. An interface the sample
+// left unnamed reads as zero, which no ifIndex is, and does not block the
+// other side from matching.
+func sflowDirection(source uint64, inputIf, outputIf uint32) flow.Direction {
+	if source>>32 != sflowSourceIfIndex {
+		return flow.DirectionUnknown
+	}
+
+	index := uint32(source)
+	if index == 0 {
+		return flow.DirectionUnknown
+	}
+
+	switch {
+	case index == inputIf && index != outputIf:
+		return flow.DirectionIngress
+	case index == outputIf && index != inputIf:
+		return flow.DirectionEgress
+	default:
+		return flow.DirectionUnknown
+	}
+}
+
 // decodeSFlowV5 parses one sFlow v5 datagram. A sample this exporter cannot
 // read is skipped over its declared length; only a structure whose lengths
 // lie is fatal to the datagram.
@@ -234,7 +269,8 @@ func (d *Decoder) decodeSFlowFlowSample(
 	if !haveChosen {
 		return dst
 	}
-	return d.appendSFlowRecord(exporter, chosenKind, chosen, samplingRate, inputIf, outputIf, dst, issue)
+	return d.appendSFlowRecord(exporter, chosenKind, chosen, samplingRate,
+		inputIf, outputIf, sflowDirection(source, inputIf, outputIf), dst, issue)
 }
 
 // sflowPacketRecordKind reports the format of a flow record that describes the
@@ -259,7 +295,8 @@ func sflowPacketRecordKind(recordType uint32) (uint32, bool) {
 // read.
 func (d *Decoder) appendSFlowRecord(
 	exporter netip.Addr, kind uint32, record []byte,
-	samplingRate, inputIf, outputIf uint32, dst []flow.Record, issue func(reason string),
+	samplingRate, inputIf, outputIf uint32, direction flow.Direction,
+	dst []flow.Record, issue func(reason string),
 ) []flow.Record {
 	var read func([]byte, *flow.Record) bool
 	switch kind {
@@ -293,6 +330,7 @@ func (d *Decoder) appendSFlowRecord(
 		SamplingRate:  samplingRate,
 		InputIf:       inputIf,
 		OutputIf:      outputIf,
+		Direction:     direction,
 	})
 
 	// A record of a known format that does not parse is a structure problem

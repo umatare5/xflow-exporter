@@ -160,31 +160,34 @@ func NewFlowCollector(
 
 	if modules.Exporters {
 		c.exporters = newFamilyDescs("xflow_exporter", "observation domain",
-			[]string{labelExporter, labelVersion, labelODID})
+			[]string{labelExporter, labelVersion, labelODID, labelDirection})
 	}
 	if modules.Hosts {
 		c.hosts = newFamilyDescs("xflow_host_pair", "source-destination pair",
-			[]string{labelExporter, labelSrc, labelDst, labelInputIf, labelOutputIf})
+			[]string{labelExporter, labelSrc, labelDst, labelInputIf, labelOutputIf, labelDirection})
 	}
 	if modules.Services {
 		c.services = newFamilyDescs("xflow_service", "source-destination service",
-			[]string{labelExporter, labelSrc, labelDst, labelProto, labelPort, labelInputIf, labelOutputIf})
+			[]string{
+				labelExporter, labelSrc, labelDst, labelProto, labelPort,
+				labelInputIf, labelOutputIf, labelDirection,
+			})
 	}
 	if modules.Destinations {
 		c.destinations = newFamilyDescs("xflow_destination", "destination service",
-			[]string{labelExporter, labelDst, labelProto, labelPort})
+			[]string{labelExporter, labelDst, labelProto, labelPort, labelDirection})
 	}
 	if modules.TCPFlags {
 		c.tcpFlags = newFamilyDescs("xflow_tcp_flags", "TCP control-bit profile",
-			[]string{labelExporter, labelFlags})
+			[]string{labelExporter, labelFlags, labelDirection})
 	}
 	if modules.DSCP {
 		c.dscp = newFamilyDescs("xflow_dscp", "DSCP class",
-			[]string{labelExporter, labelDSCP})
+			[]string{labelExporter, labelDSCP, labelDirection})
 	}
 	if modules.ASNs {
 		c.asns = newFamilyDescs("xflow_asn_pair", "AS pair",
-			[]string{labelExporter, labelSrcASN, labelDstASN})
+			[]string{labelExporter, labelSrcASN, labelDstASN, labelDirection})
 		c.asnInfoDesc = prometheus.NewDesc(
 			"xflow_asn_info",
 			"Always 1, carrying what a database calls each AS the pair table publishes",
@@ -193,19 +196,19 @@ func NewFlowCollector(
 	}
 	if modules.Applications {
 		c.applications = newFamilyDescs("xflow_application", "application",
-			[]string{labelExporter, labelApplication})
+			[]string{labelExporter, labelApplication, labelDirection})
 	}
 	if modules.Countries {
 		c.countries = newFamilyDescs("xflow_country_pair", "country pair",
-			[]string{labelExporter, labelSrcCountry, labelDstCountry})
+			[]string{labelExporter, labelSrcCountry, labelDstCountry, labelDirection})
 	}
 	if modules.Threats {
 		c.threats = newFamilyDescs("xflow_threat", "flagged address",
-			[]string{labelExporter, labelAddress, labelDirection, labelInputIf, labelOutputIf})
+			[]string{labelExporter, labelAddress, labelSide, labelInputIf, labelOutputIf, labelDirection})
 	}
 	if modules.VLANs {
 		c.vlans = newFamilyDescs("xflow_vlan_pair", "VLAN pair",
-			[]string{labelExporter, labelSrcVLAN, labelDstVLAN})
+			[]string{labelExporter, labelSrcVLAN, labelDstVLAN, labelDirection})
 	}
 	// The naming series needs both the family that carries the numbers and
 	// the file that carries the names, so without either it is absent rather
@@ -429,7 +432,7 @@ func (c *FlowCollector) collectExporters(ch chan<- prometheus.Metric) {
 	for _, e := range entries {
 		c.exporters.emit(ch, e.Totals, exporterLabels(e.Key)...)
 	}
-	c.exporters.emit(ch, overflow, otherLabel, otherLabel, otherLabel)
+	c.exporters.emit(ch, overflow, otherLabels(exporterLabels)...)
 }
 
 // collectFamily publishes one folded table: the Top-K entries at or above the
@@ -603,14 +606,14 @@ func (c *FlowCollector) collectHealth(ch chan<- prometheus.Metric) {
 func exporterLabels(k aggregator.ExporterKey) []string {
 	return []string{
 		k.Exporter.String(), k.Version.String(),
-		strconv.FormatUint(uint64(k.ODID), 10),
+		strconv.FormatUint(uint64(k.ODID), 10), k.Direction.String(),
 	}
 }
 
 func hostLabels(k aggregator.HostKey) []string {
 	return []string{
 		k.Exporter.String(), k.Src.String(), k.Dst.String(),
-		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf),
+		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf), k.Direction.String(),
 	}
 }
 
@@ -618,23 +621,23 @@ func serviceLabels(k aggregator.ServiceKey) []string {
 	return []string{
 		k.Exporter.String(), k.Src.String(), k.Dst.String(),
 		protocolName(k.Protocol), strconv.Itoa(int(k.Port)),
-		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf),
+		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf), k.Direction.String(),
 	}
 }
 
 func destinationLabels(k aggregator.DestinationKey) []string {
 	return []string{
 		k.Exporter.String(), k.Dst.String(),
-		protocolName(k.Protocol), strconv.Itoa(int(k.Port)),
+		protocolName(k.Protocol), strconv.Itoa(int(k.Port)), k.Direction.String(),
 	}
 }
 
 func tcpFlagsLabels(k aggregator.TCPFlagsKey) []string {
-	return []string{k.Exporter.String(), tcpFlagNames(k.Flags)}
+	return []string{k.Exporter.String(), tcpFlagNames(k.Flags), k.Direction.String()}
 }
 
 func dscpLabels(k aggregator.DSCPKey) []string {
-	return []string{k.Exporter.String(), dscpName(k.DSCP)}
+	return []string{k.Exporter.String(), dscpName(k.DSCP), k.Direction.String()}
 }
 
 // collectASNNames publishes what a database calls each AS the pair table
@@ -691,26 +694,29 @@ func asnLabels(k aggregator.ASNKey) []string {
 	return []string{
 		k.Exporter.String(),
 		strconv.FormatUint(uint64(k.SrcAS), 10),
-		strconv.FormatUint(uint64(k.DstAS), 10),
+		strconv.FormatUint(uint64(k.DstAS), 10), k.Direction.String(),
 	}
 }
 
 func appLabels(k aggregator.AppKey) []string {
-	return []string{k.Exporter.String(), k.Name}
+	return []string{k.Exporter.String(), k.Name, k.Direction.String()}
 }
 
 // countryLabels renders a country pair. A side the database could not place
 // reads as unknown rather than as an empty label, which Prometheus cannot
 // tell from a label that was never set.
 func countryLabels(k aggregator.CountryKey) []string {
-	return []string{k.Exporter.String(), countryLabel(k.Src), countryLabel(k.Dst)}
+	return []string{
+		k.Exporter.String(), countryLabel(k.Src), countryLabel(k.Dst), k.Direction.String(),
+	}
 }
 
-// threatLabels renders one flagged address and the side it was seen on.
+// threatLabels renders one flagged address, the side of the conversation it
+// was seen on and the point the reading was taken at.
 func threatLabels(k aggregator.ThreatKey) []string {
 	return []string{
-		k.Exporter.String(), k.Address.String(), k.Direction,
-		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf),
+		k.Exporter.String(), k.Address.String(), k.Side,
+		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf), k.Direction.String(),
 	}
 }
 
@@ -725,7 +731,7 @@ func ifIndexLabel(ifIndex uint32) string {
 // vlanLabels renders a VLAN pair. A side no prefix covered reads 0, which
 // 802.1Q reserves as the null VLAN ID and no network numbers.
 func vlanLabels(k aggregator.VLANKey) []string {
-	return []string{k.Exporter.String(), vlanLabel(k.Src), vlanLabel(k.Dst)}
+	return []string{k.Exporter.String(), vlanLabel(k.Src), vlanLabel(k.Dst), k.Direction.String()}
 }
 
 // vlanLabel spells one VLAN.
