@@ -3,7 +3,9 @@ package decoder
 import (
 	"net/netip"
 	"testing"
+	"time"
 
+	"github.com/umatare5/xflow-exporter/internal/config"
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
@@ -125,5 +127,88 @@ func TestDecodeNetFlowV9_BoundsTheSessionsOneDomainFollows(t *testing.T) {
 
 	if held := sessionsHeld(t, d, key); held != maxSessionsPerDomain {
 		t.Errorf("sessions held = %d, want the bound of %d", held, maxSessionsPerDomain)
+	}
+}
+
+// TestDecodeNetFlowV9_ReleaseTheSessionsADeviceStoppedUsing is the regression
+// test for the silent freeze. A device renumbers its source port when it
+// restarts, so the bound is reached by ordinary operation rather than by
+// abuse -- and a datagram on an untracked port still refreshes the domain,
+// which kept the whole thing from aging out.
+func TestDecodeNetFlowV9_ReleaseTheSessionsADeviceStoppedUsing(t *testing.T) {
+	t.Parallel()
+
+	d := New(config.Parser{MaxFieldsPerTemplate: 128, TemplateTTL: time.Minute})
+	now := time.Unix(1_756_600_000, 0)
+	d.templates.now = func() time.Time { return now }
+	key := domainKey{exporter: testExporter, odid: fixtureV9ODID, proto: flow.VersionNetFlowV9}
+
+	announce := func(port uint16, seq uint32) {
+		src := netip.AddrPortFrom(testExporter, port)
+		if _, err := d.Decode(src, v9Packet(seq, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
+			t.Fatalf("Decode() from port %d error = %v, want nil", port, err)
+		}
+	}
+
+	// Sixteen restarts, each on a port of its own, fill the domain.
+	for i := range maxSessionsPerDomain {
+		announce(uint16(40000+i), 1)
+	}
+	if held := sessionsHeld(t, d, key); held != maxSessionsPerDomain {
+		t.Fatalf("sessions held = %d, want the bound of %d", held, maxSessionsPerDomain)
+	}
+
+	// The seventeenth speaks past the TTL. The sweep frees the sixteen that
+	// fell silent, and the position this one is tracked from is its own.
+	now = now.Add(2 * time.Minute)
+	announce(61301, 100)
+	d.SweepDomains()
+	announce(61301, 101)
+	announce(61301, 110) // eight packets never arrived
+
+	if held := sessionsHeld(t, d, key); held != 1 {
+		t.Errorf("sessions held = %d after the sweep, want the one still speaking", held)
+	}
+	domains := d.Domains()
+	if len(domains) != 1 {
+		t.Fatalf("Domains() returned %d, want the domain kept", len(domains))
+	}
+	if domains[0].SequenceMissed != 8 {
+		t.Errorf("SequenceMissed = %d, want the eight the live session skipped", domains[0].SequenceMissed)
+	}
+}
+
+// TestDecodeNetFlowV9_KeepTheSessionsStillSpeaking pins the other half: the
+// sweep frees what fell silent, not what a device is still using.
+func TestDecodeNetFlowV9_KeepTheSessionsStillSpeaking(t *testing.T) {
+	t.Parallel()
+
+	d := New(config.Parser{MaxFieldsPerTemplate: 128, TemplateTTL: time.Minute})
+	now := time.Unix(1_756_600_000, 0)
+	d.templates.now = func() time.Time { return now }
+	key := domainKey{exporter: testExporter, odid: fixtureV9ODID, proto: flow.VersionNetFlowV9}
+
+	announce := func(port uint16, seq uint32) {
+		if _, err := d.Decode(netip.AddrPortFrom(testExporter, port),
+			v9Packet(seq, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
+			t.Fatalf("Decode() error = %v, want nil", err)
+		}
+	}
+
+	announce(61301, 1)
+	announce(63558, 1)
+
+	// One keeps speaking across the TTL while the other falls silent.
+	for i := range 3 {
+		now = now.Add(30 * time.Second)
+		announce(61301, uint32(2+i))
+		d.SweepDomains()
+	}
+
+	if held := sessionsHeld(t, d, key); held != 1 {
+		t.Errorf("sessions held = %d, want only the one still speaking", held)
+	}
+	if domains := d.Domains(); len(domains) != 1 || domains[0].SequenceMissed != 0 {
+		t.Errorf("domains = %+v, want the live session tracked with no loss", domains)
 	}
 }
