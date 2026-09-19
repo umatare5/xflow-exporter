@@ -1176,7 +1176,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Three label dimensions no legend string can carry, as one sortable column each: sorting by port groups every 443 row together and separates QUIC from TCP. The protocol lives here as a column, which is why there is no separate protocol-mix panel -- a share of this family would be fabricated while the family is truncated. Directional: this is what a service received, folded across the observation points the device reported it from. Ranks rather than totals. Sampled estimate.",
+      "description": "Three label dimensions no legend string can carry, as one sortable column each: sorting by port groups every 443 row together and separates QUIC from TCP. The protocol lives here as a column, which is why there is no separate protocol-mix panel -- a share of this family would be fabricated while the family is truncated. Directional: a side=dst row is what a service received and a side=src row what it sent to the address in dst, folded across the observation points the device reported it from. Ranks rather than totals. Sampled estimate.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1321,7 +1321,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst!=\"other\",dst=~\"$focus\"}[$rollup_interval])) * 8)",
+          "expr": "topk(15, sum by (dst, proto, port, side) (rate(xflow_destination_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst!=\"other\",dst=~\"$focus\"}[$rollup_interval])) * 8)",
           "format": "table",
           "instant": true,
           "range": false,
@@ -1337,10 +1337,11 @@
               "Time": true
             },
             "indexByName": {
-              "Bitrate": 3,
+              "Bitrate": 4,
               "dst": 0,
               "port": 2,
-              "proto": 1
+              "proto": 1,
+              "side": 3
             },
             "renameByName": {
               "Value": "Bitrate"
@@ -1447,7 +1448,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "What is being served on the campus. Two filters are deliberate heuristics: the destination is restricted to RFC 1918, and the port to four digits, which drops the ephemeral ports a reverse-direction record puts in the port label and with them any genuine listener above 9999. Read the protocol column -- for ICMP the port label is the type and code word rather than a port, so such a row is not a listening service. Ranks from a table whose cut is by byte volume, so a quiet listener can be withheld before it is ranked.",
+          "description": "What is being served on the campus. Three filters are deliberate heuristics: the destination is restricted to RFC 1918, the side to dst, which drops the reply leg of a service a campus host reached out to, and the port to four digits, which drops any genuine listener above 9999. Read the protocol column -- for ICMP the port label is the type and code word rather than a port, so such a row is not a listening service. Ranks from a table whose cut is by byte volume, so a quiet listener can be withheld before it is ranked.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1592,7 +1593,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\",port=~\"[0-9]{1,4}\"}[$rollup_interval])) * 8)",
+              "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_bytes_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\",side=\"dst\",port=~\"[0-9]{1,4}\"}[$rollup_interval])) * 8)",
               "format": "table",
               "instant": true,
               "range": false,
@@ -1930,7 +1931,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(15, sum by (dst, proto, port) (rate(xflow_destination_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst=~\"22[4-9]\\\\..*|23[0-9]\\\\..*|255\\\\.255\\\\.255\\\\.255\",dst=~\"$focus\"}[$rollup_interval])))",
+              "expr": "topk(15, sum by (dst, proto, port, side) (rate(xflow_destination_packets_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",dst=~\"22[4-9]\\\\..*|23[0-9]\\\\..*|255\\\\.255\\\\.255\\\\.255\",dst=~\"$focus\"}[$rollup_interval])))",
               "format": "table",
               "instant": true,
               "range": false,
@@ -1946,10 +1947,11 @@
                   "Time": true
                 },
                 "indexByName": {
-                  "Packets/s": 3,
+                  "Packets/s": 4,
                   "dst": 0,
                   "port": 2,
-                  "proto": 1
+                  "proto": 1,
+                  "side": 3
                 },
                 "renameByName": {
                   "Value": "Packets/s"
@@ -3360,7 +3362,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Services an inside host is using now and was not using over the preceding six hours: which machine changed behaviour, stated rather than inferred from a line chart. This is the only panel on the source-destination service family, which is the single bridge from a host to an application or an AS, neither of which carries an address. Read as not seen recently rather than never seen -- an entry evicted at the entry TTL and recreated surfaces here on its own. Expect noise on a busy LAN.",
+          "description": "Services an inside host is using now and was not using over the preceding six hours: which machine changed behaviour, stated rather than inferred from a line chart. This is the only panel on the source-destination service family, which is the single bridge from a host to an application or an AS, neither of which carries an address. Read as not seen recently rather than never seen -- an entry evicted at the entry TTL and recreated surfaces here on its own. side says which end of the conversation the port came from, and it joins the novelty test, so a pair whose side flips between the two windows surfaces with nothing about the host having changed. Expect noise on a busy LAN.",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -3475,7 +3477,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "(\n  group by (src, dst, proto, port) (rate(xflow_service_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\"}[$rollup_interval]) > 0)\n  or\n  group by (src, dst, proto, port) (rate(xflow_service_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\"}[$rollup_interval]) > 0)\n)\nunless\n(\n  group by (src, dst, proto, port) (rate(xflow_service_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\"}[6h] offset $rollup_interval) > 0)\n  or\n  group by (src, dst, proto, port) (rate(xflow_service_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\"}[6h] offset $rollup_interval) > 0)\n)",
+              "expr": "(\n  group by (src, dst, proto, port, side) (rate(xflow_service_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\"}[$rollup_interval]) > 0)\n  or\n  group by (src, dst, proto, port, side) (rate(xflow_service_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\"}[$rollup_interval]) > 0)\n)\nunless\n(\n  group by (src, dst, proto, port, side) (rate(xflow_service_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",src=~\"$focus\"}[6h] offset $rollup_interval) > 0)\n  or\n  group by (src, dst, proto, port, side) (rate(xflow_service_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",src=~\"10\\\\..*|192\\\\.168\\\\..*|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\..*\",dst=~\"$focus\"}[6h] offset $rollup_interval) > 0)\n)",
               "format": "table",
               "instant": true,
               "range": false,
@@ -3495,6 +3497,7 @@
                   "dst": 1,
                   "port": 3,
                   "proto": 2,
+                  "side": 4,
                   "src": 0
                 },
                 "renameByName": {}

@@ -835,32 +835,53 @@ func TestAggregator_KeysTheServiceSideOfTheConversation(t *testing.T) {
 	}
 }
 
-// TestAggregator_FoldsTheReplyLegOntoTheServiceItAnswered pins what the rule
-// is for. The two legs of one exchange carry the same service, so they belong
-// in one entry rather than one per client port.
-func TestAggregator_FoldsTheReplyLegOntoTheServiceItAnswered(t *testing.T) {
+// TestAggregator_FoldsTheClientsEphemeralPortOntoTheServicesPort pins what
+// the rule is for, and what it leaves alone. The two legs of one exchange
+// name the same service, so the reply leg keys on that service's port rather
+// than on the client's own -- which is the whole of it. The address the
+// device reported the traffic to is untouched, so a reply leg still names the
+// client it went to and does not join the entry the requests built.
+func TestAggregator_FoldsTheClientsEphemeralPortOntoTheServicesPort(t *testing.T) {
 	t.Parallel()
 
 	a := New(testConfig(), Modules{Destinations: true})
 
-	records := make([]flow.Record, 0, 20)
-	for client := range uint16(10) {
+	const clients = 10
+	records := make([]flow.Record, 0, clients*2)
+	for client := range uint16(clients) {
+		host := netip.AddrFrom4([4]byte{10, 0, 1, byte(client)})
+
 		request := testRecord()
+		request.SrcAddr, request.DstAddr = host, testDst
 		request.SrcPort, request.DstPort = 51000+client, 443
+
+		// The reply carries the exchange the other way round, which is how a
+		// device reporting both directions exports it.
 		reply := testRecord()
+		reply.SrcAddr, reply.DstAddr = testDst, host
 		reply.SrcPort, reply.DstPort = 443, 51000+client
+
 		records = append(records, request, reply)
 	}
 	a.Ingest(records)
 
 	entries, _ := a.Destinations()
-	if len(entries) != 2 {
-		t.Errorf("Destinations() = %d entries, want one per side of the one service", len(entries))
+	if len(entries) != clients+1 {
+		t.Errorf("Destinations() = %d entries, want one per client plus the service", len(entries))
 	}
+
+	sides := map[Side]int{}
 	for _, e := range entries {
 		if e.Key.Port != 443 {
 			t.Errorf("entry keyed on port %d, want the service both legs name", e.Key.Port)
 		}
+		sides[e.Key.Side]++
+		if e.Key.Side == SideSrc && e.Key.Dst == testDst {
+			t.Error("a reply leg keyed on the service's address, want the client it answered")
+		}
+	}
+	if sides[SideDst] != 1 || sides[SideSrc] != clients {
+		t.Errorf("sides = %v, want one destination entry and one source entry per client", sides)
 	}
 }
 
