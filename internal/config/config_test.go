@@ -649,3 +649,40 @@ func TestValidate_ListenAddressNamesAnInterface(t *testing.T) {
 		})
 	}
 }
+
+// TestConfig_ValidateKeepsTheCredentialOutOfItsErrors pins the redaction. A
+// configured endpoint may carry userinfo, and both the parse failure and the
+// two shape rules repeated the URL whole into an error the process logs at
+// start-up.
+func TestConfig_ValidateKeepsTheCredentialOutOfItsErrors(t *testing.T) {
+	t.Parallel()
+
+	const secret = "s3cr3t"
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{"a URL that does not parse", "://user:" + secret + "@example.test/write"},
+		{"a scheme the client cannot dial", "ftp://user:" + secret + "@example.test/write"},
+		{"a URL carrying no host", "http://user:" + secret + "@/write"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := validConfig()
+			cfg.RemoteWrite.URL = tt.url
+			cfg.RemoteWrite.Interval = DefaultRemoteWriteInterval
+			cfg.RemoteWrite.Timeout = DefaultRemoteWriteTimeout
+
+			err := cfg.Validate()
+			if err == nil {
+				t.Fatal("Validate() error = nil, want the endpoint refused")
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Errorf("Validate() error = %q, want the credential redacted", err)
+			}
+		})
+	}
+}

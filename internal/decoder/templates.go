@@ -441,11 +441,10 @@ func (s *templateStore) declareSampler(d *domainState, odid, samplerID uint32, n
 	}
 }
 
-// sweep drops the domains idle for longer than the template TTL. A domain
-// nobody has named for that long carries only templates that have expired
-// with it.
-func (s *templateStore) sweep() int {
-	return s.sweepDomains(s.now().Add(-s.ttl).UnixNano())
+// cutoff is the instant before which state counts as idle: one template TTL
+// back from the clock that stamps every announcement.
+func (s *templateStore) cutoff() int64 {
+	return s.now().Add(-s.ttl).UnixNano()
 }
 
 // refused reports how many datagrams the budget turned away.

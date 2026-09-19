@@ -54,8 +54,8 @@ func (c *FlowCollector) EntryScope() (topK int, minBytes uint64) {
 	return c.topK, c.minBytes
 }
 
-// Entries reads one table under the sort and cut a scrape uses, so a row's
-// rank against Published answers whether /metrics carries that entry.
+// Entries reads one table under the cut a scrape uses, so a row's rank
+// against Published answers whether /metrics carries that entry.
 //
 // A disabled table reports false rather than an empty report: no series of
 // its exists either, and absence is how this exporter spells that.
@@ -97,8 +97,11 @@ func entriesOf[K comparable](
 		return AggregationEntries{}, false
 	}
 
+	// Every row is ranked here, the withheld tail included, so the table is
+	// ordered whole rather than only as far as the cut a scrape needs.
 	entries, fold := read()
-	return report(descs, entries, published(c, entries), fold, labels), true
+	sortEntries(entries)
+	return report(descs, entries, cutOf(c, entries), fold, labels), true
 }
 
 // exporterEntries reads the per-device table, which collectExporters publishes

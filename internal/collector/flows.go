@@ -458,44 +458,116 @@ func collectFamily[K comparable](
 	return cut
 }
 
-// sortEntries orders a table largest by bytes first, the older entry winning
-// a tie.
+// compareEntries orders a table largest by bytes first, the older entry
+// winning a tie.
 //
 // The order has to be total: a comparison that returns zero leaves the sort
 // free to place either first, and the snapshot arrives in map order, so the
 // cut would admit a different subset of a tie group on every scrape and
 // publish churn nothing ingested.
-func sortEntries[K comparable](entries []aggregator.EntrySnapshot[K]) {
-	slices.SortFunc(entries, func(a, b aggregator.EntrySnapshot[K]) int {
-		switch {
-		case a.Bytes > b.Bytes:
-			return -1
-		case a.Bytes < b.Bytes:
-			return 1
-		case a.Born < b.Born:
-			return -1
-		case a.Born > b.Born:
-			return 1
-		default:
-			return 0
-		}
-	})
+func compareEntries[K comparable](a, b aggregator.EntrySnapshot[K]) int {
+	switch {
+	case a.Bytes > b.Bytes:
+		return -1
+	case a.Bytes < b.Bytes:
+		return 1
+	case a.Born < b.Born:
+		return -1
+	case a.Born > b.Born:
+		return 1
+	default:
+		return 0
+	}
 }
 
-// published sorts a table's entries and returns the ones that keep their own
-// labels. Both tests fail monotonically down the sorted slice, so the cut is a
-// prefix of it and anything reading the published set can take it whole.
+// sortEntries puts a table in that order.
+func sortEntries[K comparable](entries []aggregator.EntrySnapshot[K]) {
+	slices.SortFunc(entries, compareEntries[K])
+}
+
+// published orders a table as far as the cut reaches and returns what keeps
+// its own labels.
+//
+// A table runs to --aggregation.max-entries while Top-K publishes a fraction
+// of it, so the tail is partitioned past rather than ordered: a scrape folds
+// those entries into one row whatever their order among themselves. The
+// listing route orders them for its own ranking and calls cutOf directly.
 func published[K comparable](
 	c *FlowCollector, entries []aggregator.EntrySnapshot[K],
 ) []aggregator.EntrySnapshot[K] {
-	sortEntries(entries)
+	if c.topK < len(entries) {
+		selectLargest(entries, c.topK)
+		sortEntries(entries[:c.topK])
+	} else {
+		sortEntries(entries)
+	}
+	return cutOf(c, entries)
+}
+
+// cutOf returns the prefix of an ordered table that keeps its own labels.
+// Both tests fail monotonically down the order, so the cut is a prefix of it
+// and anything reading the published set can take it whole.
+func cutOf[K comparable](
+	c *FlowCollector, entries []aggregator.EntrySnapshot[K],
+) []aggregator.EntrySnapshot[K] {
+	if c.topK < len(entries) {
+		entries = entries[:c.topK]
+	}
 
 	for i, e := range entries {
-		if i >= c.topK || e.Bytes < c.minBytes {
+		if e.Bytes < c.minBytes {
 			return entries[:i]
 		}
 	}
 	return entries
+}
+
+// selectLargest moves the k entries that order first to the front, leaving
+// them unordered among themselves for the caller to sort. It is the half of
+// a sort the cut actually needs.
+func selectLargest[K comparable](entries []aggregator.EntrySnapshot[K], k int) {
+	lo, hi := 0, len(entries)-1
+	for lo < hi {
+		p := partitionEntries(entries, lo, hi)
+		switch {
+		case p == k-1:
+			return
+		case p < k-1:
+			lo = p + 1
+		default:
+			hi = p - 1
+		}
+	}
+}
+
+// partitionEntries splits a range around the median of its first, middle and
+// last entries, returning where that median landed. Taking the median rather
+// than an end keeps a range already in order from splitting one entry at a
+// time, which is the shape a second scrape of an unchanged table presents.
+func partitionEntries[K comparable](entries []aggregator.EntrySnapshot[K], lo, hi int) int {
+	mid := lo + (hi-lo)/2
+	if compareEntries(entries[mid], entries[lo]) < 0 {
+		entries[lo], entries[mid] = entries[mid], entries[lo]
+	}
+	if compareEntries(entries[hi], entries[lo]) < 0 {
+		entries[lo], entries[hi] = entries[hi], entries[lo]
+	}
+	if compareEntries(entries[hi], entries[mid]) < 0 {
+		entries[mid], entries[hi] = entries[hi], entries[mid]
+	}
+
+	pivot := entries[mid]
+	entries[mid], entries[hi] = entries[hi], entries[mid]
+
+	boundary := lo
+	for i := lo; i < hi; i++ {
+		if compareEntries(entries[i], pivot) < 0 {
+			entries[boundary], entries[i] = entries[i], entries[boundary]
+			boundary++
+		}
+	}
+	entries[boundary], entries[hi] = entries[hi], entries[boundary]
+	return boundary
 }
 
 // otherLabels builds the all-other label set of one family, sized by probing

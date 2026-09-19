@@ -13,6 +13,13 @@ import (
 	"github.com/umatare5/xflow-exporter/internal/config"
 )
 
+// writeTimeout bounds one response's write, every route included. Without it
+// a client that stops reading holds its connection until it disconnects, so a
+// handful of such peers exhaust the listener and the exporter answers nobody.
+// It is generous for the largest body the entry bound can produce, and a
+// scrape gives up long before it, Prometheus defaulting to ten seconds.
+const writeTimeout = 60 * time.Second
+
 // Reloader re-reads whatever the exporter loaded from disk.
 type Reloader interface {
 	Reload() error
@@ -78,6 +85,7 @@ func New(
 		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 30 * time.Second,
+		WriteTimeout:      writeTimeout,
 	}
 }
 
