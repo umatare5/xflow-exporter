@@ -264,6 +264,28 @@ type domainState struct {
 	// never reaches the guard.
 	clockInversions atomic.Uint64
 	clocksAnchored  atomic.Bool
+
+	// aggregateZeroFlows counts the records this domain routed as an
+	// aggregate on a declared flow count of zero, which leaves them in the
+	// exporters table alone. aggregatesReported records that a count was
+	// declared at all, which a zero cannot.
+	aggregateZeroFlows atomic.Uint64
+	aggregatesReported atomic.Bool
+}
+
+// countAggregate records one record carrying a declared flow count. A nil
+// domain is a device at its budget, which loses the accounting rather than
+// the record.
+func (d *domainState) countAggregate(empty bool) {
+	if d == nil {
+		return
+	}
+	if !d.aggregatesReported.Load() {
+		d.aggregatesReported.Store(true)
+	}
+	if empty {
+		d.aggregateZeroFlows.Add(1)
+	}
 }
 
 // countClockPair records one anchored flow clock pair. The load keeps the
@@ -799,6 +821,11 @@ type DomainSnapshot struct {
 	// anchored at all, which a zero cannot.
 	ClockInversions uint64
 	ClocksAnchored  bool
+	// AggregateZeroFlows counts the records routed as an aggregate on a
+	// declared flow count of zero, and AggregatesReported carries whether
+	// one was declared at all.
+	AggregateZeroFlows uint64
+	AggregatesReported bool
 }
 
 // SamplerSnapshot is one rate a device declared for one named sampler.
@@ -856,6 +883,8 @@ func (s *templateStore) snapshot() []DomainSnapshot {
 			DropsMeasured:      d.dropsMeasured.Load(),
 			ClockInversions:    d.clockInversions.Load(),
 			ClocksAnchored:     d.clocksAnchored.Load(),
+			AggregateZeroFlows: d.aggregateZeroFlows.Load(),
+			AggregatesReported: d.aggregatesReported.Load(),
 		})
 	}
 	return snapshots

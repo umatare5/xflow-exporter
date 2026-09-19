@@ -48,8 +48,8 @@ func TestDecoderCollector_Describe(t *testing.T) {
 	for range ch {
 		count++
 	}
-	if count != 18 {
-		t.Errorf("Describe() emitted %d descriptors, want 18", count)
+	if count != 19 {
+		t.Errorf("Describe() emitted %d descriptors, want 19", count)
 	}
 }
 
@@ -608,4 +608,38 @@ xflow_sampling_unresolved_flows_total{exporter_address="192.0.2.1",odid="1",vers
 // process is all these tests need, the session split being the decoder's.
 func sentFrom(addr netip.Addr) netip.AddrPort {
 	return netip.AddrPortFrom(addr, 50000)
+}
+
+// TestDecoderCollector_ZeroFlowsRidesTheAggregatingDomainsAlone pins the gate
+// on the aggregate counter. A domain whose templates declare no flow count
+// has no aggregate to route, so a zero on it would read as a cache reporting
+// nothing rather than as no cache at all.
+func TestDecoderCollector_ZeroFlowsRidesTheAggregatingDomainsAlone(t *testing.T) {
+	t.Parallel()
+
+	c := NewDecoderCollector(stubDecoderSource{domainList: []decoder.DomainSnapshot{
+		{
+			Exporter: netip.MustParseAddr("192.0.2.1"), ODID: 1,
+			Version: flow.VersionNetFlowV9, AggregateZeroFlows: 4, AggregatesReported: true,
+		},
+		{
+			Exporter: netip.MustParseAddr("192.0.2.2"), ODID: 2,
+			Version: flow.VersionIPFIX, AggregateZeroFlows: 0, AggregatesReported: true,
+		},
+		{
+			Exporter: netip.MustParseAddr("192.0.2.3"), ODID: 3,
+			Version: flow.VersionNetFlowV9, AggregateZeroFlows: 9, AggregatesReported: false,
+		},
+	}})
+
+	const want = `# HELP xflow_aggregate_zero_flows_total Records routed as an aggregate on a declared flow count of zero, per domain
+# TYPE xflow_aggregate_zero_flows_total counter
+xflow_aggregate_zero_flows_total{exporter_address="192.0.2.1",odid="1",version="netflow_v9"} 4
+xflow_aggregate_zero_flows_total{exporter_address="192.0.2.2",odid="2",version="ipfix"} 0
+`
+
+	if err := testutil.CollectAndCompare(c, strings.NewReader(want),
+		"xflow_aggregate_zero_flows_total"); err != nil {
+		t.Errorf("CollectAndCompare() error = %v", err)
+	}
 }

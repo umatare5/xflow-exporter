@@ -93,6 +93,11 @@ type Record struct {
 	// protocol, the device's own count for a NetFlow v8 aggregate that
 	// carries one -- the Catalyst methods 6-8 do not, and read as 1.
 	Flows uint64
+	// FlowsReported records that the count came from the wire, which the
+	// count cannot: a v9 or IPFIX template carrying IE 3 describes a cache
+	// the device folded, and zero is a reading that cache can legitimately
+	// give for an interval it contributed nothing to.
+	FlowsReported bool
 
 	SrcAS uint32
 	DstAS uint32
@@ -149,9 +154,13 @@ type Record struct {
 // Aggregated reports a record the device folded from several flows before
 // exporting it. A NetFlow v8 cache re-reports what the main cache already
 // counted under one method's dimensions, so a device running ten of them
-// hands the same bytes over ten times.
+// hands the same bytes over ten times. A v9 or IPFIX cache does the same
+// wherever its template carries IE 3, which RFC 7015 gives an aggregate to
+// declare its fold with. The element's presence classifies the record; its
+// value does not, a fold reporting no flows for an interval being a reading
+// rather than a per-flow record.
 func (r *Record) Aggregated() bool {
-	return r.Version == VersionNetFlowV8
+	return r.Version == VersionNetFlowV8 || r.FlowsReported
 }
 
 // Duration returns the flow duration, and false when the record did not carry

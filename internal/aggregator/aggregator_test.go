@@ -183,47 +183,63 @@ func TestAggregator_VLANsAdmitASideAtATime(t *testing.T) {
 	}
 }
 
-// TestAggregator_AnAggregateFeedsItsDomainAlone pins the v8 gate. A device
-// running ten aggregation caches hands the same traffic over ten times, so a
-// derived table fed from them counts one flow once per cache while the domain
-// they arrived in still separates the readings.
+// TestAggregator_AnAggregateFeedsItsDomainAlone pins the aggregate gate. A
+// device running ten aggregation caches hands the same traffic over ten
+// times, so a derived table fed from them counts one flow once per cache
+// while the domain they arrived in still separates the readings. The same
+// cache exported over v9 carries a flow count instead of a version to read
+// it by, and reached every table until that count was read.
 func TestAggregator_AnAggregateFeedsItsDomainAlone(t *testing.T) {
 	t.Parallel()
 
-	a := New(testConfig(), allModules())
-
-	a.Ingest([]flow.Record{{
-		Exporter:         testExporter,
-		Version:          flow.VersionNetFlowV8,
-		ODID:             5,
-		SrcAddr:          netip.MustParseAddr("10.0.0.0"),
-		DstAddr:          netip.MustParseAddr("10.0.1.0"),
-		Protocol:         6,
-		DstPort:          443,
-		TOSReported:      true,
-		TCPFlags:         2,
-		TCPFlagsReported: true,
-		SrcAS:            64500,
-		SrcVLAN:          800,
-		Bytes:            500,
-		Packets:          5,
-		Flows:            3,
-	}})
-
-	for name, entries := range map[string]int{
-		"hosts": lengthOf(a.Hosts()), "services": lengthOf(a.Services()),
-		"destinations": lengthOf(a.Destinations()), "dscp": lengthOf(a.DSCP()),
-		"asns": lengthOf(a.ASNs()), "tcp_flags": lengthOf(a.TCPFlags()),
-		"vlans": lengthOf(a.VLANs()),
+	for _, tc := range []struct {
+		name   string
+		record flow.Record
+	}{
+		{name: "netflow v8", record: flow.Record{Version: flow.VersionNetFlowV8}},
+		{
+			name:   "a v9 template declaring its fold",
+			record: flow.Record{Version: flow.VersionNetFlowV9, FlowsReported: true},
+		},
 	} {
-		if entries != 0 {
-			t.Errorf("%s = %d entries, want none from an aggregate", name, entries)
-		}
-	}
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	exporters, _ := a.Exporters()
-	if len(exporters) != 1 || exporters[0].Key.ODID != 5 || exporters[0].Flows != 3 {
-		t.Errorf("Exporters() = %+v, want the aggregate kept under its own method", exporters)
+			a := New(testConfig(), allModules())
+
+			record := tc.record
+			record.Exporter = testExporter
+			record.ODID = 5
+			record.SrcAddr = netip.MustParseAddr("10.0.0.0")
+			record.DstAddr = netip.MustParseAddr("10.0.1.0")
+			record.Protocol = 6
+			record.DstPort = 443
+			record.TOSReported = true
+			record.TCPFlags = 2
+			record.TCPFlagsReported = true
+			record.SrcAS = 64500
+			record.SrcVLAN = 800
+			record.Bytes = 500
+			record.Packets = 5
+			record.Flows = 3
+			a.Ingest([]flow.Record{record})
+
+			for name, entries := range map[string]int{
+				"hosts": lengthOf(a.Hosts()), "services": lengthOf(a.Services()),
+				"destinations": lengthOf(a.Destinations()), "dscp": lengthOf(a.DSCP()),
+				"asns": lengthOf(a.ASNs()), "tcp_flags": lengthOf(a.TCPFlags()),
+				"vlans": lengthOf(a.VLANs()),
+			} {
+				if entries != 0 {
+					t.Errorf("%s = %d entries, want none from an aggregate", name, entries)
+				}
+			}
+
+			exporters, _ := a.Exporters()
+			if len(exporters) != 1 || exporters[0].Key.ODID != 5 || exporters[0].Flows != 3 {
+				t.Errorf("Exporters() = %+v, want the aggregate kept under its own method", exporters)
+			}
+		})
 	}
 }
 
