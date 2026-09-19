@@ -136,7 +136,7 @@ func StartAndServe(ctx context.Context, cfg *config.Config, version string) erro
 	}
 	var flows *collector.FlowCollector
 	if modules.Any() {
-		agg = aggregator.New(cfg.Aggregation, modules)
+		agg = aggregator.New(cfg.Aggregation, modules, aggregatorOptions(mapping)...)
 		flows = collectorMgr.RegisterFlowCollector(agg, cfg.Collectors, cfg.Aggregation, asnNames, names)
 	}
 
@@ -225,6 +225,18 @@ func ValidateEnrichment(cfg config.Enrichment) error {
 	chain.Close()
 
 	return nil
+}
+
+// aggregatorOptions hands the aggregation what the enrichment knows about
+// ports. The service tables decide which end of a conversation keys the two
+// service families, so a file naming a site's own listeners has to reach the
+// aggregation and not the naming path alone -- without it those ports name an
+// application and still leave every reply leg keyed on a client's own number.
+func aggregatorOptions(mapping *enrich.Mapping) []aggregator.Option {
+	if mapping == nil {
+		return nil
+	}
+	return []aggregator.Option{aggregator.WithServiceLookup(mapping.IsService)}
 }
 
 // buildEnrichmentChain assembles the enabled enrichment sources in the order

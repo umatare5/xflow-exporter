@@ -280,3 +280,34 @@ func BenchmarkServices_Enrich(b *testing.B) {
 		s.Enrich(&r)
 	}
 }
+
+// TestIsService_AgreesWithTheTableItIsBuiltFrom pins the bitmap against the
+// map it is derived from, across every port of both transports. The two
+// answer different questions about one set -- which service, and whether
+// there is one -- so a build that drifts would key the aggregation on a port
+// the naming path does not recognize.
+func TestIsService_AgreesWithTheTableItIsBuiltFrom(t *testing.T) {
+	t.Parallel()
+
+	for _, protocol := range []uint8{protocolTCP, protocolUDP} {
+		for port := range 1 << 16 {
+			_, named := serviceNames[servicePort{protocol, uint16(port)}]
+			if got := IsService(protocol, uint16(port)); got != named {
+				t.Fatalf("IsService(%d, %d) = %t, want %t", protocol, port, got, named)
+			}
+		}
+	}
+}
+
+// TestIsService_NamesNothingOnAnotherTransport pins the predicate to the two
+// transports that carry a port at all. ICMP puts its type and code where a
+// port sits, and GRE and ESP carry neither.
+func TestIsService_NamesNothingOnAnotherTransport(t *testing.T) {
+	t.Parallel()
+
+	for _, protocol := range []uint8{1, 47, 50, 0} {
+		if IsService(protocol, 443) {
+			t.Errorf("IsService(%d, 443) = true, want no service on a portless protocol", protocol)
+		}
+	}
+}

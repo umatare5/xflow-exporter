@@ -87,7 +87,7 @@ groups:
       # not the level.
       - record: exporter:xflow_destination_bytes:ratio5m
         expr: >-
-          sum without (proto, port) (exporter_proto_port:xflow_destination_bytes:rate5m)
+          sum without (proto, port, side) (exporter_proto_port:xflow_destination_bytes:rate5m)
           / (sum without (version, odid) (rate(xflow_exporter_bytes_total[5m])) > 0)
 
   - name: xflow-exporter.tcp-flags
