@@ -103,7 +103,7 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		),
 		samplingUnresolvedDesc: prometheus.NewDesc(
 			"xflow_sampling_unresolved_flows_total",
-			"Records on v9 and IPFIX no declaration settled a sampling rate for, taken uncorrected, per domain",
+			"Records no declaration settled a sampling rate for, taken uncorrected, per domain",
 			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
 		clockInversionsDesc: prometheus.NewDesc(
@@ -300,7 +300,12 @@ func (c *DecoderCollector) collectDomains(ch chan<- prometheus.Metric) {
 					c.samplesDroppedDesc, prometheus.CounterValue,
 					float64(domain.SamplesDropped), exporter, version, odid)
 			}
-		case flow.VersionNetFlowV5, flow.VersionNetFlowV8, flow.VersionUnknown:
+		case flow.VersionNetFlowV5:
+			// No templates, and the sampler a record names is one v5 can
+			// never declare a rate for. The correction counters are what say
+			// so; the sequence below is the rest of what the domain is for.
+			c.collectSampling(ch, domain, exporter, version, odid)
+		case flow.VersionNetFlowV8, flow.VersionUnknown:
 			// Neither templates nor samplers; the sequence below is all these
 			// domains are opened for.
 		}

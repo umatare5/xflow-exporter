@@ -34,6 +34,8 @@ The fixed 48-byte record format, **shared byte for byte with J-Flow v5.**
 
 Flow instants are anchored from the device uptime to the export timestamp. That uptime is a 32-bit millisecond counter, so an instant is taken as a modular age and a flow straddling its 49.7-day wrap keeps its duration. The header's sampling interval rides each record.
 
+Where that interval is zero, the second pad field is read as the sampler the record names. The format carries no rate for it — v5 has no options record to declare one — so the counts stay uncorrected and `xflow_sampling_unresolved_flows_total` says so. A zero there is the absence of a sampler and is left alone.
+
 <details><summary><b>Packet Layout</b></summary><p>
 
 | Bytes | Header field        | Notes                                    |
@@ -119,7 +121,7 @@ Flow instants are anchored from the device uptime to the export timestamp. That 
 
 > [!NOTE]
 >
-> **C891FJ-K9 on 15.9(3)M13** running Random Sampled NetFlow leaves that interval zero and names its sampler in `pad2` instead, so the rate it sampled at reaches no collector. Its counts then read low by that rate with nothing on the wire saying so.
+> **C891FJ-K9 on 15.9(3)M13** running Random Sampled NetFlow leaves that interval zero and names its sampler in `pad2` instead, so the rate it sampled at reaches no collector. Its counts then read low by that rate, which only the device's own `show flow-sampler` resolves.
 
 ## NetFlow v8
 

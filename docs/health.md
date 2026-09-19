@@ -94,7 +94,7 @@ Counts the declarations that gave an identifier a rate differing from the one it
 
 **`xflow_sampling_unresolved_flows_total`**
 
-Counts the records that reached the end of the correction precedence with nothing to apply. Published only for a device known to sample, because an uncorrected record and one corrected at 1:1 carry identical counts.
+Counts the records that reached the end of the correction precedence with nothing to apply. NetFlow v5 names its sampler and declares no rate anywhere, so its records reach that end by construction. Published only for a device known to sample, because an uncorrected record and one corrected at 1:1 carry identical counts.
 
 **`xflow_*_refused_total`**
 

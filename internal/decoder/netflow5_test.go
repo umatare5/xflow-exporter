@@ -322,3 +322,64 @@ func TestDecodeNetFlowV5_BudgetCostsTheSequenceNotTheTraffic(t *testing.T) {
 		t.Errorf("DomainsRefused() = %d, want the one refusal counted", got)
 	}
 }
+
+// TestDecodeNetFlowV5_NamesItsSamplerInTheSecondPad pins the identifier the
+// format calls padding. A Cisco router running Random Sampled NetFlow leaves
+// the header's own sampling field zero and writes the sampler's export id
+// there instead, so a collector reading only the header takes counts measured
+// one packet in fifty as complete and says nothing about it.
+func TestDecodeNetFlowV5_NamesItsSamplerInTheSecondPad(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		header     uint16
+		samplerID  uint16
+		wantRate   uint32
+		wantCount  uint64
+		wantSample bool
+	}{
+		{
+			name: "a sampler the device names", samplerID: 2,
+			wantRate: 0, wantCount: 1, wantSample: true,
+		},
+		{
+			// Padding is what the format calls those bytes, and a device
+			// sampling nothing leaves them as the format says.
+			name: "an unsampled cache", samplerID: 0,
+			wantRate: 0, wantCount: 0, wantSample: false,
+		},
+		{
+			// A device that does fill the header needs nothing resolving.
+			name: "a header carrying the rate", header: 50, samplerID: 2,
+			wantRate: 50, wantCount: 0, wantSample: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			payload := buildV5Packet(1)
+			binary.BigEndian.PutUint16(payload[22:24], tc.header)
+			binary.BigEndian.PutUint16(payload[netflowV5HeaderLen+46:], tc.samplerID)
+
+			d := newTestDecoder()
+			records, decErr := d.decodeNetFlowV5(testExporter, testPort, payload, nil)
+			if decErr != nil {
+				t.Fatalf("decodeNetFlowV5() error = %v, want nil", decErr)
+			}
+			if got := records[0].SamplingRate; got != tc.wantRate {
+				t.Errorf("SamplingRate = %d, want %d", got, tc.wantRate)
+			}
+
+			count, sampled := domainSampling(d, 0)
+			if count != tc.wantCount {
+				t.Errorf("xflow_sampling_unresolved_flows_total = %d, want %d", count, tc.wantCount)
+			}
+			if sampled != tc.wantSample {
+				t.Errorf("sampled = %t, want %t", sampled, tc.wantSample)
+			}
+		})
+	}
+}

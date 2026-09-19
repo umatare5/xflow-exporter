@@ -133,8 +133,9 @@ type samplerTable struct {
 	// declared nothing takes it rather than a rate the device never tied
 	// to it.
 	inherited atomic.Uint32
-	// sampled marks a device that has declared at least once. It never
-	// clears, so an expiry that empties the table still reads as sampling.
+	// sampled marks a device known to sample, by a declaration or by a
+	// record naming its sampler. It never clears, so an expiry that empties
+	// the table still reads as sampling.
 	sampled atomic.Bool
 }
 
@@ -229,6 +230,15 @@ func (t *samplerTable) plainRate(odid uint32) uint32 {
 	defer t.mu.RUnlock()
 
 	return t.plain[odid].rate
+}
+
+// markSampled records that the device samples on evidence other than a
+// declaration, which is all NetFlow v5 can give: it names a sampler per
+// record and declares no rate anywhere.
+func (t *samplerTable) markSampled() {
+	if !t.sampled.Load() {
+		t.sampled.Store(true)
+	}
 }
 
 // soleRateLocked returns the one rate every declaration agrees on, and zero
