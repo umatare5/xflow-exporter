@@ -179,13 +179,13 @@ func NewFlowCollector(
 	if modules.Services {
 		c.services = newFamilyDescs("xflow_service", "source-destination service",
 			[]string{
-				labelExporter, labelSrc, labelDst, labelProto, labelPort, labelSide,
+				labelExporter, labelSrc, labelDst, labelProto, labelPort, labelEndpoint,
 				labelInputIf, labelOutputIf, labelDirection,
 			})
 	}
 	if modules.Destinations {
 		c.destinations = newFamilyDescs("xflow_destination", "destination service",
-			[]string{labelExporter, labelDst, labelProto, labelPort, labelSide, labelDirection})
+			[]string{labelExporter, labelDst, labelProto, labelPort, labelEndpoint, labelDirection})
 	}
 	if modules.TCPFlags {
 		c.tcpFlags = newFamilyDescs("xflow_tcp_flags", "TCP control-bit profile",
@@ -214,7 +214,7 @@ func NewFlowCollector(
 	}
 	if modules.Threats {
 		c.threats = newFamilyDescs("xflow_threat", "flagged address",
-			[]string{labelExporter, labelAddress, labelSide, labelInputIf, labelOutputIf, labelDirection})
+			[]string{labelExporter, labelAddress, labelEndpoint, labelInputIf, labelOutputIf, labelDirection})
 	}
 	if modules.VLANs {
 		c.vlans = newFamilyDescs("xflow_vlan_pair", "VLAN pair",
@@ -638,7 +638,7 @@ func hostLabels(k aggregator.HostKey) []string {
 func serviceLabels(k aggregator.ServiceKey) []string {
 	return []string{
 		k.Exporter.String(), k.Src.String(), k.Dst.String(),
-		protocolName(k.Protocol), strconv.Itoa(int(k.Port)), k.Side.String(),
+		protocolName(k.Protocol), strconv.Itoa(int(k.Port)), k.Endpoint.String(),
 		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf), k.Direction.String(),
 	}
 }
@@ -646,7 +646,7 @@ func serviceLabels(k aggregator.ServiceKey) []string {
 func destinationLabels(k aggregator.DestinationKey) []string {
 	return []string{
 		k.Exporter.String(), k.Dst.String(),
-		protocolName(k.Protocol), strconv.Itoa(int(k.Port)), k.Side.String(), k.Direction.String(),
+		protocolName(k.Protocol), strconv.Itoa(int(k.Port)), k.Endpoint.String(), k.Direction.String(),
 	}
 }
 
@@ -729,11 +729,11 @@ func countryLabels(k aggregator.CountryKey) []string {
 	}
 }
 
-// threatLabels renders one flagged address, the side of the conversation it
+// threatLabels renders one flagged address, the end of the flow it
 // was seen on and the point the reading was taken at.
 func threatLabels(k aggregator.ThreatKey) []string {
 	return []string{
-		k.Exporter.String(), k.Address.String(), k.Side.String(),
+		k.Exporter.String(), k.Address.String(), k.Endpoint.String(),
 		ifIndexLabel(k.InputIf), ifIndexLabel(k.OutputIf), k.Direction.String(),
 	}
 }
