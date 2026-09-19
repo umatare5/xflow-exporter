@@ -150,6 +150,8 @@ This section covers technical considerations and best practices for development,
 
 **Exporter Behaviors**: `xflow_exporter_*` sums domains (e.g., NetFlow v8 methods, v9 Source IDs). Summing across `odid` counts traffic once per cache view. `_flows_total` relies on cache-reported counts for v8 aggregates, which differ from underlying flows.
 
+**Application Names**: The table a device announces through its options expires on `--parser.template-ttl`, so a device whose application-table timer is longer than that loses its names between announcements. The `application` label then falls back to `engine:selector`, splitting one application across two series until the device announces again.
+
 **Cardinality Impact**: Splitting conversations across multiple asymmetrical paths (via interface pairs) increases entries by `1 + share × (k−1)`, where `k` is the interface pair count. This sparsity can cause entries to idle, face eviction, and under-report rates upon reappearance.
 
 **Histogram Export**: Native histograms for flow sizes and durations maintain bucket fidelity (`NativeHistogramBucketFactor` of 1.1) and are exposed whole when `scrape_native_histograms` is enabled. Without it, negotiation falls back to text exposition containing only `_count`, `_sum`, and one `+Inf` bucket.
