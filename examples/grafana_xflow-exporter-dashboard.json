@@ -3193,7 +3193,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "The classic reflection vectors, one row per destination and port, so a host answering these from outside is visible before it is conscripted into somebody else's attack. In a healthy network most of these ports produce no series at all, and that absence is the intended reading rather than a zero. Ranked by flow records, which are not sampling-multiplied. A row whose destination is inside the LAN is inbound traffic toward that service.",
+          "description": "The classic reflection vectors, one row per destination and port, so a host answering these from outside is visible before it is conscripted into somebody else's attack. In a healthy network most of these ports produce no series at all, and that absence is the intended reading rather than a zero. Ranked by flow records, which are not sampling-multiplied. A row whose destination is inside the LAN is inbound traffic toward that service, and side says whether the device saw that port as the destination reached or the source answering.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3326,7 +3326,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "topk(15, sum by (dst, port) (rate(xflow_destination_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",proto=\"udp\",dst=~\"$focus\",port=~\"53|123|161|389|1900|5353|11211|19|111|137|1194|3283|27015\"}[$rollup_interval])))",
+              "expr": "topk(15, sum by (dst, port, side) (rate(xflow_destination_flows_total{exporter_address=~\"$exporter\",exporter_address!=\"other\",proto=\"udp\",dst=~\"$focus\",port=~\"53|123|161|389|1900|5353|11211|19|111|137|1194|3283|27015\"}[$rollup_interval])))",
               "format": "table",
               "instant": true,
               "range": false,
@@ -3342,9 +3342,10 @@
                   "Time": true
                 },
                 "indexByName": {
-                  "Records/s": 2,
+                  "Records/s": 3,
                   "dst": 0,
-                  "port": 1
+                  "port": 1,
+                  "side": 2
                 },
                 "renameByName": {
                   "Value": "Records/s"
