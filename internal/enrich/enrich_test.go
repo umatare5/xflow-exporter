@@ -115,3 +115,35 @@ func TestChain_ReloadAttemptsEverySource(t *testing.T) {
 		t.Errorf("the source after the failure ran %d times, want 1", got)
 	}
 }
+
+// markingEnricher records which records reached it.
+type markingEnricher struct{ seen []uint64 }
+
+func (m *markingEnricher) Enrich(r *flow.Record) { m.seen = append(m.seen, r.Bytes) }
+func (m *markingEnricher) Name() string          { return "marking" }
+func (m *markingEnricher) Snapshot() Snapshot    { return Snapshot{Enricher: m.Name()} }
+func (m *markingEnricher) Reload() error         { return nil }
+
+// TestChain_SkipsTheAggregatesInOneBatch pins the gate to the record. An
+// aggregate fills no table an enrichment keys, and a domain announcing a
+// folded template beside a per-flow one puts both in one datagram -- judging
+// the batch by its first record either enriches the fold or leaves every
+// per-flow record beside it unresolved.
+func TestChain_SkipsTheAggregatesInOneBatch(t *testing.T) {
+	t.Parallel()
+
+	m := &markingEnricher{}
+	chain := NewChain(m)
+
+	chain.Enrich([]flow.Record{
+		{Version: flow.VersionNetFlowV9, FlowsReported: true, Bytes: 1},
+		{Version: flow.VersionNetFlowV9, Bytes: 2},
+		{Version: flow.VersionNetFlowV8, Bytes: 3},
+		{Version: flow.VersionIPFIX, Bytes: 4},
+	})
+
+	want := []uint64{2, 4}
+	if len(m.seen) != len(want) || m.seen[0] != want[0] || m.seen[1] != want[1] {
+		t.Errorf("enriched %v, want the per-flow records %v alone", m.seen, want)
+	}
+}

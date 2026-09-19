@@ -100,7 +100,10 @@ func (c *Chain) Enabled() bool {
 	return c != nil && len(c.enrichers) > 0
 }
 
-// Enrich applies every enricher to every record.
+// Enrich applies every enricher to every record a lookup would reach. An
+// aggregate is the device's own fold of traffic its main cache already
+// reported, so it fills no table an enrichment keys, and one datagram
+// carries both kinds wherever a domain mixes folded and per-flow templates.
 func (c *Chain) Enrich(records []flow.Record) {
 	if !c.Enabled() {
 		return
@@ -108,6 +111,9 @@ func (c *Chain) Enrich(records []flow.Record) {
 
 	for i := range records {
 		record := &records[i]
+		if record.Aggregated() {
+			continue
+		}
 		for _, e := range c.enrichers {
 			e.Enrich(record)
 		}

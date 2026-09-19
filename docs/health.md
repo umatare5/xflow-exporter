@@ -25,6 +25,7 @@ The following table lists the metrics exposed by each subsystem.
 | `decoder`      | `xflow_templates`                                   | Gauge   | Unexpired templates per `type` |
 | `decoder`      | `xflow_sequence_missed_total`                       | Counter | Packets or records lost        |
 | `decoder`      | `xflow_flow_clock_inversions_total`                 | Counter | Flows ending before they began |
+| `decoder`      | `xflow_aggregate_zero_flows_total`                  | Counter | Aggregates reporting no flows  |
 | `decoder`      | `xflow_sampling_rate`                               | Gauge   | Rate in force per domain       |
 | `decoder`      | `xflow_sampler_rate`                                | Gauge   | Rate per declared sampler      |
 | `decoder`      | `xflow_sampler_rate_changes_total`                  | Counter | Declared rates replaced        |
@@ -80,6 +81,10 @@ Captures loss or reordering based on protocol sequence numbering. The position i
 
 Counts the records whose flow ended before it began, both instants withheld rather than published. A domain whose records carry no flow clock never reaches the check, so it publishes no series.
 
+**`xflow_aggregate_zero_flows_total`**
+
+Counts the records routed as an aggregate that declared a flow count of zero. RFC 7015 distributes one fold across start intervals, so a continuation interval reporting no flows is the default rather than a fault, and the count attributes the records a per-flow family therefore never sees.
+
 **`xflow_sampling_rate`**
 
 Reflects the rate in force for a domain, declared by its own options or inherited from the device.
@@ -120,7 +125,7 @@ This section covers technical considerations and best practices for development,
 
 **Unsampled Caches**: A router exporting one sampled cache and one unsampled names samplerId `0` for every record of the second, Cisco marking the absence of a sampler rather than leaving the element out. Those records inherit no rate and are not counted uncorrected. The value is ordinary to RFC 5477 and to IANA, so a device declaring a rate for `0` is taken at its word, and an expiry then leaves its records owed one.
 
-**Series Presence**: A series keyed by wire data appears on its first event, so `xflow_decode_errors_total`, `xflow_last_flow_timestamp_seconds` and `xflow_sampling_rate` read as absent rather than zero beforehand. The `_refused_total` counters are seeded at zero instead, a first refusal reading as a rise. `xflow_flow_clock_inversions_total` seeds at zero once a domain has anchored a flow clock, and `xflow_sampler_rate_changes_total` once its device is known to sample.
+**Series Presence**: A series keyed by wire data appears on its first event, so `xflow_decode_errors_total`, `xflow_last_flow_timestamp_seconds` and `xflow_sampling_rate` read as absent rather than zero beforehand. The `_refused_total` counters are seeded at zero instead, a first refusal reading as a rise. `xflow_flow_clock_inversions_total` seeds at zero once a domain has anchored a flow clock, `xflow_sampler_rate_changes_total` once its device is known to sample, and `xflow_aggregate_zero_flows_total` once one of its templates has declared a flow count.
 
 **Sequence Tracking**: Protocol numbering schemes vary: `xflow_sequence_missed_total` counts packets for v9 and sFlow, but records for v5, v8, and IPFIX. Sequence loss tracking requires strict per-worker ordering, avoiding false positives across concurrent decoders. A sender past the session bound leaves its own sequence unfollowed until an idle session expires on the template TTL, and two sessions sharing one template ID still overwrite each other, the template space being the domain's rather than the session's.
 

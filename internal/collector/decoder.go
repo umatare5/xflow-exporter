@@ -42,6 +42,7 @@ type DecoderCollector struct {
 	seqMissedDesc          *prometheus.Desc
 	samplingUnresolvedDesc *prometheus.Desc
 	clockInversionsDesc    *prometheus.Desc
+	aggregateZeroDesc      *prometheus.Desc
 	samplingDesc           *prometheus.Desc
 	samplerRateDesc        *prometheus.Desc
 	samplerChangesDesc     *prometheus.Desc
@@ -111,6 +112,11 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 			"Records whose flow ended before it began, both instants withheld, per domain",
 			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
+		aggregateZeroDesc: prometheus.NewDesc(
+			"xflow_aggregate_zero_flows_total",
+			"Records routed as an aggregate on a declared flow count of zero, per domain",
+			[]string{labelExporter, labelVersion, labelODID}, nil,
+		),
 		samplingDesc: prometheus.NewDesc(
 			"xflow_sampling_rate",
 			"Packet sampling rate in force for the domain, declared by its own options or inherited from the device",
@@ -167,6 +173,7 @@ func (c *DecoderCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.seqMissedDesc
 	ch <- c.samplingUnresolvedDesc
 	ch <- c.clockInversionsDesc
+	ch <- c.aggregateZeroDesc
 	ch <- c.samplingDesc
 	ch <- c.samplerRateDesc
 	ch <- c.samplerChangesDesc
@@ -321,6 +328,15 @@ func (c *DecoderCollector) collectDomains(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				c.clockInversionsDesc, prometheus.CounterValue,
 				float64(domain.ClockInversions), exporter, version, odid)
+		}
+
+		// Only a domain whose templates declare a flow count has an aggregate
+		// to route, and a zero from one that does not would read as a cache
+		// reporting nothing rather than as no cache at all.
+		if domain.AggregatesReported {
+			ch <- prometheus.MustNewConstMetric(
+				c.aggregateZeroDesc, prometheus.CounterValue,
+				float64(domain.AggregateZeroFlows), exporter, version, odid)
 		}
 
 		// A domain that has not declared a rate has no series: a zero here

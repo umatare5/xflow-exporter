@@ -129,7 +129,7 @@ The router-aggregated record format. It implements aggregation version 2 coverin
 
 An aggregation cache is fed directly from the main cache. Consequently, every enabled method re-reports traffic the main cache already exported. The aggregation method functions as the observation domain here to keep readings isolated.
 
-Summing these caches counts one flow multiple times. A device exporting an aggregated cache as v9 carries no explicit aggregate marker, so its v9 cache reads as an independent view beside the v5 main cache. Always send only one view to a collector.
+Summing these caches counts one flow multiple times. A device exporting an aggregated cache as v9 or IPFIX marks it with IE 3, which routes that cache the same way this format is routed. Always send only one view to a collector.
 
 <details><summary><b>Packet Layout</b></summary><p>
 
