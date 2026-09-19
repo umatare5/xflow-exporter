@@ -27,6 +27,7 @@ The following table lists the metrics exposed by each subsystem.
 | `decoder`      | `xflow_flow_clock_inversions_total`                 | Counter | Flows ending before they began |
 | `decoder`      | `xflow_sampling_rate`                               | Gauge   | Rate in force per domain       |
 | `decoder`      | `xflow_sampler_rate`                                | Gauge   | Rate per declared sampler      |
+| `decoder`      | `xflow_sampler_rate_changes_total`                  | Counter | Declared rates replaced        |
 | `decoder`      | `xflow_sampling_unresolved_flows_total`             | Counter | Records taken uncorrected      |
 | `decoder`      | `xflow_sample_pool_packets_total`                   | Counter | Packets the samplers saw       |
 | `decoder`      | `xflow_samples_dropped_total`                       | Counter | Samples the agent lost         |
@@ -85,11 +86,15 @@ Reflects the rate in force for a domain, declared by its own options or inherite
 
 **`xflow_sampler_rate`**
 
-Tracks each sampler a device declared, keyed per device and protocol rather than per domain.
+Tracks each sampler a device declared, keyed per device, protocol and the domain that declared it. A samplerId is numbered per export process, so a chassis renumbering one per linecard declares the same identifier at two rates.
+
+**`xflow_sampler_rate_changes_total`**
+
+Counts the declarations that gave an identifier a rate differing from the one its domain held. Every record decoded between two such announcements was corrected by the rate then in force.
 
 **`xflow_sampling_unresolved_flows_total`**
 
-Counts the v9 and IPFIX records that reached the end of the correction precedence with nothing to apply. Published only for a device that has declared a rate, because an uncorrected record and one corrected at 1:1 carry identical counts.
+Counts the records that reached the end of the correction precedence with nothing to apply. Published only for a device known to sample, because an uncorrected record and one corrected at 1:1 carry identical counts.
 
 **`xflow_*_refused_total`**
 
@@ -109,11 +114,13 @@ This section covers technical considerations and best practices for development,
 
 **Domain Identification**: A domain is strictly defined by the triple `exporter_address`, `version`, and `odid`. Removing `version` could merge unrelated protocols on the same device. `odid` represents Source ID on v9, Observation Domain ID on IPFIX, and sub-agent ID on sFlow.
 
-**Sampling Declarations**: `xflow_sampling_rate` tracks singular v9/IPFIX Options Templates, while `xflow_sampler_rate` resolves mappings for devices declaring multiple samplers, keyed per device and protocol. Auditing devices with multiple rates can be achieved via: `count by (exporter_address, version) (count_values by (exporter_address, version) ("rate", (xflow_sampling_rate or xflow_sampler_rate))) > 1`.
+**Sampling Declarations**: `xflow_sampling_rate` tracks singular v9/IPFIX Options Templates, while `xflow_sampler_rate` resolves mappings for devices declaring multiple samplers, keyed per device, protocol and declaring domain. Auditing devices with multiple rates can be achieved via: `count by (exporter_address, version) (count_values by (exporter_address, version) ("rate", (xflow_sampling_rate or xflow_sampler_rate))) > 1`.
 
-**Correction Precedence**: A record takes the rate of the sampler it names, failing that its own domain's declaration, and failing that the one rate every declaration on the device agrees on. Where none answers, the counts are corrected by one and no `xflow_sampling_rate` series exists, as on a device whose declarations disagree while its records name the samplers correcting them. `xflow_sampling_unresolved_flows_total` separates the two, appearing once the device has declared, so a restart leaves it absent until the device re-announces.
+**Correction Precedence**: A record takes the rate its own domain declared for the sampler it names. A samplerId then reaches the device's other domains and stops undecided where those disagree, while a selectorId does not reach at all, IANA numbering it within the domain. A record naming nothing takes its domain's own declaration, then the one rate every declaration on the device agrees on. Where none answers, the counts are corrected by one and no `xflow_sampling_rate` series exists. `xflow_sampling_unresolved_flows_total` separates that from a genuine 1:1, appearing once the device is known to sample, so a restart leaves it absent until the device re-announces.
 
-**Series Presence**: A series keyed by wire data appears on its first event, so `xflow_decode_errors_total`, `xflow_last_flow_timestamp_seconds` and `xflow_sampling_rate` read as absent rather than zero beforehand. The `_refused_total` counters are seeded at zero instead, a first refusal reading as a rise. `xflow_flow_clock_inversions_total` seeds at zero once a domain has anchored a flow clock.
+**Unsampled Caches**: A router exporting one sampled cache and one unsampled names samplerId `0` for every record of the second, Cisco marking the absence of a sampler rather than leaving the element out. Those records inherit no rate and are not counted uncorrected. The value is an ordinary identifier to RFC 5477 and to IANA, so a device that declares a rate for `0` is taken at its word.
+
+**Series Presence**: A series keyed by wire data appears on its first event, so `xflow_decode_errors_total`, `xflow_last_flow_timestamp_seconds` and `xflow_sampling_rate` read as absent rather than zero beforehand. The `_refused_total` counters are seeded at zero instead, a first refusal reading as a rise. `xflow_flow_clock_inversions_total` seeds at zero once a domain has anchored a flow clock, and `xflow_sampler_rate_changes_total` once its device is known to sample.
 
 **Sequence Tracking**: Protocol numbering schemes vary: `xflow_sequence_missed_total` counts packets for v9 and sFlow, but records for v5, v8, and IPFIX. Sequence loss tracking requires strict per-worker ordering, avoiding false positives across concurrent decoders. A sender past the session bound leaves its own sequence unfollowed until an idle session expires on the template TTL, and two sessions sharing one template ID still overwrite each other, the template space being the domain's rather than the session's.
 
