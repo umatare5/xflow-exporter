@@ -25,29 +25,32 @@ const (
 // The v9 field types this exporter maps into flow.Record. Every other type is
 // skipped over by its declared length. Numbers are RFC 3954 / IANA.
 const (
-	fieldInBytes       = 1
-	fieldInPackets     = 2
-	fieldProtocol      = 4
-	fieldSrcTOS        = 5
-	fieldTCPFlags      = 6
-	fieldL4SrcPort     = 7
-	fieldIPv4SrcAddr   = 8
-	fieldSrcMask       = 9
-	fieldInputSNMP     = 10
-	fieldL4DstPort     = 11
-	fieldIPv4DstAddr   = 12
-	fieldDstMask       = 13
-	fieldOutputSNMP    = 14
-	fieldSrcAS         = 16
-	fieldDstAS         = 17
-	fieldLastSwitched  = 21
-	fieldFirstSwitched = 22
-	fieldOutBytes      = 23
-	fieldOutPackets    = 24
-	fieldIPv6SrcAddr   = 27
-	fieldIPv6DstAddr   = 28
-	fieldIPv6SrcMask   = 29
-	fieldIPv6DstMask   = 30
+	fieldInBytes   = 1
+	fieldInPackets = 2
+	// The flows one aggregated record folded, which RFC 7015 section 5.2.1
+	// gives a mediator to declare its cache with.
+	fieldDeltaFlowCount = 3
+	fieldProtocol       = 4
+	fieldSrcTOS         = 5
+	fieldTCPFlags       = 6
+	fieldL4SrcPort      = 7
+	fieldIPv4SrcAddr    = 8
+	fieldSrcMask        = 9
+	fieldInputSNMP      = 10
+	fieldL4DstPort      = 11
+	fieldIPv4DstAddr    = 12
+	fieldDstMask        = 13
+	fieldOutputSNMP     = 14
+	fieldSrcAS          = 16
+	fieldDstAS          = 17
+	fieldLastSwitched   = 21
+	fieldFirstSwitched  = 22
+	fieldOutBytes       = 23
+	fieldOutPackets     = 24
+	fieldIPv6SrcAddr    = 27
+	fieldIPv6DstAddr    = 28
+	fieldIPv6SrcMask    = 29
+	fieldIPv6DstMask    = 30
 
 	// Absolute flow clocks some Flexible NetFlow templates export instead of
 	// the uptime-relative pair above. IE 160 is the device's boot instant,

@@ -111,6 +111,10 @@ func finishRecord(r *flow.Record, state *fieldState, clock exportClock, domain *
 
 	resolveFlowClock(r, state, clock, domain)
 
+	if r.FlowsReported {
+		domain.countAggregate(r.Flows == 0)
+	}
+
 	if r.SamplingRate == 0 {
 		r.SamplingRate = rateInForce(state, domain)
 		if r.SamplingRate == 0 {
@@ -261,6 +265,10 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 		}
 	case fieldInPackets:
 		r.Packets, _ = beUint(value)
+	case fieldDeltaFlowCount:
+		if v, ok := beUint(value); ok {
+			r.Flows, r.FlowsReported = v, true
+		}
 	case fieldOutBytes:
 		if v, ok := beUint(value); ok {
 			state.outBytes, state.outBytesReported = v, true

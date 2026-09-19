@@ -102,7 +102,7 @@ Publishing names as separate gauges avoids churning labels on metric counters wh
 
 **`xflow_exporter_*`**
 
-Takes no scrape-time Top-K or min-bytes cuts as its cardinality is bounded by the fleet, not traffic. Summing across `odid` counts traffic once per cache view rather than once overall. `_flows_total` counts one flow per record, except for v8 aggregates where it uses the cache's reported count.
+Takes no scrape-time Top-K or min-bytes cuts as its cardinality is bounded by the fleet, not traffic. Summing across `odid` counts traffic once per cache view rather than once overall. `_flows_total` counts one flow per record, except for an aggregate where it uses the cache's reported count.
 
 **`xflow_host_pair_*`, `xflow_service_*`, `xflow_threat_*`**
 
@@ -148,7 +148,9 @@ This section covers technical considerations and best practices for development,
 
 **Address Localization**: The `private` country designation is strictly bound to RFC 1918 and RFC 4193 unique local ranges. Shared address space, loopback, and link-local are not designated private, avoiding semantic guesswork.
 
-**Exporter Behaviors**: `xflow_exporter_*` sums domains (e.g., NetFlow v8 methods, v9 Source IDs). Summing across `odid` counts traffic once per cache view. `_flows_total` relies on cache-reported counts for v8 aggregates, which differ from underlying flows.
+**Exporter Behaviors**: `xflow_exporter_*` sums domains (e.g., NetFlow v8 methods, v9 Source IDs). Summing across `odid` counts traffic once per cache view. `_flows_total` relies on cache-reported counts for aggregates, which differ from underlying flows.
+
+**Aggregated Caches**: A record is an aggregate where its version is NetFlow v8 or its template carries IE 3, and an aggregate reaches `xflow_exporter_*` alone — every other family would re-count traffic the device's main cache already reported. The element's presence decides it, so a cache declaring zero flows for an interval it contributed nothing to stays an aggregate and `xflow_aggregate_zero_flows_total` attributes it. An RFC 7015 mediator forwarding only aggregates therefore populates `xflow_exporter_*` and nothing else.
 
 **Application Names**: The table a device announces through its options expires on `--parser.template-ttl`, so a device whose application-table timer is longer than that loses its names between announcements. The `application` label then falls back to `engine:selector`, splitting one application across two series until the device announces again.
 
