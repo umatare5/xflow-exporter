@@ -48,9 +48,13 @@ func testRecord() flow.Record {
 		Bytes:    1000,
 		Packets:  10,
 		Flows:    1,
-		SrcAS:    64500,
-		DstAS:    64501,
-		AppName:  "https",
+		// Every template the fleet announces carries IE 1 and IE 2, so the
+		// shared record is one whose counts the device reported.
+		BytesReported:   true,
+		PacketsReported: true,
+		SrcAS:           64500,
+		DstAS:           64501,
+		AppName:         "https",
 	}
 }
 
