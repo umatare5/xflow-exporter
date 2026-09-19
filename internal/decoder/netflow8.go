@@ -55,7 +55,7 @@ var netflowV8Schemes = map[uint8]netflowV8Scheme{
 // decodeNetFlowV8 parses one v8 datagram and appends its records to dst.
 // Trailing bytes past the claimed records are tolerated as padding, like v5.
 func (d *Decoder) decodeNetFlowV8(
-	exporter netip.Addr, payload []byte, dst []flow.Record,
+	exporter netip.Addr, port uint16, payload []byte, dst []flow.Record,
 ) ([]flow.Record, *decodeError) {
 	if len(payload) < netflowV8HeaderLen {
 		return dst, malformed("v8 header needs %d bytes, datagram has %d", netflowV8HeaderLen, len(payload))
@@ -89,7 +89,7 @@ func (d *Decoder) decodeNetFlowV8(
 	if domain := d.templates.domain(domainKey{
 		exporter: exporter, odid: uint32(aggregation), proto: flow.VersionNetFlowV8,
 	}); domain != nil {
-		domain.trackRecordSequence(binary.BigEndian.Uint32(payload[16:20]), uint32(count),
+		domain.trackRecordSequence(port, binary.BigEndian.Uint32(payload[16:20]), uint32(count),
 			binary.BigEndian.Uint16(payload[20:22]), true)
 	}
 

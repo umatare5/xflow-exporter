@@ -75,7 +75,7 @@ func samplingRecord(samplerID uint32, named bool) []byte {
 func decodeSampling(t *testing.T, d *Decoder, packet []byte) []flow.Record {
 	t.Helper()
 
-	records, err := d.Decode(testExporter, packet, nil)
+	records, err := d.Decode(sentFrom(testExporter), packet, nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}

@@ -296,7 +296,7 @@ func TestDecoder_RefusalCountsTheDatagramNotTheFlowSet(t *testing.T) {
 	)
 
 	admitted := newTestDecoder()
-	if _, err := admitted.Decode(sender, datagram, nil); err != nil {
+	if _, err := admitted.Decode(sentFrom(sender), datagram, nil); err != nil {
 		t.Fatalf("Decode() error = %v, want the datagram itself accepted", err)
 	}
 	var missing uint64
@@ -318,7 +318,7 @@ func TestDecoder_RefusalCountsTheDatagramNotTheFlowSet(t *testing.T) {
 		t.Fatalf("ExportersRefused() = %d at the budget, want none until it is exceeded", got)
 	}
 
-	if _, err := refusing.Decode(sender, datagram, nil); err != nil {
+	if _, err := refusing.Decode(sentFrom(sender), datagram, nil); err != nil {
 		t.Fatalf("Decode() error = %v, want the datagram itself accepted", err)
 	}
 	if got := refusing.ExportersRefused(); got != 1 {

@@ -208,7 +208,14 @@ func (d *Decoder) Stats() *Stats {
 // Decode parses one datagram and appends its flow records to dst, returning
 // the extended slice. The outcome is accounted either way, so the returned
 // error is for the debug log alone.
-func (d *Decoder) Decode(exporter netip.Addr, payload []byte, dst []flow.Record) ([]flow.Record, error) {
+//
+// The source is the whole transport session. Its address is the device every
+// key and label is built from; its port separates the export processes that
+// number a sequence apart, which RFC 7011 section 2 makes part of a session's
+// identity and nothing else here reads.
+func (d *Decoder) Decode(src netip.AddrPort, payload []byte, dst []flow.Record) ([]flow.Record, error) {
+	exporter, port := src.Addr(), src.Port()
+
 	// The device is resolved once, before anything is parsed, and every
 	// accounting call below writes through that one resolution. A refusal is
 	// counted at the resolution, and a v9 datagram carries an accounting call
@@ -224,7 +231,7 @@ func (d *Decoder) Decode(exporter netip.Addr, payload []byte, dst []flow.Record)
 	}
 
 	before := len(dst)
-	dst, err = d.decodeVersion(version, exporter, es, payload, dst)
+	dst, err = d.decodeVersion(version, exporter, port, es, payload, dst)
 	if err != nil {
 		es.countError(version, err.Reason())
 		return dst[:before], err
@@ -236,22 +243,23 @@ func (d *Decoder) Decode(exporter netip.Addr, payload []byte, dst []flow.Record)
 
 // decodeVersion routes one sniffed datagram to its parser.
 func (d *Decoder) decodeVersion(
-	version flow.Version, exporter netip.Addr, es *ExporterStats, payload []byte, dst []flow.Record,
+	version flow.Version, exporter netip.Addr, port uint16,
+	es *ExporterStats, payload []byte, dst []flow.Record,
 ) ([]flow.Record, *decodeError) {
 	switch version {
 	case flow.VersionNetFlowV5:
-		return d.decodeNetFlowV5(exporter, payload, dst)
+		return d.decodeNetFlowV5(exporter, port, payload, dst)
 	case flow.VersionNetFlowV8:
-		return d.decodeNetFlowV8(exporter, payload, dst)
+		return d.decodeNetFlowV8(exporter, port, payload, dst)
 	case flow.VersionNetFlowV9:
 		issue := func(reason string) { es.countError(flow.VersionNetFlowV9, reason) }
-		return d.decodeNetFlowV9(exporter, payload, dst, issue)
+		return d.decodeNetFlowV9(exporter, port, payload, dst, issue)
 	case flow.VersionIPFIX:
 		issue := func(reason string) { es.countError(flow.VersionIPFIX, reason) }
-		return d.decodeIPFIX(exporter, payload, dst, issue)
+		return d.decodeIPFIX(exporter, port, payload, dst, issue)
 	case flow.VersionSFlowV5:
 		issue := func(reason string) { es.countError(flow.VersionSFlowV5, reason) }
-		return d.decodeSFlowV5(exporter, payload, dst, issue)
+		return d.decodeSFlowV5(exporter, port, payload, dst, issue)
 	case flow.VersionUnknown:
 		return dst, &decodeError{reason: ReasonUnsupportedVersion, detail: "unknown version"}
 	default:

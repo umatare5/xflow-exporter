@@ -69,7 +69,7 @@ func sflowIfIndex(format, value uint32) uint32 {
 // read is skipped over its declared length; only a structure whose lengths
 // lie is fatal to the datagram.
 func (d *Decoder) decodeSFlowV5(
-	exporter netip.Addr, payload []byte, dst []flow.Record, issue func(reason string),
+	exporter netip.Addr, port uint16, payload []byte, dst []flow.Record, issue func(reason string),
 ) ([]flow.Record, *decodeError) {
 	r := newByteReader(payload)
 
@@ -98,7 +98,7 @@ func (d *Decoder) decodeSFlowV5(
 		issue(ReasonDomainLimit)
 		return dst, nil
 	}
-	domain.trackSequence(sequence)
+	domain.trackSequence(port, sequence)
 
 	// One hold for the datagram: the samples of a domain arrive on the worker
 	// its device is hashed to, and a scrape reads the totals as atomics.

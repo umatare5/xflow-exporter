@@ -83,7 +83,7 @@ const (
 // through issue and do not fail the datagram: a missing template must not
 // discard the flowsets whose templates are known.
 func (d *Decoder) decodeNetFlowV9(
-	exporter netip.Addr, payload []byte, dst []flow.Record, issue func(reason string),
+	exporter netip.Addr, port uint16, payload []byte, dst []flow.Record, issue func(reason string),
 ) ([]flow.Record, *decodeError) {
 	if len(payload) < netflowV9HeaderLen {
 		return dst, malformed("v9 header needs %d bytes, datagram has %d", netflowV9HeaderLen, len(payload))
@@ -99,7 +99,7 @@ func (d *Decoder) decodeNetFlowV9(
 		issue(ReasonDomainLimit)
 		return dst, nil
 	}
-	domain.trackSequence(sequence)
+	domain.trackSequence(port, sequence)
 
 	clock := exportClock{at: time.Unix(int64(exportSecs), 0), uptimeMs: sysUptimeMs, hasUptime: true}
 
