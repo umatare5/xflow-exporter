@@ -411,7 +411,7 @@ The packet-sampling based record format. It relies on standard XDR encoding for 
 
 Flow samples decode from the raw Ethernet header up to transport layers, alongside pre-parsed IPv4/IPv6 records.
 
-The observation point is derived rather than exported. A sample taken on an interface data source that matches the input alone was seen entering the device, and one matching the output alone leaving it. A hairpin, a VLAN or entity source, and the agent's whole port set each leave it unknown.
+The observation point is derived rather than exported. A sample whose interface data source matches the input alone was seen entering the device, one matching the output alone leaving it, and anything else leaves the point unknown.
 
 ```text
 sFlow v5 datagram

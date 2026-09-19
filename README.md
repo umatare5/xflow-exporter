@@ -101,9 +101,6 @@ show flow monitor EXAMPLE_FLOW_MONITOR
 > [!TIP]
 > All protocols reach that same port. See [Version Identification](docs/protocols.md#version-identification) for how a datagram is detected.
 
-> [!NOTE]
-> Add `collect flow direction` on a platform that supports it. Every traffic series carries the observation point, and a record without the element reads `direction="unknown"`. NetFlow Lite platforms such as the C2960CX attach a monitor in the ingress direction only and offer no such collect statement.
-
 ### 2. Run the exporter and start receiving flow records
 
 Run the exporter using Docker as shown below, and start to receive the flow records.
