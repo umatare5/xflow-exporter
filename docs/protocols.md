@@ -32,7 +32,7 @@ The protocol is resolved from a datagram's leading bytes, not from the port it a
 
 The fixed 48-byte record format, **shared byte for byte with J-Flow v5.**
 
-Flow instants are anchored from the device uptime to the export timestamp. The header's sampling interval rides each record.
+Flow instants are anchored from the device uptime to the export timestamp. That uptime is a 32-bit millisecond counter, so an instant is taken as a modular age and a flow straddling its 49.7-day wrap keeps its duration. The header's sampling interval rides each record.
 
 <details><summary><b>Packet Layout</b></summary><p>
 
@@ -387,6 +387,7 @@ A field count of zero is a template withdrawal. UDP gives no ordering, so a with
 | Enterprise fields | Absent                   | Bit 15 set, then a 4-byte PEN  |
 | Variable length   | Absent                   | Declared `65535`               |
 | Integer widths    | Native only              | Reduced to any width that fits |
+| Uptime anchor     | Header `SysUptime`       | Record IE 160                  |
 
 ```text
  0                   1                   2                   3

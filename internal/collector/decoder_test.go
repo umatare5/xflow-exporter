@@ -48,8 +48,8 @@ func TestDecoderCollector_Describe(t *testing.T) {
 	for range ch {
 		count++
 	}
-	if count != 17 {
-		t.Errorf("Describe() emitted %d descriptors, want 17", count)
+	if count != 18 {
+		t.Errorf("Describe() emitted %d descriptors, want 18", count)
 	}
 }
 

@@ -59,6 +59,23 @@ func FuzzDecode(f *testing.F) {
 	f.Add(ipfixMessage(7, fixtureIPFIXTemplate(),
 		flowSet(fixtureIPFIXTemplateID, nil)))
 
+	// The clock shapes, whose arithmetic is modular: a pair behind the wrap,
+	// a pair that inverts, one element of a pair, and the IPFIX record that
+	// carries its own anchor.
+	f.Add(v9ClockPacket(100_000, beforeWrap(10_000), beforeWrap(5_000)))
+	f.Add(v9ClockPacket(120_000, 45_000, 30_000))
+	f.Add(v9Packet(5, fixtureV9ODID,
+		flowSet(templateFlowSetID, templateSpec(fixtureV9TemplateID,
+			[2]uint16{fieldFirstSwitched, 4})),
+		flowSet(fixtureV9TemplateID, be32(nil, 30_000))))
+	f.Add(ipfixMessage(8,
+		ipfixTemplateSet(
+			ipfixSpec(fieldSystemInitTime, 8, 0),
+			ipfixSpec(fieldFirstSwitched, 4, 0),
+			ipfixSpec(fieldLastSwitched, 4, 0)),
+		flowSet(fixtureIPFIXTemplateID,
+			be32(be32(be64(nil, uint64(fixtureIPFIXExportSecs)*1000-3_600_000), 3_540_000), 3_570_000))))
+
 	exporter := netip.MustParseAddr("192.0.2.99")
 
 	f.Fuzz(func(t *testing.T, payload []byte) {

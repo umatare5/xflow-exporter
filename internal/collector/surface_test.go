@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -162,6 +163,59 @@ func gatherFamilies(t *testing.T, appName string) []*dto.MetricFamily {
 func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	t.Parallel()
 
+	families := gatherWholeSurface(t)
+	// The count this surface publishes, held exactly rather than as a floor:
+	// a floor cannot see a family disappear in the same change that adds
+	// another, and the lint below reaches only what was gathered. Four
+	// registered families stay outside it -- the sampling rate, the sampler
+	// rate and the unresolved count need an options template announcing a
+	// rate, and the remote write instant needs a client that has written,
+	// whose counters the package keeps unexported. Changing the surface is
+	// meant to change this number.
+	const wantFamilies = 72
+	if len(families) != wantFamilies {
+		t.Fatalf("gathered %d families, want %d: the lint below covers only what is registered",
+			len(families), wantFamilies)
+	}
+
+	problems, err := promlint.NewWithMetricFamilies(families).Lint()
+	if err != nil {
+		t.Fatalf("Lint() error = %v, want nil", err)
+	}
+	for _, problem := range problems {
+		t.Errorf("%s: %s", problem.Metric, problem.Text)
+	}
+}
+
+// TestAllCollectors_FamiliesAreDocumented pins the surface to the two files
+// that describe it, no other check standing between a new family and an
+// operator who cannot find it. The union is the contract: health.md tables
+// the exporter's own metrics and collectors.md the traffic ones, and either
+// alone leaves most of the surface out.
+func TestAllCollectors_FamiliesAreDocumented(t *testing.T) {
+	t.Parallel()
+
+	var docs string
+	for _, name := range []string{"health.md", "collectors.md"} {
+		content, err := os.ReadFile(filepath.Join("..", "..", "docs", name))
+		if err != nil {
+			t.Fatalf("reading docs/%s: %v", name, err)
+		}
+		docs += string(content)
+	}
+
+	for _, f := range gatherWholeSurface(t) {
+		if !strings.Contains(docs, f.GetName()) {
+			t.Errorf("%s is published but named in neither docs/health.md nor docs/collectors.md", f.GetName())
+		}
+	}
+}
+
+// gatherWholeSurface registers and feeds every collector, returning what one
+// scrape would publish.
+func gatherWholeSurface(t *testing.T) []*dto.MetricFamily {
+	t.Helper()
+
 	cfg := testConfig()
 	cfg.Collectors = config.Collectors{
 		Exporters: true, Hosts: true, Services: true, Destinations: true,
@@ -251,27 +305,7 @@ func TestAllCollectors_MetricNamesMatchTypes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Gather() error = %v, want nil", err)
 	}
-	// The count this surface publishes, held exactly rather than as a floor:
-	// a floor cannot see a family disappear in the same change that adds
-	// another, and the lint below reaches only what was gathered. Four
-	// registered families stay outside it -- the sampling rate, the sampler
-	// rate and the unresolved count need an options template announcing a
-	// rate, and the remote write instant needs a client that has written,
-	// whose counters the package keeps unexported. Changing the surface is
-	// meant to change this number.
-	const wantFamilies = 71
-	if len(families) != wantFamilies {
-		t.Fatalf("gathered %d families, want %d: the lint below covers only what is registered",
-			len(families), wantFamilies)
-	}
-
-	problems, err := promlint.NewWithMetricFamilies(families).Lint()
-	if err != nil {
-		t.Fatalf("Lint() error = %v, want nil", err)
-	}
-	for _, problem := range problems {
-		t.Errorf("%s: %s", problem.Metric, problem.Text)
-	}
+	return families
 }
 
 // writeThreatList gives the enrichment collector a real set to report.

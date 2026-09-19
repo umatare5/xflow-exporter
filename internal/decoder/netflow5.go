@@ -46,8 +46,10 @@ func (d *Decoder) decodeNetFlowV5(
 
 	// A v5 export carries no domain field, so the device is its own domain.
 	// The records parse without one, so a device at its domain budget loses
-	// the sequence rather than the traffic the datagram carries.
-	if domain := d.templates.domain(domainKey{exporter: exporter, proto: flow.VersionNetFlowV5}); domain != nil {
+	// the sequence and the clock accounting rather than the traffic the
+	// datagram carries.
+	domain := d.templates.domain(domainKey{exporter: exporter, proto: flow.VersionNetFlowV5})
+	if domain != nil {
 		domain.trackRecordSequence(binary.BigEndian.Uint32(payload[16:20]), uint32(count),
 			binary.BigEndian.Uint16(payload[20:22]), true)
 	}
@@ -57,14 +59,14 @@ func (d *Decoder) decodeNetFlowV5(
 	exportNanos := binary.BigEndian.Uint32(payload[12:16])
 	samplingRate := uint32(binary.BigEndian.Uint16(payload[22:24]) & netflowV5SamplingMask)
 
-	// The per-record instants are milliseconds of device uptime, so the boot
-	// instant anchors them to the export timestamp the header carries.
-	bootTime := time.Unix(int64(exportSecs), int64(exportNanos)).
-		Add(-time.Duration(sysUptimeMs) * time.Millisecond)
+	clock := exportClock{
+		at:       time.Unix(int64(exportSecs), int64(exportNanos)),
+		uptimeMs: sysUptimeMs, hasUptime: true,
+	}
 
 	for i := range count {
 		record := payload[netflowV5HeaderLen+i*netflowV5RecordLen:]
-		dst = append(dst, netflowV5Record(exporter, record, bootTime, samplingRate))
+		dst = append(dst, netflowV5Record(exporter, record, clock, samplingRate, domain))
 	}
 
 	return dst, nil
@@ -73,10 +75,11 @@ func (d *Decoder) decodeNetFlowV5(
 // netflowV5Record reads one 48-byte record. The slice is at least that long,
 // which decodeNetFlowV5 has established.
 func netflowV5Record(
-	exporter netip.Addr, record []byte, bootTime time.Time, samplingRate uint32,
+	exporter netip.Addr, record []byte, clock exportClock, samplingRate uint32, domain *domainState,
 ) flow.Record {
-	first := binary.BigEndian.Uint32(record[24:28])
-	last := binary.BigEndian.Uint32(record[28:32])
+	start, end, ok := clock.anchorPair(
+		binary.BigEndian.Uint32(record[24:28]), binary.BigEndian.Uint32(record[28:32]))
+	domain.countClockPair(!ok)
 
 	return flow.Record{
 		Exporter: exporter,
@@ -107,8 +110,8 @@ func netflowV5Record(
 		SrcMask: record[44],
 		DstMask: record[45],
 
-		Start: bootTime.Add(time.Duration(first) * time.Millisecond),
-		End:   bootTime.Add(time.Duration(last) * time.Millisecond),
+		Start: start,
+		End:   end,
 
 		SamplingRate: samplingRate,
 	}

@@ -41,6 +41,7 @@ type DecoderCollector struct {
 	samplersRefusedDesc    *prometheus.Desc
 	seqMissedDesc          *prometheus.Desc
 	samplingUnresolvedDesc *prometheus.Desc
+	clockInversionsDesc    *prometheus.Desc
 	samplingDesc           *prometheus.Desc
 	samplerRateDesc        *prometheus.Desc
 	declRefusedDesc        *prometheus.Desc
@@ -104,6 +105,11 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 			"Records on v9 and IPFIX no declaration settled a sampling rate for, taken uncorrected, per domain",
 			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
+		clockInversionsDesc: prometheus.NewDesc(
+			"xflow_flow_clock_inversions_total",
+			"Records whose flow ended before it began, both instants withheld, per domain",
+			[]string{labelExporter, labelVersion, labelODID}, nil,
+		),
 		samplingDesc: prometheus.NewDesc(
 			"xflow_sampling_rate",
 			"Packet sampling rate in force for the domain, declared by its own options or inherited from the device",
@@ -154,6 +160,7 @@ func (c *DecoderCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.samplersRefusedDesc
 	ch <- c.seqMissedDesc
 	ch <- c.samplingUnresolvedDesc
+	ch <- c.clockInversionsDesc
 	ch <- c.samplingDesc
 	ch <- c.samplerRateDesc
 	ch <- c.declRefusedDesc
@@ -281,6 +288,15 @@ func (c *DecoderCollector) collectDomains(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			c.seqMissedDesc, prometheus.CounterValue,
 			float64(domain.SequenceMissed), exporter, version, odid)
+
+		// Only a domain whose records carry a flow clock has been looked at,
+		// and a zero from one that does not would read as agreement rather
+		// than as silence. Which protocols those are is the wire's to say.
+		if domain.ClocksAnchored {
+			ch <- prometheus.MustNewConstMetric(
+				c.clockInversionsDesc, prometheus.CounterValue,
+				float64(domain.ClockInversions), exporter, version, odid)
+		}
 
 		// A domain that has not declared a rate has no series: a zero here
 		// would read as sampling switched off rather than unknown.

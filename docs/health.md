@@ -24,6 +24,7 @@ The following table lists the metrics exposed by each subsystem.
 | `decoder`      | `xflow_last_datagram_timestamp_seconds`             | Gauge   | Unix time, last datagram       |
 | `decoder`      | `xflow_templates`                                   | Gauge   | Unexpired templates per `type` |
 | `decoder`      | `xflow_sequence_missed_total`                       | Counter | Packets or records lost        |
+| `decoder`      | `xflow_flow_clock_inversions_total`                 | Counter | Flows ending before they began |
 | `decoder`      | `xflow_sampling_rate`                               | Gauge   | Rate in force per domain       |
 | `decoder`      | `xflow_sampler_rate`                                | Gauge   | Rate per declared sampler      |
 | `decoder`      | `xflow_sampling_unresolved_flows_total`             | Counter | Records taken uncorrected      |
@@ -74,6 +75,10 @@ Updates on record decodes (`flow`) or any datagram arrival (`datagram`).
 
 Captures loss or reordering based on protocol sequence numbering.
 
+**`xflow_flow_clock_inversions_total`**
+
+Counts the records whose flow ended before it began, both instants withheld rather than published. A domain whose records carry no flow clock never reaches the check, so it publishes no series.
+
 **`xflow_sampling_rate`**
 
 Reflects the rate in force for a domain, declared by its own options or inherited from the device.
@@ -108,7 +113,7 @@ This section covers technical considerations and best practices for development,
 
 **Correction Precedence**: A record takes the rate of the sampler it names, failing that its own domain's declaration, and failing that the one rate every declaration on the device agrees on. Where none answers, the counts are corrected by one and no `xflow_sampling_rate` series exists, as on a device whose declarations disagree while its records name the samplers correcting them. `xflow_sampling_unresolved_flows_total` separates the two, appearing once the device has declared, so a restart leaves it absent until the device re-announces.
 
-**Series Presence**: A series keyed by wire data appears on its first event, so `xflow_decode_errors_total`, `xflow_last_flow_timestamp_seconds` and `xflow_sampling_rate` read as absent rather than zero beforehand. The `_refused_total` counters are seeded at zero instead, a first refusal reading as a rise.
+**Series Presence**: A series keyed by wire data appears on its first event, so `xflow_decode_errors_total`, `xflow_last_flow_timestamp_seconds` and `xflow_sampling_rate` read as absent rather than zero beforehand. The `_refused_total` counters are seeded at zero instead, a first refusal reading as a rise. `xflow_flow_clock_inversions_total` seeds at zero once a domain has anchored a flow clock.
 
 **Sequence Tracking**: Protocol numbering schemes vary: `xflow_sequence_missed_total` counts packets for v9 and sFlow, but records for v5, v8, and IPFIX. Sequence loss tracking requires strict per-worker ordering, avoiding false positives across concurrent decoders.
 

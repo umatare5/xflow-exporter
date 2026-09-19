@@ -255,6 +255,29 @@ type domainState struct {
 	// be refused while the other is accumulated.
 	poolMeasured  atomic.Bool
 	dropsMeasured atomic.Bool
+
+	// clockInversions counts the records whose flow ended before it began,
+	// both instants withheld. clocksAnchored records that a pair was anchored
+	// at all, which a zero count cannot: a template carrying no flow clock
+	// never reaches the guard.
+	clockInversions atomic.Uint64
+	clocksAnchored  atomic.Bool
+}
+
+// countClockPair records one anchored flow clock pair. The load keeps the
+// steady state off the write path, every record after the first finding the
+// flag already set. A nil domain is a device at its budget, which loses the
+// accounting rather than the record.
+func (d *domainState) countClockPair(inverted bool) {
+	if d == nil {
+		return
+	}
+	if !d.clocksAnchored.Load() {
+		d.clocksAnchored.Store(true)
+	}
+	if inverted {
+		d.clockInversions.Add(1)
+	}
 }
 
 // rateInForce is the rate a record carrying no samplerId takes: the domain's
@@ -699,6 +722,11 @@ type DomainSnapshot struct {
 	SamplesDropped uint64
 	PoolMeasured   bool
 	DropsMeasured  bool
+	// ClockInversions counts the records whose two instants were withheld for
+	// ending before they began, and ClocksAnchored carries whether a pair was
+	// anchored at all, which a zero cannot.
+	ClockInversions uint64
+	ClocksAnchored  bool
 }
 
 // SamplerSnapshot is one rate a device declared for one named sampler.
@@ -754,6 +782,8 @@ func (s *templateStore) snapshot() []DomainSnapshot {
 			SamplesDropped:     d.samplesDropped.Load(),
 			PoolMeasured:       d.poolMeasured.Load(),
 			DropsMeasured:      d.dropsMeasured.Load(),
+			ClockInversions:    d.clockInversions.Load(),
+			ClocksAnchored:     d.clocksAnchored.Load(),
 		})
 	}
 	return snapshots
