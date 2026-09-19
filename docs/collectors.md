@@ -84,7 +84,8 @@ Every traffic family is labeled with `exporter_address` (except `xflow_asn_info`
 | `asn`/`organization`             | AS number and database organization name                                |
 | `application`                    | AVC name, vendor string, or `engine:selector`                           |
 | `src_country`/`dst_country`      | ISO country code, `private`, or `unknown`                               |
-| `address`/`direction`            | Flagged address and its flow side (`src`/`dst`)                         |
+| `address`/`side`                 | Flagged address and its conversation side (`src`/`dst`)                 |
+| `direction`                      | Observation point (`ingress`, `egress`, `unknown`)                      |
 | `src_vlan`/`dst_vlan`            | VLAN from mapping file, or `0` if unknown                               |
 | `exporter_name`                  | Hostname from mapping file                                              |
 | `ifindex`/`ifname`               | ifIndex and assigned name                                               |
@@ -110,7 +111,7 @@ The inclusion of interface pairs keeps asymmetrical paths distinct. Unrecorded p
 
 **`xflow_destination_*`**
 
-Unidirectional aggregate for destinations independent of sources. States total received volume per service. It is directional; ingress-only observation points key the two directions of a conversation separately.
+Unidirectional aggregate for destinations independent of sources. States total received volume per service. It is directional; the two directions of a conversation are keyed separately whichever points observed them.
 
 **`xflow_tcp_flags_*`**
 
@@ -149,6 +150,8 @@ This section covers technical considerations and best practices for development,
 **Address Localization**: The `private` country designation is strictly bound to RFC 1918 and RFC 4193 unique local ranges. Shared address space, loopback, and link-local are not designated private, avoiding semantic guesswork.
 
 **Exporter Behaviors**: `xflow_exporter_*` sums domains (e.g., NetFlow v8 methods, v9 Source IDs). Summing across `odid` counts traffic once per cache view. `_flows_total` relies on cache-reported counts for v8 aggregates, which differ from underlying flows.
+
+**Observation Points**: `direction` carries IE 61 on v9 and IPFIX, and on sFlow the point derived from the data source a sample was taken on. It separates the two readings a device gives for a path it watches at both ends, but does not correct their sum — summing across the label returns the doubled figure, and selecting one direction returns the measured one. The two flow distributions carry no such label, so a two-point device doubles their `_count` and `_sum` for the same reason. The 32 families carrying neither `version` nor `odid` double again where one cache is fanned out to two exporters aimed at the same collector.
 
 **Application Names**: The table a device announces through its options expires on `--parser.template-ttl`, so a device whose application-table timer is longer than that loses its names between announcements. The `application` label then falls back to `engine:selector`, splitting one application across two series until the device announces again.
 

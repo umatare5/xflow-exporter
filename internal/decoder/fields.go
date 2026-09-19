@@ -167,6 +167,25 @@ func rateInForce(state *fieldState, domain *domainState) uint32 {
 	return domain.rateInForce()
 }
 
+// flowDirection reads IE 61. RFC 5102 assigns 0 and 1 alone, so any other
+// value is a device writing something the element does not define and the
+// point stays unknown rather than being read as one of the two.
+func flowDirection(value []byte) flow.Direction {
+	v, ok := beUint8(value)
+	if !ok {
+		return flow.DirectionUnknown
+	}
+
+	switch v {
+	case 0:
+		return flow.DirectionIngress
+	case 1:
+		return flow.DirectionEgress
+	default:
+		return flow.DirectionUnknown
+	}
+}
+
 // resolveAddrs settles which address family the device actually measured.
 //
 // A template announcing both families carries four address elements per
@@ -271,6 +290,8 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 		if v, ok := beUint8(value); ok {
 			r.Protocol = v
 		}
+	case fieldFlowDirection:
+		r.Direction = flowDirection(value)
 	case fieldSrcTOS:
 		if v, ok := beUint8(value); ok {
 			r.TOS = v

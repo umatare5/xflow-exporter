@@ -48,6 +48,9 @@ const (
 	fieldIPv6DstAddr   = 28
 	fieldIPv6SrcMask   = 29
 	fieldIPv6DstMask   = 30
+	// The observation point the device took the reading at, 0 for ingress
+	// and 1 for egress. RFC 5102 defines no other value.
+	fieldFlowDirection = 61
 
 	// Absolute flow clocks some Flexible NetFlow templates export instead of
 	// the uptime-relative pair above. IE 160 is the device's boot instant,
