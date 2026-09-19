@@ -38,6 +38,7 @@ func (d *Decoder) decodeIPFIX(
 		return dst, malformed("ipfix message length %d does not fit the %d-byte datagram", msgLen, len(payload))
 	}
 
+	exportSecs := binary.BigEndian.Uint32(payload[4:8])
 	sequence := binary.BigEndian.Uint32(payload[8:12])
 	key := domainKey{exporter: exporter, odid: binary.BigEndian.Uint32(payload[12:16]), proto: flow.VersionIPFIX}
 	domain := d.templates.domain(key)
@@ -45,6 +46,10 @@ func (d *Decoder) decodeIPFIX(
 		issue(ReasonDomainLimit)
 		return dst, nil
 	}
+
+	// Export Time is seconds (RFC 7011 section 3.1), and the header states no
+	// uptime: a record's own IE 160 is what supplies one.
+	clock := exportClock{at: time.Unix(int64(exportSecs), 0)}
 
 	dataRecords, complete := 0, true
 
@@ -63,7 +68,7 @@ func (d *Decoder) decodeIPFIX(
 
 		set := payload[offset+flowSetHeaderLen : offset+setLen]
 		var records int
-		dst, records, complete = d.decodeIPFIXSet(key, domain, setID, set, dst, complete, issue)
+		dst, records, complete = d.decodeIPFIXSet(key, domain, setID, set, clock, dst, complete, issue)
 		dataRecords += records
 		offset += setLen
 	}
@@ -78,7 +83,7 @@ func (d *Decoder) decodeIPFIX(
 // decodeIPFIXSet routes one set by its id, reporting how many data records it
 // held and whether that count is trustworthy.
 func (d *Decoder) decodeIPFIXSet(
-	key domainKey, domain *domainState, setID uint16, set []byte,
+	key domainKey, domain *domainState, setID uint16, set []byte, clock exportClock,
 	dst []flow.Record, complete bool, issue func(reason string),
 ) ([]flow.Record, int, bool) {
 	switch {
@@ -89,7 +94,7 @@ func (d *Decoder) decodeIPFIXSet(
 		d.parseIPFIXOptionsTemplates(key, set, issue)
 		return dst, 0, complete
 	case setID >= minDataSetID:
-		return d.decodeIPFIXDataSet(key, domain, setID, set, dst, complete, issue)
+		return d.decodeIPFIXDataSet(key, domain, setID, set, clock, dst, complete, issue)
 	default:
 		issue(ReasonReservedSet)
 		return dst, 0, false
@@ -235,7 +240,7 @@ func parseIPFIXFieldSpecs(
 // the record boundaries come from the records themselves, so a walk failure
 // abandons the rest of the set rather than guessing an offset.
 func (d *Decoder) decodeIPFIXDataSet(
-	key domainKey, domain *domainState, setID uint16, set []byte,
+	key domainKey, domain *domainState, setID uint16, set []byte, clock exportClock,
 	dst []flow.Record, complete bool, issue func(reason string),
 ) ([]flow.Record, int, bool) {
 	tpl, ok := d.templates.lookup(key, setID)
@@ -248,7 +253,7 @@ func (d *Decoder) decodeIPFIXDataSet(
 	offset := 0
 	for len(set)-offset >= tpl.recordLen {
 		var walked bool
-		dst, offset, walked = d.decodeIPFIXRecord(key, domain, tpl, set, offset, dst)
+		dst, offset, walked = d.decodeIPFIXRecord(key, domain, tpl, set, offset, clock, dst)
 		if !walked {
 			issue(ReasonMalformed)
 			return dst, records, false
@@ -272,7 +277,7 @@ func (d *Decoder) decodeIPFIXDataSet(
 // decodeIPFIXRecord walks one record, flow or options, returning the offset
 // past it.
 func (d *Decoder) decodeIPFIXRecord(
-	key domainKey, domain *domainState, tpl *template, set []byte, offset int,
+	key domainKey, domain *domainState, tpl *template, set []byte, offset int, clock exportClock,
 	dst []flow.Record,
 ) ([]flow.Record, int, bool) {
 	if tpl.options {
@@ -298,9 +303,7 @@ func (d *Decoder) decodeIPFIXRecord(
 		applyField(r, &state, f.fieldType, f.enterprise, value)
 	}
 
-	// IPFIX has no uptime anchor in its header, so uptime-relative clocks
-	// are left absent unless a future element supplies the boot instant.
-	finishRecord(r, &state, time.Time{}, domain)
+	finishRecord(r, &state, clock, domain)
 	d.resolveApplication(key.exporter, r)
 	return dst, offset, true
 }

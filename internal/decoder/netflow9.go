@@ -50,11 +50,13 @@ const (
 	fieldIPv6DstMask   = 30
 
 	// Absolute flow clocks some Flexible NetFlow templates export instead of
-	// the uptime-relative pair above.
+	// the uptime-relative pair above. IE 160 is the device's boot instant,
+	// which anchors that pair where the header states no uptime.
 	fieldFlowStartSeconds      = 150
 	fieldFlowEndSeconds        = 151
 	fieldFlowStartMilliseconds = 152
 	fieldFlowEndMilliseconds   = 153
+	fieldSystemInitTime        = 160
 
 	// The code point alone, which Flexible NetFlow exports in place of the
 	// TOS byte where the record matched on DSCP rather than on TOS.
@@ -99,7 +101,7 @@ func (d *Decoder) decodeNetFlowV9(
 	}
 	domain.trackSequence(sequence)
 
-	bootTime := time.Unix(int64(exportSecs), 0).Add(-time.Duration(sysUptimeMs) * time.Millisecond)
+	clock := exportClock{at: time.Unix(int64(exportSecs), 0), uptimeMs: sysUptimeMs, hasUptime: true}
 
 	offset := netflowV9HeaderLen
 	for offset+flowSetHeaderLen <= len(payload) {
@@ -115,7 +117,7 @@ func (d *Decoder) decodeNetFlowV9(
 		}
 
 		set := payload[offset+flowSetHeaderLen : offset+setLen]
-		dst = d.decodeV9FlowSet(key, domain, setID, set, bootTime, dst, issue)
+		dst = d.decodeV9FlowSet(key, domain, setID, set, clock, dst, issue)
 		offset += setLen
 	}
 
@@ -126,7 +128,7 @@ func (d *Decoder) decodeNetFlowV9(
 // decodeV9FlowSet routes one flowset by its id.
 func (d *Decoder) decodeV9FlowSet(
 	key domainKey, domain *domainState, setID uint16, set []byte,
-	bootTime time.Time, dst []flow.Record, issue func(reason string),
+	clock exportClock, dst []flow.Record, issue func(reason string),
 ) []flow.Record {
 	switch {
 	case setID == templateFlowSetID:
@@ -134,7 +136,7 @@ func (d *Decoder) decodeV9FlowSet(
 	case setID == optionsTemplateFlowSetID:
 		d.parseV9OptionsTemplates(key, set, issue)
 	case setID >= minDataSetID:
-		dst = d.decodeV9DataSet(key, domain, setID, set, bootTime, dst, issue)
+		dst = d.decodeV9DataSet(key, domain, setID, set, clock, dst, issue)
 	default:
 		// 2-255 are reserved. A device using one speaks a dialect this
 		// exporter does not, which must be visible rather than skipped.
@@ -290,7 +292,7 @@ func (d *Decoder) parseV9OptionsTemplates(key domainKey, set []byte, issue func(
 // bytes shorter than one record are the padding some devices append.
 func (d *Decoder) decodeV9DataSet(
 	key domainKey, domain *domainState, setID uint16, set []byte,
-	bootTime time.Time, dst []flow.Record, issue func(reason string),
+	clock exportClock, dst []flow.Record, issue func(reason string),
 ) []flow.Record {
 	tpl, ok := d.templates.lookup(key, setID)
 	if !ok {
@@ -323,7 +325,7 @@ func (d *Decoder) decodeV9DataSet(
 			d.readV9OptionsRecord(key, domain, tpl, record)
 			continue
 		}
-		dst = d.appendV9Record(key, tpl, record, bootTime, domain, dst)
+		dst = d.appendV9Record(key, tpl, record, clock, domain, dst)
 	}
 	return dst
 }
@@ -346,7 +348,7 @@ func (d *Decoder) readV9OptionsRecord(key domainKey, domain *domainState, tpl *t
 // appendV9Record decodes one data record in place at the end of dst.
 func (d *Decoder) appendV9Record(
 	key domainKey, tpl *template, record []byte,
-	bootTime time.Time, domain *domainState, dst []flow.Record,
+	clock exportClock, domain *domainState, dst []flow.Record,
 ) []flow.Record {
 	dst = append(dst, flow.Record{
 		Exporter: key.exporter,
@@ -365,7 +367,7 @@ func (d *Decoder) appendV9Record(
 		applyField(r, &state, f.fieldType, f.enterprise, value)
 	}
 
-	finishRecord(r, &state, bootTime, domain)
+	finishRecord(r, &state, clock, domain)
 	d.resolveApplication(key.exporter, r)
 	return dst
 }

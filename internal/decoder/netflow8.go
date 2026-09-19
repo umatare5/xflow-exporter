@@ -96,8 +96,10 @@ func (d *Decoder) decodeNetFlowV8(
 	sysUptimeMs := binary.BigEndian.Uint32(payload[4:8])
 	exportSecs := binary.BigEndian.Uint32(payload[8:12])
 	exportNanos := binary.BigEndian.Uint32(payload[12:16])
-	bootTime := time.Unix(int64(exportSecs), int64(exportNanos)).
-		Add(-time.Duration(sysUptimeMs) * time.Millisecond)
+	clock := exportClock{
+		at:       time.Unix(int64(exportSecs), int64(exportNanos)),
+		uptimeMs: sysUptimeMs, hasUptime: true,
+	}
 
 	for i := range count {
 		record := payload[netflowV8HeaderLen+i*scheme.recordLen:]
@@ -110,7 +112,7 @@ func (d *Decoder) decodeNetFlowV8(
 		})
 		normalized := &dst[len(dst)-1]
 		scheme.read(record, normalized)
-		anchorV8Times(record, normalized, bootTime, aggregation)
+		anchorV8Times(record, normalized, clock, aggregation)
 	}
 
 	return dst, nil
@@ -120,7 +122,10 @@ func (d *Decoder) decodeNetFlowV8(
 // them is 12 bytes on every method but the Catalyst pair 7 and 8, which carry
 // a second address and, on 8, both ports before the counters -- so only those
 // two move First and Last off the flow-tools common offsets 12 and 16.
-func anchorV8Times(record []byte, dst *flow.Record, bootTime time.Time, aggregation uint8) {
+//
+// An inversion withholds both instants here as elsewhere, but is not counted:
+// a v8 record is an aggregate, so its span reaches no series to distort.
+func anchorV8Times(record []byte, dst *flow.Record, clock exportClock, aggregation uint8) {
 	firstAt, lastAt := 12, 16
 	switch aggregation {
 	case 6:
@@ -131,10 +136,9 @@ func anchorV8Times(record []byte, dst *flow.Record, bootTime time.Time, aggregat
 		firstAt, lastAt = 20, 24
 	}
 
-	first := binary.BigEndian.Uint32(record[firstAt : firstAt+4])
-	last := binary.BigEndian.Uint32(record[lastAt : lastAt+4])
-	dst.Start = bootTime.Add(time.Duration(first) * time.Millisecond)
-	dst.End = bootTime.Add(time.Duration(last) * time.Millisecond)
+	dst.Start, dst.End, _ = clock.anchorPair(
+		binary.BigEndian.Uint32(record[firstAt:firstAt+4]),
+		binary.BigEndian.Uint32(record[lastAt:lastAt+4]))
 }
 
 // readV8Common reads the dFlows/dPkts/dOctets prefix methods 1-5 and 9-14

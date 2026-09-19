@@ -58,12 +58,18 @@ const (
 // field is read: the flow clocks and the egress fallback counters. It also
 // carries the interner vendor strings resolve through.
 type fieldState struct {
-	firstUptimeMs, lastUptimeMs uint32
-	hasUptime                   bool
-	startAbs, endAbs            time.Time
-	outBytes, outPackets        uint64
-	outBytesReported            bool
-	intern                      *interner
+	// The uptime-relative pair, each flagged on its own: one element without
+	// the other is half a reading, and anchoring the absent half would date
+	// the flow from the device's boot.
+	firstUptimeMs, lastUptimeMs   uint32
+	hasFirstUptime, hasLastUptime bool
+	// bootAt is the device's boot instant, which IE 160 states for the
+	// protocol whose header carries no uptime.
+	bootAt               time.Time
+	startAbs, endAbs     time.Time
+	outBytes, outPackets uint64
+	outBytesReported     bool
+	intern               *interner
 
 	// The two address families, kept apart until every field is read: which
 	// pair the device measured and which it zero-filled is a property of
@@ -90,7 +96,7 @@ type addrPair struct {
 
 // finishRecord resolves the accumulated state into the record and stamps the
 // domain sampling rate where the record carried none.
-func finishRecord(r *flow.Record, state *fieldState, bootTime time.Time, domain *domainState) {
+func finishRecord(r *flow.Record, state *fieldState, clock exportClock, domain *domainState) {
 	resolveAddrs(r, state)
 	resolvePacketSection(r, state)
 
@@ -103,14 +109,7 @@ func finishRecord(r *flow.Record, state *fieldState, bootTime time.Time, domain 
 		r.Packets = state.outPackets
 	}
 
-	switch {
-	case !state.startAbs.IsZero() || !state.endAbs.IsZero():
-		r.Start = state.startAbs
-		r.End = state.endAbs
-	case state.hasUptime && !bootTime.IsZero():
-		r.Start = bootTime.Add(time.Duration(state.firstUptimeMs) * time.Millisecond)
-		r.End = bootTime.Add(time.Duration(state.lastUptimeMs) * time.Millisecond)
-	}
+	resolveFlowClock(r, state, clock, domain)
 
 	if r.SamplingRate == 0 {
 		r.SamplingRate = rateInForce(state, domain)
@@ -118,6 +117,39 @@ func finishRecord(r *flow.Record, state *fieldState, bootTime time.Time, domain 
 			domain.samplingUnresolved.Add(1)
 		}
 	}
+}
+
+// resolveFlowClock stamps the record's two instants, holding a complete pair
+// to the inversion rule whichever elements carried it.
+func resolveFlowClock(r *flow.Record, state *fieldState, clock exportClock, domain *domainState) {
+	start, end, complete := flowClockPair(state, clock)
+	if !complete {
+		r.Start, r.End = start, end
+		return
+	}
+
+	start, end, ok := withholdInverted(start, end)
+	domain.countClockPair(!ok)
+	r.Start, r.End = start, end
+}
+
+// flowClockPair resolves the record's instants and reports whether they form
+// a pair. Absolute elements are taken as the device wrote them; the
+// uptime-relative ones are anchored against the export clock, which IPFIX
+// leaves to IE 160 to supply.
+func flowClockPair(state *fieldState, clock exportClock) (start, end time.Time, complete bool) {
+	if !state.startAbs.IsZero() || !state.endAbs.IsZero() {
+		return state.startAbs, state.endAbs, !state.startAbs.IsZero() && !state.endAbs.IsZero()
+	}
+	if !state.hasFirstUptime || !state.hasLastUptime {
+		return time.Time{}, time.Time{}, false
+	}
+
+	clock = clock.withBootTime(state.bootAt)
+	if !clock.hasUptime {
+		return time.Time{}, time.Time{}, false
+	}
+	return clock.anchor(state.firstUptimeMs), clock.anchor(state.lastUptimeMs), true
 }
 
 // rateInForce resolves the rate that measured one record. A record naming a
@@ -348,11 +380,13 @@ func applyRareField(r *flow.Record, state *fieldState, fieldType uint16, value [
 
 	switch fieldType {
 	case fieldFirstSwitched:
-		state.firstUptimeMs, _ = beUint32(value)
-		state.hasUptime = true
+		state.firstUptimeMs, state.hasFirstUptime = beUint32(value)
 	case fieldLastSwitched:
-		state.lastUptimeMs, _ = beUint32(value)
-		state.hasUptime = true
+		state.lastUptimeMs, state.hasLastUptime = beUint32(value)
+	case fieldSystemInitTime:
+		if at, ok := unixMilliseconds(value); ok {
+			state.bootAt = at
+		}
 	case fieldFlowStartSeconds:
 		if at, ok := unixSeconds(value); ok {
 			state.startAbs = at
