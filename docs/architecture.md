@@ -64,8 +64,8 @@ Every map keyed by wire data takes a bound, because a push protocol cannot choos
 | Templates per domain              | [8192](../internal/decoder/templates.go#L18) | Prune expired, then reject as `invalid_template` |
 | Samplers per domain               | [4096](../internal/decoder/templates.go#L23) | Prune idle, then leave the sampler untracked     |
 | Sampler declarations per device   | [256](../internal/decoder/templates.go#L42)  | Refuse; records take the device's own rate       |
-| Interned vendor strings           | [65536](../internal/decoder/apps.go#L172)    | Copy per occurrence rather than refuse           |
-| One vendor string                 | [255 B](../internal/decoder/apps.go#L179)    | Refuse like invalid UTF-8, once per field        |
+| Interned vendor strings           | [65536](../internal/decoder/apps.go#L173)    | Copy per occurrence rather than refuse           |
+| One vendor string                 | [255 B](../internal/decoder/apps.go#L180)    | Refuse like invalid UTF-8, once per field        |
 | Announced applications per device | [16384](../internal/decoder/apps.go#L38)     | Leave the application numbered, never named      |
 | Devices with decode statistics    | [65536](../internal/decoder/stats.go#L29)    | Decode on, but publish no decode counters        |
 | AS names cached from the database | [65536](../internal/enrich/mmdb.go#L86)      | Leave the AS unnamed; a join finds no name       |
