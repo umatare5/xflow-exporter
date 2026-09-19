@@ -562,7 +562,7 @@ func TestDecoderCollector_ADomainOfSeveralSamplersAuditsThemIndividually(t *test
 
 	c := NewDecoderCollector(d)
 	expected := `
-# HELP xflow_sampler_rate Packet sampling rate a device declared for one named sampler, per domain it declared in
+# HELP xflow_sampler_rate Packet sampling rate a device declared for one named sampler
 # TYPE xflow_sampler_rate gauge
 xflow_sampler_rate{exporter_address="192.0.2.21",odid="256",sampler="1",version="netflow_v9"} 32
 xflow_sampler_rate{exporter_address="192.0.2.21",odid="256",sampler="2",version="netflow_v9"} 64
