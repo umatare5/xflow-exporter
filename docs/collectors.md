@@ -112,9 +112,7 @@ The inclusion of interface pairs keeps asymmetrical paths distinct. Unrecorded p
 
 **`xflow_destination_*`**
 
-Unidirectional aggregate for destinations independent of sources. States total received volume per service. It is directional; the two directions of a conversation are keyed separately whichever points observed them.
-
-`side` says which end the `port` came from. A reply leg reported by the device as a source port now folds onto the service it answered instead of taking an entry of its own under a client's number, so a busy listener reads as one row per side rather than one row per client.
+Unidirectional aggregate for destinations independent of sources. States total received volume per service. It is directional; the two directions of a conversation are keyed separately whichever points observed them. `side` says which end the `port` came from, a reply leg folding onto the service's port rather than taking an entry under a client's number.
 
 **`xflow_tcp_flags_*`**
 

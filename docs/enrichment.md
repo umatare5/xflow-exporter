@@ -43,16 +43,16 @@ See [examples/mapping.yml](../examples/mapping.yml) for the example with the det
 
 `--enrich.services` maps standard protocol ports to application names using the internal tables.
 
+The same two tables also decide which port keys `xflow_service_*` and `xflow_destination_*`, whether or not `--enrich.services` is set. A port the mapping file declares moves that service's reply leg onto its own entry, from the next entry created.
+
+The built-in table names around fifty ports and no internal service, so a site's own listeners reach the service side through the mapping file alone. A symmetric pair keys on its destination, and a port declared inside 1024–4999 takes the service side off a client that reused it.
+
 Resolution order is first match wins.
 
 1. Use name on the flow record itself
 2. Use `--enrich.mapping-file` `services:` block
 3. Use `--enrich.services` built-in table
 4. No name
-
-The same two tables, in the same order, decide which port of a conversation keys `xflow_service_*` and `xflow_destination_*`, and that decision is independent of `--enrich.services`. A port the mapping file declares therefore moves the reply leg of that service onto the service's own entry, which a reload applies to entries created after it.
-
-The built-in table names around fifty ports and deliberately covers no internal service, so a site's own listeners reach the service side only through the mapping file. Two mis-selections follow from the rule and are left as they are: a symmetric pair whose two ends both name a service keys on the destination, and a declared port inside the old ephemeral range 1024–4999 takes the service side off a client that reused the number. Twenty of the built-in ports sit in that range.
 
 ## Threat Lists
 
