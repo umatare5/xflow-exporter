@@ -137,6 +137,47 @@ type Services struct {
 	counters
 }
 
+// serviceBits marks every port the built-in table names, one bit per port
+// per transport. The aggregation asks this of both ports of every record, so
+// it is a bitmap rather than the map the naming path reads: 16 KiB of fixed
+// state answers in a couple of nanoseconds where the map takes closer to
+// twenty.
+var serviceBits = buildServiceBits()
+
+// serviceBitsWords is 65536 ports over 64 bits a word.
+const serviceBitsWords = 1 << 16 / 64
+
+func buildServiceBits() [2][serviceBitsWords]uint64 {
+	var bits [2][serviceBitsWords]uint64
+	for key := range serviceNames {
+		if i, ok := serviceTransport(key.protocol); ok {
+			bits[i][key.port>>6] |= 1 << (key.port & 63)
+		}
+	}
+	return bits
+}
+
+// serviceTransport indexes the two transports the table covers. IANA assigns
+// per protocol, and nothing else carries a port this exporter reads.
+func serviceTransport(protocol uint8) (int, bool) {
+	switch protocol {
+	case protocolTCP:
+		return 0, true
+	case protocolUDP:
+		return 1, true
+	default:
+		return 0, false
+	}
+}
+
+// IsService reports whether the built-in table names a service at that port.
+// It answers what the aggregation asks of a conversation -- which of its two
+// ports is the service side -- rather than what the name is.
+func IsService(protocol uint8, port uint16) bool {
+	i, ok := serviceTransport(protocol)
+	return ok && serviceBits[i][port>>6]&(1<<(port&63)) != 0
+}
+
 // NewServices creates the port-based application enricher.
 func NewServices() *Services {
 	return &Services{}
