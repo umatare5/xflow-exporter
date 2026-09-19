@@ -326,11 +326,12 @@ func (d *Decoder) appendSFlowRecord(
 		Packets:  1,
 		// Every reader below sets Bytes from a wire length on its success
 		// path, and a reader that fails takes the record with it.
-		BytesReported: true,
-		SamplingRate:  samplingRate,
-		InputIf:       inputIf,
-		OutputIf:      outputIf,
-		Direction:     direction,
+		BytesReported:   true,
+		PacketsReported: true,
+		SamplingRate:    samplingRate,
+		InputIf:         inputIf,
+		OutputIf:        outputIf,
+		Direction:       direction,
 	})
 
 	// A record of a known format that does not parse is a structure problem

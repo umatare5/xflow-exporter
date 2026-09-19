@@ -69,6 +69,7 @@ type fieldState struct {
 	startAbs, endAbs     time.Time
 	outBytes, outPackets uint64
 	outBytesReported     bool
+	outPacketsReported   bool
 	intern               *interner
 
 	// The two address families, kept apart until every field is read: which
@@ -105,8 +106,8 @@ func finishRecord(r *flow.Record, state *fieldState, clock exportClock, domain *
 	if r.Bytes == 0 && state.outBytesReported {
 		r.Bytes, r.BytesReported = state.outBytes, true
 	}
-	if r.Packets == 0 {
-		r.Packets = state.outPackets
+	if r.Packets == 0 && state.outPacketsReported {
+		r.Packets, r.PacketsReported = state.outPackets, true
 	}
 
 	resolveFlowClock(r, state, clock, domain)
@@ -256,7 +257,7 @@ func resolvePacketSection(r *flow.Record, state *fieldState) {
 	// semantics rather than a fabricated reading. The frame length is the
 	// original frame's, a-la the sFlow frameLength.
 	if r.Packets == 0 {
-		r.Packets = 1
+		r.Packets, r.PacketsReported = 1, true
 	}
 	if r.Bytes == 0 && state.frameSize > 0 {
 		r.Bytes, r.BytesReported = state.frameSize, true
@@ -279,13 +280,17 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 			r.Bytes, r.BytesReported = v, true
 		}
 	case fieldInPackets:
-		r.Packets, _ = beUint(value)
+		if v, ok := beUint(value); ok {
+			r.Packets, r.PacketsReported = v, true
+		}
 	case fieldOutBytes:
 		if v, ok := beUint(value); ok {
 			state.outBytes, state.outBytesReported = v, true
 		}
 	case fieldOutPackets:
-		state.outPackets, _ = beUint(value)
+		if v, ok := beUint(value); ok {
+			state.outPackets, state.outPacketsReported = v, true
+		}
 	case fieldProtocol:
 		if v, ok := beUint8(value); ok {
 			r.Protocol = v
