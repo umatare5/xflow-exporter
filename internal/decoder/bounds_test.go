@@ -261,8 +261,8 @@ func TestInterner_RefusesUnrepresentableStrings(t *testing.T) {
 	// leaves the table without an entry rather than with a poisoned one.
 	tables := newAppTables(i)
 	exporter := netip.MustParseAddr("192.0.2.10")
-	tables.setName(exporter, 42, truncated)
-	tables.setCategory(exporter, 42, truncated)
+	tables.setName(exporter, 42, truncated, announcedNow)
+	tables.setCategory(exporter, 42, truncated, announcedNow)
 	if name, category := tables.resolve(exporter, 42); name != "" || category != "" {
 		t.Errorf("resolve() = %q, %q; want both absent", name, category)
 	}
@@ -282,13 +282,13 @@ func TestAppTables_RefusedRefreshKeepsLastAnnouncement(t *testing.T) {
 	tables := newAppTables(newInterner())
 	exporter := netip.MustParseAddr("192.0.2.10")
 
-	tables.setName(exporter, 42, []byte("ms-office-365\x00\x00\x00"))
-	tables.setCategory(exporter, 42, []byte("business-and-productivity-tools\x00"))
+	tables.setName(exporter, 42, []byte("ms-office-365\x00\x00\x00"), announcedNow)
+	tables.setCategory(exporter, 42, []byte("business-and-productivity-tools\x00"), announcedNow)
 
 	// The refresh that follows carries one field cut mid rune and one blanked
 	// to padding, the two shapes the interner refuses.
-	tables.setName(exporter, 42, []byte("アプリ")[:8])
-	tables.setCategory(exporter, 42, []byte("\x00\x00\x00\x00\x00\x00\x00\x00"))
+	tables.setName(exporter, 42, []byte("アプリ")[:8], announcedNow)
+	tables.setCategory(exporter, 42, []byte("\x00\x00\x00\x00\x00\x00\x00\x00"), announcedNow)
 
 	name, category := tables.resolve(exporter, 42)
 	if name != "ms-office-365" {
@@ -397,10 +397,14 @@ func announceApps(t *testing.T, d *Decoder, exporter netip.Addr, count int) {
 	}
 }
 
+// announcedNow is the instant the tests below announce at, standing for the
+// template clock the decoder stamps an announcement from.
+const announcedNow = int64(1_756_600_000_000_000_000)
+
 // TestAppTables_AreBoundedPerExporter is the regression test for the
 // unbounded application table. The applicationId is a wire field, so one
-// permitted source address can announce 2^32 of them, no network-layer filter
-// can prevent it, and nothing expires what the table already holds.
+// permitted source address can announce 2^32 of them and no network-layer
+// filter can prevent it, so the budget is what holds a single datagram run.
 func TestAppTables_AreBoundedPerExporter(t *testing.T) {
 	t.Parallel()
 
@@ -408,7 +412,7 @@ func TestAppTables_AreBoundedPerExporter(t *testing.T) {
 	const attempts = maxAppsPerExporter * 2
 	announceApps(t, d, testExporter, attempts)
 
-	table := d.apps.table(testExporter)
+	table := d.apps.table(testExporter, announcedNow)
 	table.mu.RLock()
 	held := len(table.names)
 	table.mu.RUnlock()
@@ -668,5 +672,37 @@ func TestDecodeV9_RefusesAVariableLengthTemplate(t *testing.T) {
 
 	if refused := errorCount(d, ReasonInvalidTemplate); refused != 1 {
 		t.Errorf("invalid_template count = %d, want 1 so the refusal is visible", refused)
+	}
+}
+
+// TestAppTables_ExpireWithTheirAnnouncements pins the table's lifetime. The
+// budget bounds one device's announcements, but nothing bounded the devices:
+// a table was minted per source address and held for the life of the process,
+// so a spoofed address left its strings behind forever.
+func TestAppTables_ExpireWithTheirAnnouncements(t *testing.T) {
+	t.Parallel()
+
+	d := New(config.Parser{MaxFieldsPerTemplate: 128, TemplateTTL: time.Minute})
+	now := time.Unix(1_756_600_000, 0)
+	d.templates.now = func() time.Time { return now }
+
+	silent := netip.MustParseAddr("192.0.2.70")
+	talking := netip.MustParseAddr("192.0.2.71")
+	announceApps(t, d, silent, 1)
+	announceApps(t, d, talking, 1)
+
+	// The talkative device re-announces while the other falls silent, which
+	// is what a device does on its own template timer.
+	now = now.Add(50 * time.Second)
+	announceApps(t, d, talking, 1)
+
+	now = now.Add(30 * time.Second)
+	d.SweepDomains()
+
+	if name, _ := d.apps.resolve(silent, 1); name != "" {
+		t.Errorf("resolve() = %q for a device silent past the TTL, want the table dropped", name)
+	}
+	if name, _ := d.apps.resolve(talking, 1); name == "" {
+		t.Error("resolve() = empty for a device still announcing, want its table kept")
 	}
 }

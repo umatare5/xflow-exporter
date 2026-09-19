@@ -39,6 +39,13 @@ const maxAppsPerExporter = 16384
 
 // appTable is one device's announcements.
 type appTable struct {
+	// announcedAt is when the device last announced into this table, which
+	// the sweep measures against the template TTL. A table is options-template
+	// state, so it expires on the clock its announcements arrive by rather
+	// than on the records that read it: a device silent long enough to lose
+	// its templates has already lost the records the names would label.
+	announcedAt atomic.Int64
+
 	mu         sync.RWMutex
 	names      map[uint32]string
 	categories map[uint32]string
@@ -49,12 +56,15 @@ func newAppTables(intern *interner) *appTables {
 	return &appTables{intern: intern, tables: make(map[netip.Addr]*appTable)}
 }
 
-// table returns one exporter's table, creating it on first use.
-func (a *appTables) table(exporter netip.Addr) *appTable {
+// table returns one exporter's table as of the announcement reaching it,
+// creating it on first use. The stamp is taken here rather than by the
+// caller so a new table is never briefly eligible for the sweep.
+func (a *appTables) table(exporter netip.Addr, at int64) *appTable {
 	a.mu.RLock()
 	t, ok := a.tables[exporter]
 	a.mu.RUnlock()
 	if ok {
+		t.announcedAt.Store(at)
 		return t
 	}
 
@@ -67,18 +77,37 @@ func (a *appTables) table(exporter netip.Addr) *appTable {
 		names:      make(map[uint32]string),
 		categories: make(map[uint32]string),
 	}
+	t.announcedAt.Store(at)
 	a.tables[exporter] = t
 	return t
 }
 
+// sweep drops the tables no device has announced into since the cutoff,
+// freeing the strings a sender that has gone away left behind.
+func (a *appTables) sweep(cutoff int64) int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	evicted := 0
+	for exporter, t := range a.tables {
+		if t.announcedAt.Load() >= cutoff {
+			continue
+		}
+		delete(a.tables, exporter)
+		evicted++
+	}
+	return evicted
+}
+
 // setName records one application's name as the device announced it.
-func (a *appTables) setName(exporter netip.Addr, appID uint32, name []byte) {
+func (a *appTables) setName(exporter netip.Addr, appID uint32, name []byte, at int64) {
 	value := a.intern.intern(name)
 	if value == "" {
 		return
 	}
 
-	t := a.table(exporter)
+	t := a.table(exporter, at)
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if !admits(t.names, appID) {
@@ -89,13 +118,14 @@ func (a *appTables) setName(exporter netip.Addr, appID uint32, name []byte) {
 }
 
 // setCategory records one application's category.
-func (a *appTables) setCategory(exporter netip.Addr, appID uint32, category []byte) {
+func (a *appTables) setCategory(exporter netip.Addr, appID uint32, category []byte, at int64) {
 	value := a.intern.intern(category)
 	if value == "" {
 		return
 	}
 
-	t := a.table(exporter)
+	t := a.table(exporter, at)
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if !admits(t.categories, appID) {

@@ -88,11 +88,14 @@ func (o *optionsState) commit(d *Decoder, key domainKey, domain *domainState) {
 	}
 
 	if o.appID != 0 {
+		// The announcement instant comes from the template clock, which is
+		// the one the sweep measures its cutoff against.
+		at := d.templates.now().UnixNano()
 		if len(o.appName) > 0 {
-			d.apps.setName(key.exporter, o.appID, o.appName)
+			d.apps.setName(key.exporter, o.appID, o.appName, at)
 		}
 		if len(o.appCategory) > 0 {
-			d.apps.setCategory(key.exporter, o.appID, o.appCategory)
+			d.apps.setCategory(key.exporter, o.appID, o.appCategory, at)
 		}
 	}
 }
