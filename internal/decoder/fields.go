@@ -78,9 +78,12 @@ type fieldState struct {
 
 	// samplerID is the sampler the record named, which the device's table
 	// resolves into the rate that measured it. Zero is a legal identifier,
-	// so the flag is what says one was read.
-	samplerID    uint32
-	hasSamplerID bool
+	// so the flag is what says one was read. selectorID is PSAMP's element
+	// for the same purpose, resolved within the observation domain.
+	samplerID     uint32
+	hasSamplerID  bool
+	selectorID    uint32
+	hasSelectorID bool
 
 	// A sampled packet section, kept for resolution after every field is
 	// read so the device's own parsed fields can take precedence.
@@ -112,8 +115,9 @@ func finishRecord(r *flow.Record, state *fieldState, clock exportClock, domain *
 	resolveFlowClock(r, state, clock, domain)
 
 	if r.SamplingRate == 0 {
-		r.SamplingRate = rateInForce(state, domain)
-		if r.SamplingRate == 0 {
+		owed := false
+		r.SamplingRate, owed = rateInForce(state, domain)
+		if owed {
 			domain.samplingUnresolved.Add(1)
 		}
 	}
@@ -152,19 +156,18 @@ func flowClockPair(state *fieldState, clock exportClock) (start, end time.Time, 
 	return clock.anchor(state.firstUptimeMs), clock.anchor(state.lastUptimeMs), true
 }
 
-// rateInForce resolves the rate that measured one record. A record naming a
-// sampler takes that sampler's declaration; one naming none, or naming one
-// the device has not announced yet, falls back to its domain and then to the
-// single rate the whole device agrees on. Where the device declared several,
-// the rate stays zero: correcting by one of them is a wrong reading rather
-// than a missing one.
-func rateInForce(state *fieldState, domain *domainState) uint32 {
-	if state.hasSamplerID {
-		if rate, ok := domain.declared.rateFor(state.samplerID); ok {
-			return rate
-		}
+// rateInForce resolves the rate that measured one record from whichever
+// element named its selection process, and reports whether a rate is still
+// owed to it.
+func rateInForce(state *fieldState, domain *domainState) (rate uint32, owed bool) {
+	switch {
+	case state.hasSamplerID:
+		return domain.correctionFor(state.samplerID, true)
+	case state.hasSelectorID:
+		return domain.correctionFor(state.selectorID, false)
+	default:
+		return domain.inheritedCorrection()
 	}
-	return domain.rateInForce()
 }
 
 // resolveAddrs settles which address family the device actually measured.
@@ -351,6 +354,8 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 		}
 	case fieldSamplerID:
 		state.samplerID, state.hasSamplerID = beUint32(value)
+	case fieldSelectorID:
+		state.selectorID, state.hasSelectorID = beUint32(value)
 	default:
 		applyRareField(r, state, fieldType, value)
 	}

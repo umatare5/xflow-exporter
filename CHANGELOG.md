@@ -1,6 +1,6 @@
 # Changelog
 
-Notable changes to the metric surface, one section per release, listing the pull requests that release carries.
+Notable changes to the metric surface, one section per release, listing the pull requests that release carries. An entry whose change removes a series, moves one, or alters a label set opens with **Breaking**.
 
 ## [Unreleased]
 

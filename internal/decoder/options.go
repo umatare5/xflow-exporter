@@ -6,6 +6,9 @@ package decoder
 // IPFIX PSAMP sampling elements, alongside the legacy v9 pair declared with
 // the field constants.
 const (
+	// The Selector a record was chosen by, which PSAMP numbers within the
+	// observation domain and uses where v9 uses the samplerId.
+	fieldSelectorID             = 302
 	fieldSamplingPacketInterval = 305
 	fieldSamplingPacketSpace    = 306
 	// The random n-out-of-N sampler pair: size packets selected out of each
@@ -13,6 +16,11 @@ const (
 	fieldSamplingSize       = 309
 	fieldSamplingPopulation = 310
 )
+
+// unsampledSamplerID is the samplerId Cisco gives a cache it does not sample.
+// The value is an ordinary identifier to RFC 5477 and to IANA, so it carries
+// the convention only until a device declares a rate for it.
+const unsampledSamplerID = 0
 
 // AVC application name element; the identifier is fieldApplicationID.
 const fieldApplicationName = 96
@@ -22,6 +30,10 @@ const fieldApplicationName = 96
 type optionsState struct {
 	samplerID    uint32
 	hasSamplerID bool
+	// selectorID is PSAMP's identifier for the same declaration, scoped to
+	// the observation domain rather than the device.
+	selectorID    uint32
+	hasSelectorID bool
 
 	plainInterval  uint32
 	randomInterval uint32
@@ -55,6 +67,8 @@ func (o *optionsState) apply(fieldType uint16, enterprise uint32, value []byte) 
 	switch fieldType {
 	case fieldSamplerID:
 		o.samplerID, o.hasSamplerID = beUint32(value)
+	case fieldSelectorID:
+		o.selectorID, o.hasSelectorID = beUint32(value)
 	case fieldSamplingInterval:
 		o.plainInterval, _ = beUint32(value)
 	case fieldSamplerRandomInterval:
@@ -81,10 +95,11 @@ func (o *optionsState) apply(fieldType uint16, enterprise uint32, value []byte) 
 // the only scope its announcement can claim.
 func (o *optionsState) commit(d *Decoder, key domainKey, domain *domainState) {
 	if rate := o.samplingRate(); rate > 0 {
-		if !o.hasSamplerID {
+		id, named := o.declaredID()
+		if !named {
 			domain.samplingRate.Store(rate)
 		}
-		d.templates.declareSampler(domain, key.odid, o.samplerID, o.hasSamplerID, rate)
+		d.templates.declareSampler(domain, key.odid, id, named, rate)
 	}
 
 	if o.appID != 0 {
@@ -97,6 +112,20 @@ func (o *optionsState) commit(d *Decoder, key domainKey, domain *domainState) {
 		if len(o.appCategory) > 0 {
 			d.apps.setCategory(key.exporter, o.appID, o.appCategory, at)
 		}
+	}
+}
+
+// declaredID returns the identifier this declaration is tied to. A record
+// carrying both elements is taken at its samplerId, the element the rest of
+// the device's exports name their selection process by.
+func (o *optionsState) declaredID() (id uint32, named bool) {
+	switch {
+	case o.hasSamplerID:
+		return o.samplerID, true
+	case o.hasSelectorID:
+		return o.selectorID, true
+	default:
+		return 0, false
 	}
 }
 
