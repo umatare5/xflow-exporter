@@ -63,7 +63,8 @@ Every map keyed by wire data takes a bound, because a push protocol cannot choos
 | Devices holding domain state      | [65536](../internal/decoder/stats.go#L29)    | Discard the datagram; v5 and v8 lose sequence    |
 | Templates per domain              | [8192](../internal/decoder/templates.go#L18) | Prune expired, then reject as `invalid_template` |
 | Samplers per domain               | [4096](../internal/decoder/templates.go#L23) | Prune idle, then leave the sampler untracked     |
-| Sampler declarations per device   | [256](../internal/decoder/templates.go#L42)  | Refuse; records take the device's own rate       |
+| Transport sessions per domain     | [16](../internal/decoder/templates.go#L44)   | Leave that session's sequence unfollowed         |
+| Sampler declarations per device   | [256](../internal/decoder/templates.go#L49)  | Refuse; records take the device's own rate       |
 | Interned vendor strings           | [65536](../internal/decoder/apps.go#L173)    | Copy per occurrence rather than refuse           |
 | One vendor string                 | [255 B](../internal/decoder/apps.go#L180)    | Refuse like invalid UTF-8, once per field        |
 | Announced applications per device | [16384](../internal/decoder/apps.go#L38)     | Leave the application numbered, never named      |

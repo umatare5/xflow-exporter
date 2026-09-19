@@ -27,7 +27,7 @@ const (
 // decodeIPFIX parses one IPFIX message. Like v9, per-set problems are counted
 // through issue without failing the message.
 func (d *Decoder) decodeIPFIX(
-	exporter netip.Addr, payload []byte, dst []flow.Record, issue func(reason string),
+	exporter netip.Addr, port uint16, payload []byte, dst []flow.Record, issue func(reason string),
 ) ([]flow.Record, *decodeError) {
 	if len(payload) < ipfixHeaderLen {
 		return dst, malformed("ipfix header needs %d bytes, datagram has %d", ipfixHeaderLen, len(payload))
@@ -76,7 +76,13 @@ func (d *Decoder) decodeIPFIX(
 	// The sequence number counts data records, so a message with an
 	// undecodable set leaves the true count unknown and resets the tracking.
 	// The domain id already separates what an engine halfword does on v5.
-	domain.trackRecordSequence(sequence, uint32(dataRecords), 0, complete) //nolint:gosec // Bounded by message size.
+	domain.trackRecordSequence(
+		port,
+		sequence,
+		uint32(dataRecords),
+		0,
+		complete,
+	) //nolint:gosec // Bounded by message size.
 	return dst, nil
 }
 

@@ -35,7 +35,7 @@ func TestDecodeSection_V9PacketSection(t *testing.T) {
 	record = be32(record, 8)
 	record = append(record, padTo(tcpFrame(false))...)
 
-	records, err := d.Decode(testExporter,
+	records, err := d.Decode(sentFrom(testExporter),
 		v9Packet(1, fixtureV9ODID, tpl, flowSet(fixtureV9TemplateID, record)), nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
@@ -84,7 +84,7 @@ func TestDecodeSection_IPFIXSectionWithFrameSize(t *testing.T) {
 	record = append(record, byte(len(frame)))
 	record = append(record, frame...)
 
-	records, err := d.Decode(testExporter,
+	records, err := d.Decode(sentFrom(testExporter),
 		ipfixMessage(0, tpl, flowSet(fixtureIPFIXTemplateID, record)), nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
@@ -130,7 +130,7 @@ func TestDecodeSection_CountersWinOverTheSection(t *testing.T) {
 	record = append(record, byte(len(frame)))
 	record = append(record, frame...)
 
-	records, err := d.Decode(testExporter,
+	records, err := d.Decode(sentFrom(testExporter),
 		ipfixMessage(0, tpl, flowSet(fixtureIPFIXTemplateID, record)), nil)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
@@ -161,7 +161,7 @@ func TestDecodeSection_IPHeaderSection(t *testing.T) {
 	ipPacket := tcpFrame(false)[ethernetHdrLen:]
 	record := append([]byte{byte(len(ipPacket))}, ipPacket...)
 
-	records, err := d.Decode(testExporter,
+	records, err := d.Decode(sentFrom(testExporter),
 		ipfixMessage(0, tpl, flowSet(fixtureIPFIXTemplateID, record)), nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
@@ -199,7 +199,7 @@ func TestDecodeSection_ParsedFieldsWinOverSection(t *testing.T) {
 	record = be32(record, 5555)
 	record = append(record, padTo(tcpFrame(false))...)
 
-	records, err := d.Decode(testExporter,
+	records, err := d.Decode(sentFrom(testExporter),
 		v9Packet(1, fixtureV9ODID, tpl, flowSet(fixtureV9TemplateID, record)), nil)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
@@ -229,7 +229,7 @@ func TestDecodeSection_ShortPaddedSection(t *testing.T) {
 	frame := tcpFrame(false)[:ethernetHdrLen+ipv4MinHdrLen]
 	record := padTo(frame)
 
-	records, err := d.Decode(testExporter,
+	records, err := d.Decode(sentFrom(testExporter),
 		v9Packet(1, fixtureV9ODID, tpl, flowSet(fixtureV9TemplateID, record)), nil)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
@@ -275,7 +275,7 @@ func TestDecodeSection_RandomSamplerPair(t *testing.T) {
 		flowSet(optionsTemplateFlowSetID, optionsBody),
 		flowSet(600, optionsRecord),
 	)
-	if _, err := d.Decode(testExporter, packet, nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), packet, nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 

@@ -84,10 +84,10 @@ func TestDecoderCollector_ReportsOutcomes(t *testing.T) {
 	d := newTestDecoder()
 	exporter := netip.MustParseAddr("192.0.2.10")
 
-	if _, err := d.Decode(exporter, buildV5(), nil); err != nil {
+	if _, err := d.Decode(sentFrom(exporter), buildV5(), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
-	if _, err := d.Decode(exporter, []byte{0x00, 0x07, 0x00, 0x00}, nil); err == nil {
+	if _, err := d.Decode(sentFrom(exporter), []byte{0x00, 0x07, 0x00, 0x00}, nil); err == nil {
 		t.Fatal("Decode() error = nil, want an unsupported version rejection")
 	}
 
@@ -137,7 +137,7 @@ func TestDecoderCollector_LeavesATemplatelessDomainUncounted(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()
-	if _, err := d.Decode(netip.MustParseAddr("192.0.2.30"), buildV5(), nil); err != nil {
+	if _, err := d.Decode(sentFrom(netip.MustParseAddr("192.0.2.30")), buildV5(), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 
@@ -157,7 +157,7 @@ func TestDecoderCollector_ReportsDomainState(t *testing.T) {
 	d := newTestDecoder()
 	exporter := netip.MustParseAddr("192.0.2.20")
 
-	if _, err := d.Decode(exporter, buildV9TemplateOnly(), nil); err != nil {
+	if _, err := d.Decode(sentFrom(exporter), buildV9TemplateOnly(), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 
@@ -219,10 +219,10 @@ func TestDecoderCollector_TwoProtocolsUnderOneIdentifierStillGather(t *testing.T
 	d := newTestDecoder()
 	exporter := netip.MustParseAddr("192.0.2.20")
 
-	if _, err := d.Decode(exporter, v9DomainOnly(1), nil); err != nil {
+	if _, err := d.Decode(sentFrom(exporter), v9DomainOnly(1), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want the v9 datagram accepted", err)
 	}
-	if _, err := d.Decode(exporter, sflowDomainOnly(1), nil); err != nil {
+	if _, err := d.Decode(sentFrom(exporter), sflowDomainOnly(1), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want the sFlow datagram accepted", err)
 	}
 	if got := len(d.Domains()); got != 2 {
@@ -288,7 +288,7 @@ func TestDecoderCollector_ReportsRefusedVendorStrings(t *testing.T) {
 	d := newTestDecoder()
 	exporter := netip.MustParseAddr("192.0.2.30")
 
-	records, err := d.Decode(exporter, buildIPFIXRefusedAppName(), nil)
+	records, err := d.Decode(sentFrom(exporter), buildIPFIXRefusedAppName(), nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want the message tolerated", err)
 	}
@@ -397,7 +397,7 @@ func TestDecoderCollector_SeparatesFlowFromDatagram(t *testing.T) {
 	d := newTestDecoder()
 	exporter := netip.MustParseAddr("192.0.2.21")
 
-	records, err := d.Decode(exporter, buildV9TemplateOnly(), nil)
+	records, err := d.Decode(sentFrom(exporter), buildV9TemplateOnly(), nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
@@ -452,14 +452,14 @@ func TestDecoderCollector_SamplerCountersNeedTwoReadings(t *testing.T) {
 	exporter := netip.MustParseAddr("192.0.2.30")
 	c := NewDecoderCollector(d)
 
-	if _, err := d.Decode(exporter, buildSFlowFlowSample(1, 1, 5000, 7), nil); err != nil {
+	if _, err := d.Decode(sentFrom(exporter), buildSFlowFlowSample(1, 1, 5000, 7), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 	if got := testutil.CollectAndCount(c, "xflow_sample_pool_packets_total"); got != 0 {
 		t.Errorf("sample pool series = %d, want 0 after one reading", got)
 	}
 
-	if _, err := d.Decode(exporter, buildSFlowFlowSample(2, 2, 5500, 9), nil); err != nil {
+	if _, err := d.Decode(sentFrom(exporter), buildSFlowFlowSample(2, 2, 5500, 9), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 
@@ -495,10 +495,10 @@ func TestDecoderCollector_ARefusedDifferenceLeavesItsCounterAbsent(t *testing.T)
 
 	// The pool steps by 500 while the drop counter steps past the window the
 	// tracker reads as one agent's continuous run.
-	if _, err := d.Decode(exporter, buildSFlowFlowSample(1, 1, 5000, 0), nil); err != nil {
+	if _, err := d.Decode(sentFrom(exporter), buildSFlowFlowSample(1, 1, 5000, 0), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
-	if _, err := d.Decode(exporter, buildSFlowFlowSample(2, 2, 5500, 1<<31), nil); err != nil {
+	if _, err := d.Decode(sentFrom(exporter), buildSFlowFlowSample(2, 2, 5500, 1<<31), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 
@@ -512,7 +512,7 @@ func TestDecoderCollector_ARefusedDifferenceLeavesItsCounterAbsent(t *testing.T)
 	// The same pair the other way round, on a device of its own.
 	other := netip.MustParseAddr("192.0.2.31")
 	for _, pool := range []uint32{5000, 5000 + 1<<31} {
-		if _, err := d.Decode(other, buildSFlowFlowSample(1, 1, pool, 0), nil); err != nil {
+		if _, err := d.Decode(sentFrom(other), buildSFlowFlowSample(1, 1, pool, 0), nil); err != nil {
 			t.Fatalf("Decode() error = %v, want nil", err)
 		}
 	}
@@ -555,7 +555,7 @@ func TestDecoderCollector_ADomainOfSeveralSamplersAuditsThemIndividually(t *test
 	d := newTestDecoder()
 	exporter := netip.MustParseAddr("192.0.2.21")
 	for i, entry := range [][2]byte{{1, 32}, {2, 64}} {
-		if _, err := d.Decode(exporter, buildV9SamplerTable(byte(i+1), entry[0], entry[1]), nil); err != nil {
+		if _, err := d.Decode(sentFrom(exporter), buildV9SamplerTable(byte(i+1), entry[0], entry[1]), nil); err != nil {
 			t.Fatalf("Decode() error = %v, want nil", err)
 		}
 	}
@@ -602,4 +602,10 @@ xflow_sampling_unresolved_flows_total{exporter_address="192.0.2.1",odid="1",vers
 		"xflow_sampling_unresolved_flows_total"); err != nil {
 		t.Errorf("CollectAndCompare() error = %v", err)
 	}
+}
+
+// sentFrom is the transport session a fixture datagram arrives on. One export
+// process is all these tests need, the session split being the decoder's.
+func sentFrom(addr netip.Addr) netip.AddrPort {
+	return netip.AddrPortFrom(addr, 50000)
 }

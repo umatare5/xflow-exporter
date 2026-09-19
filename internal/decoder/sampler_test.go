@@ -238,14 +238,14 @@ func TestTrackRecordSequence_AnAcceptedMessageEndsTheLateRun(t *testing.T) {
 	// Each round names the skipped records once and nothing is ever lost.
 	const records, rounds = 2, maxLateRun + 2
 	base := uint32(100)
-	d.trackRecordSequence(base, records, 0, true)
+	d.trackRecordSequence(testPort, base, records, 0, true)
 
 	for range rounds {
 		base += records
-		d.trackRecordSequence(base+records, records, 0, true) // skips ahead
-		d.trackRecordSequence(base, records, 0, true)         // the overtaken one
+		d.trackRecordSequence(testPort, base+records, records, 0, true) // skips ahead
+		d.trackRecordSequence(testPort, base, records, 0, true)         // the overtaken one
 		base += 2 * records
-		d.trackRecordSequence(base, records, 0, true) // back in order
+		d.trackRecordSequence(testPort, base, records, 0, true) // back in order
 	}
 
 	if got := d.sequenceMissed.Load(); got != rounds*records {
@@ -266,10 +266,10 @@ func TestTrackRecordSequence_ARebaseStartsTheLateRunOver(t *testing.T) {
 	// One engine skips ahead and its overtaken messages fill the run, then
 	// another engine repeats the shape. Each skip names its records once.
 	for _, seq := range []uint32{0, 50, 10, 20, 30} {
-		d.trackRecordSequence(seq, 10, 0, true)
+		d.trackRecordSequence(testPort, seq, 10, 0, true)
 	}
 	for _, seq := range []uint32{900, 880, 890, 910} {
-		d.trackRecordSequence(seq, 10, 1, true)
+		d.trackRecordSequence(testPort, seq, 10, 1, true)
 	}
 
 	if got := d.sequenceMissed.Load(); got != 40 {
@@ -302,9 +302,9 @@ func TestTrackRecordSequence_TheWindowBoundsWhatReadsAsLate(t *testing.T) {
 			t.Parallel()
 
 			d := &domainState{}
-			d.trackRecordSequence(base, records, 0, true)
-			d.trackRecordSequence(base+records-tt.back, records, 0, true)
-			d.trackRecordSequence(base+records, records, 0, true)
+			d.trackRecordSequence(testPort, base, records, 0, true)
+			d.trackRecordSequence(testPort, base+records-tt.back, records, 0, true)
+			d.trackRecordSequence(testPort, base+records, records, 0, true)
 
 			if got := d.sequenceMissed.Load(); got != tt.want {
 				t.Errorf("SequenceMissed = %d, want %d", got, tt.want)

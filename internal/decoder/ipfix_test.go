@@ -118,7 +118,7 @@ func TestDecodeIPFIX_IPv4MappedAddressBecomesIPv4(t *testing.T) {
 		flowSet(fixtureIPFIXTemplateID, record),
 	)
 
-	records, err := d.Decode(testExporter, message, nil)
+	records, err := d.Decode(sentFrom(testExporter), message, nil)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
 	}
@@ -241,7 +241,7 @@ func TestDecodeIPFIX_DualFamilyResolvesTheSameInAnyTemplateOrder(t *testing.T) {
 				d := newTestDecoder()
 				message := ipfixMessage(0, ipfixTemplateSet(specs...), flowSet(fixtureIPFIXTemplateID, record))
 
-				records, err := d.Decode(testExporter, message, nil)
+				records, err := d.Decode(sentFrom(testExporter), message, nil)
 				if err != nil || len(records) != 1 {
 					t.Fatalf("order%s: Decode() = %d records, %v; want 1, nil", declared, len(records), err)
 				}
@@ -310,7 +310,7 @@ func TestDecodeIPFIX_UnspecifiedAddressIsStillRecorded(t *testing.T) {
 			d := newTestDecoder()
 			message := ipfixMessage(0, singleFamily, flowSet(fixtureIPFIXTemplateID, record))
 
-			records, err := d.Decode(testExporter, message, nil)
+			records, err := d.Decode(sentFrom(testExporter), message, nil)
 			if err != nil || len(records) != 1 {
 				t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
 			}
@@ -345,7 +345,7 @@ func TestDecodeIPFIX_TemplatePairingOneFamilyPerSideKeepsBoth(t *testing.T) {
 	d := newTestDecoder()
 	message := ipfixMessage(0, mixed, flowSet(fixtureIPFIXTemplateID, record))
 
-	records, err := d.Decode(testExporter, message, nil)
+	records, err := d.Decode(sentFrom(testExporter), message, nil)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
 	}
@@ -368,7 +368,7 @@ func TestDecodeIPFIX_TemplateThenData(t *testing.T) {
 		flowSet(fixtureIPFIXTemplateID, fixtureIPFIXRecord()),
 	)
 
-	records, err := d.Decode(testExporter, message, nil)
+	records, err := d.Decode(sentFrom(testExporter), message, nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
@@ -426,7 +426,7 @@ func TestDecodeIPFIX_VariableLengthFields(t *testing.T) {
 	message := ipfixMessage(0, tpl,
 		flowSet(fixtureIPFIXTemplateID, shortForm, longForm))
 
-	records, err := d.Decode(testExporter, message, nil)
+	records, err := d.Decode(sentFrom(testExporter), message, nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
@@ -454,7 +454,7 @@ func TestDecodeIPFIX_VariableLengthOverrunIsCounted(t *testing.T) {
 	record := []byte{200, 'a', 'b', 'c'}
 	message := ipfixMessage(0, tpl, flowSet(fixtureIPFIXTemplateID, record))
 
-	records, err := d.Decode(testExporter, message, nil)
+	records, err := d.Decode(sentFrom(testExporter), message, nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want the message tolerated", err)
 	}
@@ -489,7 +489,7 @@ func TestDecodeIPFIX_ShortDataSetIsCounted(t *testing.T) {
 			message := ipfixMessage(0, fixtureIPFIXTemplate(),
 				flowSet(fixtureIPFIXTemplateID, tt.body))
 
-			records, err := d.Decode(testExporter, message, nil)
+			records, err := d.Decode(sentFrom(testExporter), message, nil)
 			if err != nil {
 				t.Fatalf("Decode() error = %v, want the message tolerated", err)
 			}
@@ -573,7 +573,7 @@ func TestDecodeIPFIX_NBARApplicationTableResolvesRecords(t *testing.T) {
 		dataTemplate, flowSet(fixtureIPFIXTemplateID, dataRecord),
 	)
 
-	records, err := d.Decode(testExporter, message, nil)
+	records, err := d.Decode(sentFrom(testExporter), message, nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
@@ -606,7 +606,7 @@ func TestDecodeIPFIX_UnresolvedApplicationStaysNumbered(t *testing.T) {
 	message := ipfixMessage(0, dataTemplate,
 		flowSet(fixtureIPFIXTemplateID, record))
 
-	records, err := d.Decode(testExporter, message, nil)
+	records, err := d.Decode(sentFrom(testExporter), message, nil)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
 	}
@@ -637,7 +637,7 @@ func TestDecodeIPFIX_PSAMPSamplingPairWins(t *testing.T) {
 	message := ipfixMessage(0, flowSet(ipfixOptionsTemplateSetID, optionsBody),
 		flowSet(601, record))
 
-	if _, err := d.Decode(testExporter, message, nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), message, nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 
@@ -656,7 +656,7 @@ func TestDecodeIPFIX_IgnoresTemplateWithdrawal(t *testing.T) {
 	d := newTestDecoder()
 
 	announce := ipfixMessage(0, fixtureIPFIXTemplate())
-	if _, err := d.Decode(testExporter, announce, nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), announce, nil); err != nil {
 		t.Fatalf("announce error = %v, want nil", err)
 	}
 	if got := d.Domains()[0].Templates; got != 1 {
@@ -667,7 +667,7 @@ func TestDecodeIPFIX_IgnoresTemplateWithdrawal(t *testing.T) {
 	binary.BigEndian.PutUint16(withdrawBody[0:2], fixtureIPFIXTemplateID)
 	binary.BigEndian.PutUint16(withdrawBody[2:4], 0)
 	withdraw := ipfixMessage(0, flowSet(ipfixTemplateSetID, withdrawBody))
-	if _, err := d.Decode(testExporter, withdraw, nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), withdraw, nil); err != nil {
 		t.Fatalf("withdraw error = %v, want nil", err)
 	}
 
@@ -689,10 +689,10 @@ func TestDecodeIPFIX_SequenceCountsDataRecords(t *testing.T) {
 	first := ipfixMessage(100, tpl, flowSet(fixtureIPFIXTemplateID, twoRecords))
 	second := ipfixMessage(105, flowSet(fixtureIPFIXTemplateID, be32(nil, 3)))
 
-	if _, err := d.Decode(testExporter, first, nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), first, nil); err != nil {
 		t.Fatalf("first message error = %v, want nil", err)
 	}
-	if _, err := d.Decode(testExporter, second, nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), second, nil); err != nil {
 		t.Fatalf("second message error = %v, want nil", err)
 	}
 
@@ -735,7 +735,7 @@ func TestDecodeIPFIX_RejectsBrokenStructure(t *testing.T) {
 			t.Parallel()
 
 			d := newTestDecoder()
-			records, err := d.Decode(testExporter, tt.payload, nil)
+			records, err := d.Decode(sentFrom(testExporter), tt.payload, nil)
 			if err == nil {
 				t.Fatal("Decode() error = nil, want a malformed rejection")
 			}
@@ -748,7 +748,7 @@ func TestDecodeIPFIX_RejectsBrokenStructure(t *testing.T) {
 
 func BenchmarkDecodeIPFIX(b *testing.B) {
 	d := newTestDecoder()
-	if _, err := d.Decode(testExporter, ipfixMessage(0, fixtureIPFIXTemplate()), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), ipfixMessage(0, fixtureIPFIXTemplate()), nil); err != nil {
 		b.Fatal(err)
 	}
 
@@ -762,7 +762,7 @@ func BenchmarkDecodeIPFIX(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		var err error
-		dst, err = d.Decode(testExporter, payload, dst[:0])
+		dst, err = d.Decode(sentFrom(testExporter), payload, dst[:0])
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -844,14 +844,14 @@ func TestDecodeIPFIX_IgnoresOptionsTemplateWithdrawal(t *testing.T) {
 			t.Parallel()
 
 			d := newTestDecoder()
-			if _, err := d.Decode(testExporter, announce(), nil); err != nil {
+			if _, err := d.Decode(sentFrom(testExporter), announce(), nil); err != nil {
 				t.Fatalf("Decode() error = %v, want the announcement accepted", err)
 			}
 			if got := optionsHeld(t, d); got != 2 {
 				t.Fatalf("options templates held = %d, want 2 before the withdrawal", got)
 			}
 
-			if _, err := d.Decode(testExporter, ipfixMessage(1, tt.set), nil); err != nil {
+			if _, err := d.Decode(sentFrom(testExporter), ipfixMessage(1, tt.set), nil); err != nil {
 				t.Fatalf("Decode() error = %v, want the set accepted", err)
 			}
 			if got := optionsHeld(t, d); got != tt.want {
@@ -893,7 +893,7 @@ func TestDecodeIPFIX_TCPControlBitsAtTwoOctets(t *testing.T) {
 			)
 			record := be16([]byte{protocolTCP}, tt.wire)
 
-			records, err := d.Decode(testExporter, ipfixMessage(0, template,
+			records, err := d.Decode(sentFrom(testExporter), ipfixMessage(0, template,
 				flowSet(fixtureIPFIXTemplateID, record),
 			), nil)
 			if err != nil || len(records) != 1 {
@@ -963,7 +963,7 @@ func TestDecodeIPFIX_DiffServCodePoint(t *testing.T) {
 			t.Parallel()
 
 			d := newTestDecoder()
-			records, err := d.Decode(testExporter, ipfixMessage(0,
+			records, err := d.Decode(sentFrom(testExporter), ipfixMessage(0,
 				ipfixTemplateSet(tt.specs...),
 				flowSet(fixtureIPFIXTemplateID, tt.record),
 			), nil)
@@ -1047,7 +1047,7 @@ func TestDecodeIPFIX_BytesReported(t *testing.T) {
 			t.Parallel()
 
 			d := newTestDecoder()
-			records, err := d.Decode(testExporter, ipfixMessage(0,
+			records, err := d.Decode(sentFrom(testExporter), ipfixMessage(0,
 				ipfixTemplateSet(tt.specs...),
 				flowSet(fixtureIPFIXTemplateID, tt.record),
 			), nil)

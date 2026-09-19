@@ -36,6 +36,13 @@ const maxLateRun = 4
 // hundreds is already generous.
 const maxDomainsPerExporter = 256
 
+// maxSessionsPerDomain bounds the transport sessions one domain follows. A
+// source port is a wire field, so a sender varying it would otherwise mint
+// positions without end. A device runs one export process per port and a
+// handful of processes at most, so the bound is an order of magnitude above
+// what one has been seen to open.
+const maxSessionsPerDomain = 16
+
 // maxSamplersPerExporter bounds the sampler declarations one device holds for
 // one protocol. A samplerId is a wire field and the scope is the device, so
 // the table grows with what a sender announces rather than with its domains.
@@ -203,18 +210,13 @@ type domainState struct {
 	// sweep reads to free the exporter's budget again.
 	lastSeen atomic.Int64
 
-	// sequence gap tracking. seqInit, lastSeq, seqEngine and seqLateRun move
-	// under mu, which is not the lock the sampler run below is held by.
-	seqInit bool
-	lastSeq uint32
-	// seqEngine is the switching engine the tracked position belongs to. A v5
-	// or v8 device numbers a sequence per engine, and the odid a domain is
-	// keyed by does not carry which one, so a change rebases.
-	seqEngine uint16
-	// seqLateRun counts the messages read as late one after another.
-	seqLateRun int
-	// SequenceMissed counts export packets the sequence numbers say were
-	// lost. Reordering and device restarts reset the base instead.
+	// sessions holds one sequence position per transport session, keyed by
+	// the source port that identifies it. They move under mu, which is not
+	// the lock the sampler run below is held by.
+	sessions map[uint16]*session
+	// sequenceMissed counts the export packets the sequence numbers say were
+	// lost, summed across those sessions so the published label set stays the
+	// domain's. Reordering and device restarts reset a position instead.
 	sequenceMissed atomic.Uint64
 
 	// samplingRate is the packet sampling rate the domain's options declared
@@ -287,6 +289,42 @@ func (d *domainState) rateInForce() uint32 {
 		return rate
 	}
 	return d.declared.inherited.Load()
+}
+
+// session is one transport session's position in a domain's sequence. RFC
+// 7011 section 2 identifies a UDP session by its addresses and ports, and the
+// sequence is numbered within one, so two export processes sharing an
+// Observation Domain number independently and a shared position would read
+// every alternation between them as loss.
+type session struct {
+	lastSeq uint32
+	// engine is the switching engine the position belongs to. A v5 or v8
+	// device numbers a sequence per engine inside one session, and the odid a
+	// domain is keyed by does not carry which one, so a change rebases.
+	engine uint16
+	// lateRun counts the messages read as late one after another.
+	lateRun int
+	init    bool
+}
+
+// sessionLocked returns one session's position, opening it on first use. A
+// domain at its bound keeps the sessions it has rather than replacing them:
+// an established position is worth more than the one a spoofed port would
+// open. The domain lock is held by the caller.
+func (d *domainState) sessionLocked(port uint16) *session {
+	if s, ok := d.sessions[port]; ok {
+		return s
+	}
+	if len(d.sessions) >= maxSessionsPerDomain {
+		return nil
+	}
+
+	if d.sessions == nil {
+		d.sessions = make(map[uint16]*session, 1)
+	}
+	s := &session{}
+	d.sessions[port] = s
+	return s
 }
 
 // samplerState is one sampler's last reading, which the next one is measured
@@ -521,7 +559,7 @@ func (s *templateStore) lookup(key domainKey, id uint16) (*template, bool) {
 // and is ignored so the packet it overtook is not counted missing twice; any
 // larger jump in either direction reads as a device restart and resets the
 // base without counting.
-func (d *domainState) trackSequence(seq uint32) {
+func (d *domainState) trackSequence(port uint16, seq uint32) {
 	const (
 		forwardWindow = 1 << 30
 		reorderWindow = 1024
@@ -530,24 +568,28 @@ func (d *domainState) trackSequence(seq uint32) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if !d.seqInit {
-		d.seqInit = true
-		d.lastSeq = seq
+	s := d.sessionLocked(port)
+	if s == nil {
+		return
+	}
+	if !s.init {
+		s.init = true
+		s.lastSeq = seq
 		return
 	}
 
-	switch diff := seq - d.lastSeq; {
+	switch diff := seq - s.lastSeq; {
 	case diff == 0:
 		// A duplicate; nothing moved.
 	case diff < forwardWindow:
 		if diff > 1 {
 			d.sequenceMissed.Add(uint64(diff - 1))
 		}
-		d.lastSeq = seq
+		s.lastSeq = seq
 	case diff > ^uint32(0)-reorderWindow:
 		// A late packet from before the current position.
 	default:
-		d.lastSeq = seq
+		s.lastSeq = seq
 	}
 }
 
@@ -643,7 +685,7 @@ func (d *domainState) pruneIdleSamplersLocked(now int64, ttl time.Duration) {
 // records it carries were counted missing when it was skipped, and rewinding
 // counts them a second time on the next one to arrive. A run longer than
 // reordering reaches is a restart, which rebases without counting.
-func (d *domainState) trackRecordSequence(seq, records uint32, engine uint16, complete bool) {
+func (d *domainState) trackRecordSequence(port uint16, seq, records uint32, engine uint16, complete bool) {
 	const (
 		forwardWindow = 1 << 30
 		reorderWindow = 1024
@@ -652,20 +694,24 @@ func (d *domainState) trackRecordSequence(seq, records uint32, engine uint16, co
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if !d.seqInit || engine != d.seqEngine {
-		d.seqInit = complete
-		d.seqEngine = engine
-		d.lastSeq = seq + records
-		d.seqLateRun = 0
+	s := d.sessionLocked(port)
+	if s == nil {
+		return
+	}
+	if !s.init || engine != s.engine {
+		s.init = complete
+		s.engine = engine
+		s.lastSeq = seq + records
+		s.lateRun = 0
 		return
 	}
 
 	// lastSeq holds the sequence expected on the next message.
-	switch diff := seq - d.lastSeq; {
+	switch diff := seq - s.lastSeq; {
 	case diff == 0:
 		// In order; only the base advances.
-	case diff > ^uint32(0)-reorderWindow && d.seqLateRun < maxLateRun:
-		d.seqLateRun++
+	case diff > ^uint32(0)-reorderWindow && s.lateRun < maxLateRun:
+		s.lateRun++
 		return
 	case diff < forwardWindow:
 		d.sequenceMissed.Add(uint64(diff))
@@ -673,9 +719,9 @@ func (d *domainState) trackRecordSequence(seq, records uint32, engine uint16, co
 		// A restart, which the counter does not span.
 	}
 
-	d.seqLateRun = 0
-	d.seqInit = complete
-	d.lastSeq = seq + records
+	s.lateRun = 0
+	s.init = complete
+	s.lastSeq = seq + records
 }
 
 // counts reports how many data and options templates the domain holds now.

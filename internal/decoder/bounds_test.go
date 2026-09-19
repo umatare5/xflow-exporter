@@ -33,7 +33,7 @@ func TestTemplateStore_DomainsAreBoundedPerExporter(t *testing.T) {
 	const attempts = maxDomainsPerExporter * 4
 
 	for odid := range uint32(attempts) {
-		if _, err := d.Decode(testExporter, ipfixHeaderOnly(odid), nil); err != nil {
+		if _, err := d.Decode(sentFrom(testExporter), ipfixHeaderOnly(odid), nil); err != nil {
 			t.Fatalf("Decode() error = %v, want the datagram tolerated", err)
 		}
 	}
@@ -60,7 +60,7 @@ func TestTemplateStore_DomainsAreBoundedAcrossTheFleet(t *testing.T) {
 	d.templates.now = func() time.Time { return now }
 
 	for i := range maxExporters {
-		_, _ = d.Decode(spoofedAddr(i), ipfixHeaderOnly(1), nil)
+		_, _ = d.Decode(sentFrom(spoofedAddr(i)), ipfixHeaderOnly(1), nil)
 	}
 	if got := len(d.Domains()); got != maxExporters {
 		t.Fatalf("domains = %d, want the fleet budget of %d", got, maxExporters)
@@ -68,7 +68,7 @@ func TestTemplateStore_DomainsAreBoundedAcrossTheFleet(t *testing.T) {
 
 	refused := d.DomainsRefused()
 	fresh := netip.MustParseAddr("203.0.113.9")
-	_, _ = d.Decode(fresh, ipfixHeaderOnly(1), nil)
+	_, _ = d.Decode(sentFrom(fresh), ipfixHeaderOnly(1), nil)
 
 	for _, domain := range d.Domains() {
 		if domain.Exporter == fresh {
@@ -81,7 +81,7 @@ func TestTemplateStore_DomainsAreBoundedAcrossTheFleet(t *testing.T) {
 
 	// A device already inside the budget keeps its own, so a full fleet costs
 	// the newcomer rather than the devices that were already reporting.
-	_, _ = d.Decode(spoofedAddr(0), ipfixHeaderOnly(2), nil)
+	_, _ = d.Decode(sentFrom(spoofedAddr(0)), ipfixHeaderOnly(2), nil)
 	held := 0
 	for _, domain := range d.Domains() {
 		if domain.Exporter == spoofedAddr(0) {
@@ -96,7 +96,7 @@ func TestTemplateStore_DomainsAreBoundedAcrossTheFleet(t *testing.T) {
 	// template TTL rather than the process.
 	now = now.Add(2 * time.Minute)
 	d.SweepDomains()
-	_, _ = d.Decode(fresh, ipfixHeaderOnly(1), nil)
+	_, _ = d.Decode(sentFrom(fresh), ipfixHeaderOnly(1), nil)
 
 	readmitted := false
 	for _, domain := range d.Domains() {
@@ -118,9 +118,9 @@ func TestTemplateStore_BudgetIsPerExporter(t *testing.T) {
 	other := netip.MustParseAddr("192.0.2.77")
 
 	for odid := range uint32(maxDomainsPerExporter * 2) {
-		_, _ = d.Decode(testExporter, ipfixHeaderOnly(odid), nil)
+		_, _ = d.Decode(sentFrom(testExporter), ipfixHeaderOnly(odid), nil)
 	}
-	if _, err := d.Decode(other, ipfixHeaderOnly(1), nil); err != nil {
+	if _, err := d.Decode(sentFrom(other), ipfixHeaderOnly(1), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 
@@ -144,20 +144,20 @@ func TestTemplateStore_DecodingSurvivesTheBudget(t *testing.T) {
 	d := newTestDecoder()
 
 	// The first domain announces a template and decodes a record.
-	if _, err := d.Decode(testExporter,
+	if _, err := d.Decode(sentFrom(testExporter),
 		ipfixMessage(0, fixtureIPFIXTemplate()), nil); err != nil {
 		t.Fatalf("template error = %v, want nil", err)
 	}
 
 	// Exhaust the budget with unrelated domains.
 	for odid := range uint32(maxDomainsPerExporter * 2) {
-		_, _ = d.Decode(testExporter, ipfixHeaderOnly(odid+1000), nil)
+		_, _ = d.Decode(sentFrom(testExporter), ipfixHeaderOnly(odid+1000), nil)
 	}
 	if d.DomainsRefused() == 0 {
 		t.Fatal("no domain was refused, the budget did not engage")
 	}
 
-	records, err := d.Decode(testExporter,
+	records, err := d.Decode(sentFrom(testExporter),
 		ipfixMessage(1, flowSet(fixtureIPFIXTemplateID, fixtureIPFIXRecord())), nil)
 	if err != nil {
 		t.Fatalf("data error = %v, want nil", err)
@@ -178,9 +178,9 @@ func TestTemplateStore_SweepReturnsTheBudget(t *testing.T) {
 	d.templates.now = func() time.Time { return now }
 
 	for odid := range uint32(maxDomainsPerExporter) {
-		_, _ = d.Decode(testExporter, ipfixHeaderOnly(odid), nil)
+		_, _ = d.Decode(sentFrom(testExporter), ipfixHeaderOnly(odid), nil)
 	}
-	if _, err := d.Decode(testExporter, ipfixHeaderOnly(9999), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), ipfixHeaderOnly(9999), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 	if got := d.DomainsRefused(); got != 1 {
@@ -197,7 +197,7 @@ func TestTemplateStore_SweepReturnsTheBudget(t *testing.T) {
 	}
 
 	// The freed budget admits a new domain.
-	if _, err := d.Decode(testExporter, ipfixHeaderOnly(9999), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), ipfixHeaderOnly(9999), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 	if got := len(d.Domains()); got != 1 {
@@ -217,12 +217,12 @@ func TestTemplateStore_SweepSparesLiveDomains(t *testing.T) {
 	now := time.Unix(1_756_600_000, 0)
 	d.templates.now = func() time.Time { return now }
 
-	_, _ = d.Decode(testExporter, ipfixHeaderOnly(1), nil)
-	_, _ = d.Decode(testExporter, ipfixHeaderOnly(2), nil)
+	_, _ = d.Decode(sentFrom(testExporter), ipfixHeaderOnly(1), nil)
+	_, _ = d.Decode(sentFrom(testExporter), ipfixHeaderOnly(2), nil)
 
 	// Domain 2 keeps speaking while domain 1 falls silent.
 	now = now.Add(50 * time.Second)
-	_, _ = d.Decode(testExporter, ipfixHeaderOnly(2), nil)
+	_, _ = d.Decode(sentFrom(testExporter), ipfixHeaderOnly(2), nil)
 
 	now = now.Add(30 * time.Second)
 	if evicted := d.SweepDomains(); evicted != 1 {
@@ -380,7 +380,7 @@ func appAnnouncement(appID uint32, name string) []byte {
 func announceApps(t *testing.T, d *Decoder, exporter netip.Addr, count int) {
 	t.Helper()
 
-	if _, err := d.Decode(exporter, ipfixMessage(0, appTableTemplate()), nil); err != nil {
+	if _, err := d.Decode(sentFrom(exporter), ipfixMessage(0, appTableTemplate()), nil); err != nil {
 		t.Fatalf("options template: %v", err)
 	}
 
@@ -390,7 +390,7 @@ func announceApps(t *testing.T, d *Decoder, exporter netip.Addr, count int) {
 		for k := base; k < base+perMessage && k < count; k++ {
 			body = append(body, appAnnouncement(uint32(k)+1, "app-"+strconv.Itoa(k))...)
 		}
-		if _, err := d.Decode(exporter,
+		if _, err := d.Decode(sentFrom(exporter),
 			ipfixMessage(uint32(base)+1, flowSet(appTableTemplateID, body)), nil); err != nil {
 			t.Fatalf("announcement at %d: %v", base, err)
 		}
@@ -583,11 +583,11 @@ func TestDecodeV9_DoesNotDecodeAgainstAnotherProtocolsTemplate(t *testing.T) {
 	d := newTestDecoder()
 	const odid = 7
 
-	if _, err := d.Decode(testExporter, ipfixVariableLengthTemplate(odid), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), ipfixVariableLengthTemplate(odid), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want the IPFIX template accepted", err)
 	}
 
-	got, err := d.Decode(testExporter, v9DataSetNaming(odid, 256), nil)
+	got, err := d.Decode(sentFrom(testExporter), v9DataSetNaming(odid, 256), nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want the v9 data set tolerated", err)
 	}
@@ -615,13 +615,13 @@ func TestDecodeV9_DoesNotPoisonTheSamplingRateFromAnotherProtocol(t *testing.T) 
 		observedID = 300
 	)
 
-	if _, err := d.Decode(testExporter, v9TemplateNaming(odid, observedID), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), v9TemplateNaming(odid, observedID), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want the v9 template accepted", err)
 	}
 	rateNow := func() uint32 {
 		t.Helper()
 
-		got, err := d.Decode(testExporter, v9AddressRecord(odid, observedID), nil)
+		got, err := d.Decode(sentFrom(testExporter), v9AddressRecord(odid, observedID), nil)
 		if err != nil || len(got) != 1 {
 			t.Fatalf("Decode() error = %v, records = %d, want one observable record", err, len(got))
 		}
@@ -630,10 +630,10 @@ func TestDecodeV9_DoesNotPoisonTheSamplingRateFromAnotherProtocol(t *testing.T) 
 
 	before := rateNow()
 
-	if _, err := d.Decode(testExporter, ipfixSamplingOptionsTemplate(odid, optionsID), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), ipfixSamplingOptionsTemplate(odid, optionsID), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want the IPFIX options template accepted", err)
 	}
-	if _, err := d.Decode(testExporter, v9AddressRecord(odid, optionsID), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), v9AddressRecord(odid, optionsID), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want the colliding v9 data set tolerated", err)
 	}
 
@@ -662,7 +662,7 @@ func TestDecodeV9_RefusesAVariableLengthTemplate(t *testing.T) {
 		t.Fatal("add() refused the template the test needs")
 	}
 
-	got, err := d.Decode(testExporter, v9DataSetNaming(odid, 256), nil)
+	got, err := d.Decode(sentFrom(testExporter), v9DataSetNaming(odid, 256), nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want the v9 data set tolerated", err)
 	}

@@ -77,7 +77,7 @@ func TestDecodeLoop_ObservesOnlyWhatTheBudgetAdmits(t *testing.T) {
 	var refused netip.Addr
 	for i := range 1 << 20 {
 		addr := spoofedAddr(i)
-		_, _ = dec.Decode(addr, []byte{0, 0, 0, 0}, nil)
+		_, _ = dec.Decode(sentFrom(addr), []byte{0, 0, 0, 0}, nil)
 		if !dec.Admits(addr) {
 			refused = addr
 			break

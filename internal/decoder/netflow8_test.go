@@ -66,7 +66,7 @@ func baseV8Want() flow.Record {
 // decodeV8 reads one datagram through a decoder of its own, so a parse test
 // reads the record rather than the domain a shared decoder carries forward.
 func decodeV8(payload []byte) ([]flow.Record, *decodeError) {
-	return newTestDecoder().decodeNetFlowV8(testExporter, payload, nil)
+	return newTestDecoder().decodeNetFlowV8(testExporter, testPort, payload, nil)
 }
 
 func TestDecodeNetFlowV8_ReadsEveryScheme(t *testing.T) {
@@ -515,7 +515,7 @@ func BenchmarkDecodeNetFlowV8(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		var err *decodeError
-		records, err = d.decodeNetFlowV8(testExporter, payload, records[:0])
+		records, err = d.decodeNetFlowV8(testExporter, testPort, payload, records[:0])
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -549,7 +549,7 @@ func TestDecodeNetFlowV8_SequencePerAggregationCache(t *testing.T) {
 		aggregation uint8
 		seq         uint32
 	}{{1, 400}, {2, 2300}, {1, 402}, {2, 2302}} {
-		if _, err := d.Decode(testExporter, v8Datagram(step.aggregation, 2, step.seq), nil); err != nil {
+		if _, err := d.Decode(sentFrom(testExporter), v8Datagram(step.aggregation, 2, step.seq), nil); err != nil {
 			t.Fatalf("Decode() error = %v, want nil", err)
 		}
 	}
@@ -577,7 +577,7 @@ func TestDecodeNetFlowV8_SequenceCountsTheGapOnce(t *testing.T) {
 	// Four datagrams of two records from seq 10. The third overtakes the
 	// second, which then arrives late.
 	for _, seq := range []uint32{10, 14, 12, 16} {
-		if _, err := d.Decode(testExporter, v8Datagram(1, 2, seq), nil); err != nil {
+		if _, err := d.Decode(sentFrom(testExporter), v8Datagram(1, 2, seq), nil); err != nil {
 			t.Fatalf("Decode() error = %v, want nil", err)
 		}
 	}
@@ -600,12 +600,12 @@ func TestDecodeNetFlowV8_BudgetCostsTheSequenceNotTheTraffic(t *testing.T) {
 		header := make([]byte, 20)
 		binary.BigEndian.PutUint16(header[0:2], 9)
 		binary.BigEndian.PutUint32(header[16:20], uint32(i))
-		if _, err := d.Decode(testExporter, header, nil); err != nil {
+		if _, err := d.Decode(sentFrom(testExporter), header, nil); err != nil {
 			t.Fatalf("v9 domain %d: %v", i, err)
 		}
 	}
 
-	records, err := d.Decode(testExporter, v8Datagram(1, 2, 500), nil)
+	records, err := d.Decode(sentFrom(testExporter), v8Datagram(1, 2, 500), nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want the records decoded anyway", err)
 	}

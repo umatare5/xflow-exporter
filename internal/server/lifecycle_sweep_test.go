@@ -47,7 +47,7 @@ func TestSweepDomains_ReclaimsTheExporterBudget(t *testing.T) {
 		// rather than counted to. The bound only stops a runaway loop.
 		const maxFill = 1 << 20
 		for i := range maxFill {
-			_, _ = dec.Decode(spoofedAddr(i), burst, nil)
+			_, _ = dec.Decode(sentFrom(spoofedAddr(i)), burst, nil)
 			if dec.ExportersRefused() > 0 {
 				break
 			}
@@ -72,7 +72,7 @@ func TestSweepDomains_ReclaimsTheExporterBudget(t *testing.T) {
 		<-done
 
 		fresh := netip.MustParseAddr("203.0.113.9")
-		_, _ = dec.Decode(fresh, burst, nil)
+		_, _ = dec.Decode(sentFrom(fresh), burst, nil)
 
 		var admitted bool
 		for _, snap := range dec.Stats().Snapshot() {
@@ -105,7 +105,7 @@ func TestSweepDomains_ReleasesTheSeriesWithTheSlot(t *testing.T) {
 		burst := []byte{0xff, 0xff}
 		const maxFill = 1 << 20
 		for i := range maxFill {
-			_, _ = dec.Decode(spoofedAddr(i), burst, nil)
+			_, _ = dec.Decode(sentFrom(spoofedAddr(i)), burst, nil)
 			if dec.ExportersRefused() > 0 {
 				break
 			}
@@ -145,4 +145,9 @@ func TestSweepDomains_ReleasesTheSeriesWithTheSlot(t *testing.T) {
 			t.Errorf("series after the sweep = %d, want the swept device to hold none", got)
 		}
 	})
+}
+
+// sentFrom is the transport session a fixture datagram arrives on.
+func sentFrom(addr netip.Addr) netip.AddrPort {
+	return netip.AddrPortFrom(addr, 50000)
 }

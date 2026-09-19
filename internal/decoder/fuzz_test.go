@@ -84,7 +84,7 @@ func FuzzDecode(f *testing.F) {
 			TemplateTTL:          config.DefaultParserTemplateTTL,
 		})
 
-		records, err := d.Decode(exporter, payload, nil)
+		records, err := d.Decode(sentFrom(exporter), payload, nil)
 		if err != nil && len(records) != 0 {
 			t.Errorf("Decode() returned %d records alongside error %v, want 0", len(records), err)
 		}
@@ -117,7 +117,7 @@ func FuzzDecodeSequence(f *testing.F) {
 		})
 
 		for _, payload := range [][]byte{first, second} {
-			records, err := d.Decode(exporter, payload, nil)
+			records, err := d.Decode(sentFrom(exporter), payload, nil)
 			if err != nil && len(records) != 0 {
 				t.Errorf("Decode() returned %d records alongside error %v, want 0", len(records), err)
 			}

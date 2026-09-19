@@ -60,7 +60,7 @@ func TestDecoder_DecodeAccountsSuccess(t *testing.T) {
 	d := newTestDecoder()
 	d.now = func() time.Time { return at }
 
-	records, err := d.Decode(testExporter, buildV5Packet(2), nil)
+	records, err := d.Decode(sentFrom(testExporter), buildV5Packet(2), nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
@@ -95,12 +95,12 @@ func TestDecoder_DecodeAccountsRejections(t *testing.T) {
 	// A structurally broken v5 datagram.
 	broken := buildV5Packet(1)
 	binary.BigEndian.PutUint16(broken[2:4], 0)
-	if _, err := d.Decode(testExporter, broken, nil); err == nil {
+	if _, err := d.Decode(sentFrom(testExporter), broken, nil); err == nil {
 		t.Fatal("Decode() error = nil, want a malformed rejection")
 	}
 
 	// A version nothing decodes.
-	if _, err := d.Decode(testExporter, []byte{0x00, 0x07, 0x00, 0x00}, nil); err == nil {
+	if _, err := d.Decode(sentFrom(testExporter), []byte{0x00, 0x07, 0x00, 0x00}, nil); err == nil {
 		t.Fatal("Decode() error = nil, want an unsupported version rejection")
 	}
 
@@ -129,7 +129,7 @@ func TestDecoder_DecodeTruncatesPartialAppends(t *testing.T) {
 
 	d := newTestDecoder()
 
-	records, _ := d.Decode(testExporter, buildV5Packet(2), nil)
+	records, _ := d.Decode(sentFrom(testExporter), buildV5Packet(2), nil)
 	if len(records) != 2 {
 		t.Fatalf("seed decode returned %d records, want 2", len(records))
 	}
@@ -137,7 +137,7 @@ func TestDecoder_DecodeTruncatesPartialAppends(t *testing.T) {
 	// A datagram that fails after the count is read: 3 claimed, bytes for 1.
 	short := buildV5Packet(3)[:netflowV5HeaderLen+netflowV5RecordLen]
 
-	records, err := d.Decode(testExporter, short, records)
+	records, err := d.Decode(sentFrom(testExporter), short, records)
 	if err == nil {
 		t.Fatal("Decode() error = nil, want a malformed rejection")
 	}
@@ -152,14 +152,23 @@ func TestStats_ExporterIsSharedAcrossVersions(t *testing.T) {
 	d := newTestDecoder()
 	other := netip.MustParseAddr("192.0.2.2")
 
-	if _, err := d.Decode(testExporter, buildV5Packet(1), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), buildV5Packet(1), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
-	if _, err := d.Decode(other, buildV5Packet(1), nil); err != nil {
+	if _, err := d.Decode(sentFrom(other), buildV5Packet(1), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 
 	if got := len(d.Stats().Snapshot()); got != 2 {
 		t.Errorf("Snapshot() returned %d exporters, want 2", got)
 	}
+}
+
+// testPort is the source port every fixture datagram arrives on, one export
+// process being all a test needs unless it is about the session split.
+const testPort = 50000
+
+// sentFrom is the transport session a fixture datagram arrives on.
+func sentFrom(addr netip.Addr) netip.AddrPort {
+	return netip.AddrPortFrom(addr, testPort)
 }

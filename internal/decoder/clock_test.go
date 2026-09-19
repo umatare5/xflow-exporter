@@ -29,7 +29,7 @@ func v9ClockPacket(uptimeMs, firstMs, lastMs uint32) []byte {
 func decodeOneRecord(t *testing.T, d *Decoder, payload []byte) flow.Record {
 	t.Helper()
 
-	records, err := d.Decode(testExporter, payload, nil)
+	records, err := d.Decode(sentFrom(testExporter), payload, nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}

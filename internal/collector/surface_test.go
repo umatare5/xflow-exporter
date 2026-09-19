@@ -243,21 +243,22 @@ func gatherWholeSurface(t *testing.T) []*dto.MetricFamily {
 
 	dec := newTestDecoder()
 	exporter := netip.MustParseAddr("192.0.2.30")
-	if _, err := dec.Decode(exporter, buildV5(), nil); err != nil {
+	if _, err := dec.Decode(sentFrom(exporter), buildV5(), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 	// A rejected datagram and a template announcement, so the families that
 	// only a v9 exchange publishes reach the lint below.
-	if _, err := dec.Decode(exporter, []byte{0x00, 0x63, 0x00, 0x00}, nil); err == nil {
+	if _, err := dec.Decode(sentFrom(exporter), []byte{0x00, 0x63, 0x00, 0x00}, nil); err == nil {
 		t.Fatal("Decode() of an unknown version error = nil, want a rejection")
 	}
-	if _, err := dec.Decode(exporter, buildV9TemplateOnly(), nil); err != nil {
+	if _, err := dec.Decode(sentFrom(exporter), buildV9TemplateOnly(), nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 	// Two readings of one sFlow sampler, which is what the pool and drop
 	// counters are a difference between, so their names reach the lint below.
 	for i, pool := range []uint32{5000, 5500} {
-		if _, err := dec.Decode(exporter, buildSFlowFlowSample(uint32(i+1), uint32(i+1), pool, 7), nil); err != nil {
+		sample := buildSFlowFlowSample(uint32(i+1), uint32(i+1), pool, 7)
+		if _, err := dec.Decode(sentFrom(exporter), sample, nil); err != nil {
 			t.Fatalf("Decode() error = %v, want nil", err)
 		}
 	}

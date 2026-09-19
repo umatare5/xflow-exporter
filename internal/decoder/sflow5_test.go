@@ -102,7 +102,7 @@ func TestDecodeSFlowV5_RawEthernetTCP(t *testing.T) {
 	datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
 		sflowFlowSampleBody(1000, 3, 4, rawHeaderRecord(tcpFrame(false), 1518))))
 
-	records, err := d.Decode(testExporter, datagram, nil)
+	records, err := d.Decode(sentFrom(testExporter), datagram, nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
@@ -144,7 +144,7 @@ func TestDecodeSFlowV5_VLANTaggedFrame(t *testing.T) {
 	datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
 		sflowFlowSampleBody(500, 1, 2, rawHeaderRecord(tcpFrame(true), 900))))
 
-	records, err := d.Decode(testExporter, datagram, nil)
+	records, err := d.Decode(sentFrom(testExporter), datagram, nil)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
 	}
@@ -173,7 +173,7 @@ func TestDecodeSFlowV5_ExpandedSample(t *testing.T) {
 
 	datagram := sflowDatagram(1, sflowSample(sflowFlowSampleExpanded, body))
 
-	records, err := d.Decode(testExporter, datagram, nil)
+	records, err := d.Decode(sentFrom(testExporter), datagram, nil)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
 	}
@@ -199,7 +199,7 @@ func TestDecodeSFlowV5_SampledIPv4Record(t *testing.T) {
 	datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
 		sflowFlowSampleBody(100, 1, 2, sflowRecord(sflowSampledIPv4, body))))
 
-	records, err := d.Decode(testExporter, datagram, nil)
+	records, err := d.Decode(sentFrom(testExporter), datagram, nil)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
 	}
@@ -248,7 +248,7 @@ func TestDecodeSFlowV5_SampledIPv6RecordUnmapsIPv4(t *testing.T) {
 	datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
 		sflowFlowSampleBody(100, 1, 2, sflowRecord(sflowSampledIPv6, body))))
 
-	records, err := d.Decode(testExporter, datagram, nil)
+	records, err := d.Decode(sentFrom(testExporter), datagram, nil)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
 	}
@@ -285,7 +285,7 @@ func TestDecodeSFlowV5_RawIPv6HeaderUnmapsIPv4(t *testing.T) {
 	datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
 		sflowFlowSampleBody(10, 1, 2, rawHeaderRecord(mappedIPv6Frame(), 128))))
 
-	records, err := d.Decode(testExporter, datagram, nil)
+	records, err := d.Decode(sentFrom(testExporter), datagram, nil)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
 	}
@@ -328,7 +328,7 @@ func TestDecodeSFlowV5_CounterSampleYieldsNothing(t *testing.T) {
 			sflowFlowSampleBody(10, 1, 2, rawHeaderRecord(tcpFrame(false), 64))),
 	)
 
-	records, err := d.Decode(testExporter, datagram, nil)
+	records, err := d.Decode(sentFrom(testExporter), datagram, nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want the counter sample skipped", err)
 	}
@@ -348,7 +348,7 @@ func TestDecodeSFlowV5_TruncatedHeaderKeepsWhatDecoded(t *testing.T) {
 	datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
 		sflowFlowSampleBody(10, 1, 2, rawHeaderRecord(frame, 1518))))
 
-	records, err := d.Decode(testExporter, datagram, nil)
+	records, err := d.Decode(sentFrom(testExporter), datagram, nil)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
 	}
@@ -371,7 +371,7 @@ func TestDecodeSFlowV5_UnreadableKnownRecordIsCounted(t *testing.T) {
 	datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
 		sflowFlowSampleBody(10, 1, 2, short)))
 
-	records, err := d.Decode(testExporter, datagram, nil)
+	records, err := d.Decode(sentFrom(testExporter), datagram, nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want the datagram tolerated", err)
 	}
@@ -414,7 +414,7 @@ func TestDecodeSFlowV5_RejectsBrokenStructure(t *testing.T) {
 			t.Parallel()
 
 			d := newTestDecoder()
-			records, err := d.Decode(testExporter, tt.payload, nil)
+			records, err := d.Decode(sentFrom(testExporter), tt.payload, nil)
 			if err == nil {
 				t.Fatal("Decode() error = nil, want a malformed rejection")
 			}
@@ -431,7 +431,7 @@ func TestDecodeSFlowV5_SequencePerSubAgent(t *testing.T) {
 	d := newTestDecoder()
 
 	for _, seq := range []uint32{1, 2, 6} {
-		if _, err := d.Decode(testExporter, sflowDatagram(seq), nil); err != nil {
+		if _, err := d.Decode(sentFrom(testExporter), sflowDatagram(seq), nil); err != nil {
 			t.Fatalf("Decode() error = %v, want nil", err)
 		}
 	}
@@ -462,7 +462,7 @@ func BenchmarkDecodeSFlowV5(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		var err error
-		dst, err = d.Decode(testExporter, datagram, dst[:0])
+		dst, err = d.Decode(sentFrom(testExporter), datagram, dst[:0])
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -505,7 +505,7 @@ func TestDecodeSFlowV5_LaterFragmentReportsNoTransport(t *testing.T) {
 			t.Parallel()
 
 			d := newTestDecoder()
-			records, err := d.Decode(testExporter, sflowDatagram(1, sflowSample(sflowFlowSample,
+			records, err := d.Decode(sentFrom(testExporter), sflowDatagram(1, sflowSample(sflowFlowSample,
 				sflowFlowSampleBody(1000, 3, 4, rawHeaderRecord(fragmentFrame(tt.fragWord), 1518)))), nil)
 			if err != nil || len(records) != 1 {
 				t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
@@ -619,7 +619,7 @@ func TestDecodeSFlowV5_SampledRecordRefusesAnOverwideWord(t *testing.T) {
 				body []byte
 			}{{sflowSampledIPv4, tt.v4}, {sflowSampledIPv6, tt.v6}} {
 				d := newTestDecoder()
-				records, err := d.Decode(testExporter, sflowDatagram(1, sflowSample(sflowFlowSample,
+				records, err := d.Decode(sentFrom(testExporter), sflowDatagram(1, sflowSample(sflowFlowSample,
 					sflowFlowSampleBody(100, 1, 2, sflowRecord(form.kind, form.body)))), nil)
 				if err != nil {
 					t.Fatalf("Decode() error = %v, want nil", err)
@@ -761,7 +761,7 @@ func TestDecodeSFlowV5_InterfaceFormats(t *testing.T) {
 			datagram := sflowDatagram(1, sflowSampleWithInterfaces(tt.expanded, tt.in, tt.out,
 				rawHeaderRecord(tcpFrame(false), 1518)))
 
-			records, err := d.Decode(testExporter, datagram, nil)
+			records, err := d.Decode(sentFrom(testExporter), datagram, nil)
 			if err != nil || len(records) != 1 {
 				t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
 			}
@@ -802,7 +802,7 @@ func TestDecodeSFlowV5_SampledRecordRefusesAnOverlongPacket(t *testing.T) {
 			binary.BigEndian.PutUint32(body[0:4], tt.length)
 
 			d := newTestDecoder()
-			records, err := d.Decode(testExporter, sflowDatagram(1, sflowSample(sflowFlowSample,
+			records, err := d.Decode(sentFrom(testExporter), sflowDatagram(1, sflowSample(sflowFlowSample,
 				sflowFlowSampleBody(100, 1, 2, sflowRecord(tt.kind, body)))), nil)
 			if err != nil {
 				t.Fatalf("Decode() error = %v, want nil", err)
@@ -887,7 +887,7 @@ func TestDecodeSFlowV5_OnePacketRecordPerSample(t *testing.T) {
 			datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
 				sflowFlowSampleBody(100, 1, 2, tt.records...)))
 
-			records, err := d.Decode(testExporter, datagram, nil)
+			records, err := d.Decode(sentFrom(testExporter), datagram, nil)
 			if err != nil {
 				t.Fatalf("Decode() error = %v, want nil", err)
 			}
@@ -936,7 +936,7 @@ func TestDecodeSFlowV5_HeaderProtocols(t *testing.T) {
 			datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
 				sflowFlowSampleBody(100, 1, 2, sflowRecord(sflowRawPacketHeader, body))))
 
-			records, err := d.Decode(testExporter, datagram, nil)
+			records, err := d.Decode(sentFrom(testExporter), datagram, nil)
 			if err != nil {
 				t.Fatalf("Decode() error = %v, want nil", err)
 			}

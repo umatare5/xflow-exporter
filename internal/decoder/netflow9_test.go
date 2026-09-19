@@ -156,7 +156,7 @@ func TestDecodeNetFlowV9_TemplateThenData(t *testing.T) {
 		flowSet(fixtureV9TemplateID, fixtureV9DataRecord()),
 	)
 
-	records, err := d.Decode(testExporter, packet, nil)
+	records, err := d.Decode(sentFrom(testExporter), packet, nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
@@ -173,11 +173,11 @@ func TestDecodeNetFlowV9_TemplatePersistsAcrossDatagrams(t *testing.T) {
 
 	d := newTestDecoder()
 
-	if _, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), v9Packet(1, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
 		t.Fatalf("template datagram error = %v, want nil", err)
 	}
 
-	records, err := d.Decode(testExporter,
+	records, err := d.Decode(sentFrom(testExporter),
 		v9Packet(2, fixtureV9ODID, flowSet(fixtureV9TemplateID, fixtureV9DataRecord(), fixtureV9DataRecord())), nil)
 	if err != nil {
 		t.Fatalf("data datagram error = %v, want nil", err)
@@ -197,7 +197,7 @@ func TestDecodeNetFlowV9_TemplatesAreScopedPerDomain(t *testing.T) {
 	otherExporter := netip.MustParseAddr("192.0.2.2")
 
 	// Domain A announces the 45-byte fixture template under ID 300.
-	if _, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), v9Packet(1, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
 		t.Fatalf("domain A template error = %v, want nil", err)
 	}
 
@@ -207,17 +207,17 @@ func TestDecodeNetFlowV9_TemplatesAreScopedPerDomain(t *testing.T) {
 		[2]uint16{fieldInBytes, 4},
 		[2]uint16{fieldInPackets, 4},
 	))
-	if _, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID+1, shortTemplate), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), v9Packet(1, fixtureV9ODID+1, shortTemplate), nil); err != nil {
 		t.Fatalf("domain B template error = %v, want nil", err)
 	}
 
 	// A third domain on another exporter also reuses ID 300.
-	if _, err := d.Decode(otherExporter, v9Packet(1, fixtureV9ODID, shortTemplate), nil); err != nil {
+	if _, err := d.Decode(sentFrom(otherExporter), v9Packet(1, fixtureV9ODID, shortTemplate), nil); err != nil {
 		t.Fatalf("exporter B template error = %v, want nil", err)
 	}
 
 	// Domain A must still decode with its own 45-byte template.
-	records, err := d.Decode(testExporter,
+	records, err := d.Decode(sentFrom(testExporter),
 		v9Packet(2, fixtureV9ODID, flowSet(fixtureV9TemplateID, fixtureV9DataRecord())), nil)
 	if err != nil {
 		t.Fatalf("domain A data error = %v, want nil", err)
@@ -230,7 +230,7 @@ func TestDecodeNetFlowV9_TemplatesAreScopedPerDomain(t *testing.T) {
 	short := make([]byte, 0, 8)
 	short = be32(short, 111)
 	short = be32(short, 7)
-	records, err = d.Decode(testExporter,
+	records, err = d.Decode(sentFrom(testExporter),
 		v9Packet(2, fixtureV9ODID+1, flowSet(fixtureV9TemplateID, short)), nil)
 	if err != nil {
 		t.Fatalf("domain B data error = %v, want nil", err)
@@ -246,7 +246,7 @@ func TestDecodeNetFlowV9_MissingTemplateIsCountedNotFatal(t *testing.T) {
 	d := newTestDecoder()
 
 	// One known and one unknown data flowset in a single datagram.
-	if _, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), v9Packet(1, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
 		t.Fatalf("template error = %v, want nil", err)
 	}
 
@@ -254,7 +254,7 @@ func TestDecodeNetFlowV9_MissingTemplateIsCountedNotFatal(t *testing.T) {
 		flowSet(999, []byte{1, 2, 3, 4}),
 		flowSet(fixtureV9TemplateID, fixtureV9DataRecord()),
 	)
-	records, err := d.Decode(testExporter, packet, nil)
+	records, err := d.Decode(sentFrom(testExporter), packet, nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want the known flowset decoded", err)
 	}
@@ -320,7 +320,7 @@ func TestDecodeNetFlowV9_RejectsInvalidTemplates(t *testing.T) {
 			t.Parallel()
 
 			d := newTestDecoder()
-			if _, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID, tt.set), nil); err != nil {
+			if _, err := d.Decode(sentFrom(testExporter), v9Packet(1, fixtureV9ODID, tt.set), nil); err != nil {
 				t.Fatalf("Decode() error = %v, want the datagram tolerated", err)
 			}
 
@@ -330,8 +330,8 @@ func TestDecodeNetFlowV9_RejectsInvalidTemplates(t *testing.T) {
 
 			// The refused template must not serve data.
 			d2 := newTestDecoder()
-			_, _ = d2.Decode(testExporter, v9Packet(1, fixtureV9ODID, tt.set), nil)
-			_, _ = d2.Decode(testExporter,
+			_, _ = d2.Decode(sentFrom(testExporter), v9Packet(1, fixtureV9ODID, tt.set), nil)
+			_, _ = d2.Decode(sentFrom(testExporter),
 				v9Packet(2, fixtureV9ODID, flowSet(fixtureV9TemplateID, fixtureV9DataRecord())), nil)
 			if got := errorCount(d2, ReasonMissingTemplate); got != 1 {
 				t.Errorf("missing_template count = %d, want the refused template absent", got)
@@ -347,13 +347,13 @@ func TestDecodeNetFlowV9_TemplateExpiresAfterTTL(t *testing.T) {
 	now := time.Unix(1_756_300_000, 0)
 	d.templates.now = func() time.Time { return now }
 
-	if _, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), v9Packet(1, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
 		t.Fatalf("template error = %v, want nil", err)
 	}
 
 	// Within the TTL the template serves.
 	now = now.Add(30 * time.Second)
-	records, _ := d.Decode(testExporter,
+	records, _ := d.Decode(sentFrom(testExporter),
 		v9Packet(2, fixtureV9ODID, flowSet(fixtureV9TemplateID, fixtureV9DataRecord())), nil)
 	if len(records) != 1 {
 		t.Fatalf("Decode() within TTL returned %d records, want 1", len(records))
@@ -362,7 +362,7 @@ func TestDecodeNetFlowV9_TemplateExpiresAfterTTL(t *testing.T) {
 	// Past the TTL it must not: an orphaned template may describe a schema
 	// the device replaced while unreachable.
 	now = now.Add(2 * time.Minute)
-	records, _ = d.Decode(testExporter,
+	records, _ = d.Decode(sentFrom(testExporter),
 		v9Packet(3, fixtureV9ODID, flowSet(fixtureV9TemplateID, fixtureV9DataRecord())), nil)
 	if len(records) != 0 {
 		t.Errorf("Decode() past TTL returned %d records, want 0", len(records))
@@ -403,7 +403,7 @@ func TestDecodeNetFlowV9_OptionsTemplateThatConsumesNothingIsRefused(t *testing.
 		v9OptionsTemplate(300, 1, [2]uint16{1, 0}),
 		flowSet(300, []byte{0, 0, 0, 0}),
 	)
-	records, err := d.Decode(testExporter, packet, nil)
+	records, err := d.Decode(sentFrom(testExporter), packet, nil)
 	if err != nil || len(records) != 0 {
 		t.Fatalf("Decode() = %d records, %v; want 0, nil", len(records), err)
 	}
@@ -435,7 +435,7 @@ func TestDecodeNetFlowV9_ZeroLengthScopeBesideAnOptionFieldIsKept(t *testing.T) 
 		),
 		flowSet(501, be32(nil, 100)),
 	)
-	if _, err := d.Decode(testExporter, packet, nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), packet, nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 
@@ -477,7 +477,7 @@ func TestDecodeNetFlowV9_OptionsScopeFieldIsRead(t *testing.T) {
 		),
 		flowSet(502, record),
 	)
-	if _, err := d.Decode(testExporter, packet, nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), packet, nil); err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
 
@@ -517,7 +517,7 @@ func TestDecodeNetFlowV9_OptionsDeclareSamplingRate(t *testing.T) {
 	}()
 
 	packet := v9Packet(1, fixtureV9ODID, optionsTemplate, flowSet(500, optionsRecord))
-	records, err := d.Decode(testExporter, packet, nil)
+	records, err := d.Decode(sentFrom(testExporter), packet, nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
 	}
@@ -537,10 +537,10 @@ func TestDecodeNetFlowV9_OptionsDeclareSamplingRate(t *testing.T) {
 	}
 
 	// Flow records decoded after the options carry the rate.
-	if _, err := d.Decode(testExporter, v9Packet(2, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), v9Packet(2, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
 		t.Fatalf("template error = %v, want nil", err)
 	}
-	records, _ = d.Decode(testExporter,
+	records, _ = d.Decode(sentFrom(testExporter),
 		v9Packet(3, fixtureV9ODID, flowSet(fixtureV9TemplateID, fixtureV9DataRecord())), nil)
 	if len(records) != 1 || records[0].SamplingRate != 1000 {
 		t.Errorf("record sampling rate = %+v, want 1000 stamped from the domain", records)
@@ -553,7 +553,7 @@ func TestDecodeNetFlowV9_SequenceGapsAreCounted(t *testing.T) {
 	d := newTestDecoder()
 
 	for _, seq := range []uint32{10, 11, 15, 14, 16} {
-		_, _ = d.Decode(testExporter, v9Packet(seq, fixtureV9ODID, fixtureV9Template()), nil)
+		_, _ = d.Decode(sentFrom(testExporter), v9Packet(seq, fixtureV9ODID, fixtureV9Template()), nil)
 	}
 
 	domains := d.Domains()
@@ -590,7 +590,7 @@ func TestDecodeNetFlowV9_AbsoluteClocksWinOverUptime(t *testing.T) {
 	binary.BigEndian.PutUint64(tmp[:], 1_756_300_160_000)
 	record = append(record, tmp[:]...)
 
-	records, err := d.Decode(testExporter,
+	records, err := d.Decode(sentFrom(testExporter),
 		v9Packet(1, fixtureV9ODID, tpl, flowSet(fixtureV9TemplateID, record)), nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
@@ -630,7 +630,7 @@ func TestDecodeNetFlowV9_RejectsReducedAbsoluteClocks(t *testing.T) {
 			record := be32(be32(be32(nil, 100), 30_000), 45_000)
 			record = append(record, make([]byte, 2*width)...)
 
-			records, err := d.Decode(testExporter,
+			records, err := d.Decode(sentFrom(testExporter),
 				v9Packet(1, fixtureV9ODID, tpl, flowSet(fixtureV9TemplateID, record)), nil)
 			if err != nil {
 				t.Fatalf("Decode() error = %v, want nil", err)
@@ -682,7 +682,7 @@ func TestDecodeNetFlowV9_RejectsBrokenStructure(t *testing.T) {
 			t.Parallel()
 
 			d := newTestDecoder()
-			records, err := d.Decode(testExporter, tt.payload, nil)
+			records, err := d.Decode(sentFrom(testExporter), tt.payload, nil)
 			if err == nil {
 				t.Fatal("Decode() error = nil, want a malformed rejection")
 			}
@@ -697,7 +697,8 @@ func TestDecodeNetFlowV9_ReservedSetIsCounted(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()
-	if _, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID, flowSet(2, []byte{0, 0, 0, 0})), nil); err != nil {
+	reserved := v9Packet(1, fixtureV9ODID, flowSet(2, []byte{0, 0, 0, 0}))
+	if _, err := d.Decode(sentFrom(testExporter), reserved, nil); err != nil {
 		t.Fatalf("Decode() error = %v, want the datagram tolerated", err)
 	}
 	if got := errorCount(d, ReasonReservedSet); got != 1 {
@@ -710,14 +711,14 @@ func TestDecodeNetFlowV9_ToleratesTrailingPadding(t *testing.T) {
 
 	d := newTestDecoder()
 	payload := append(v9Packet(1, fixtureV9ODID, fixtureV9Template()), 0, 0, 0)
-	if _, err := d.Decode(testExporter, payload, nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), payload, nil); err != nil {
 		t.Errorf("Decode() error = %v, want trailing padding tolerated", err)
 	}
 }
 
 func BenchmarkDecodeNetFlowV9(b *testing.B) {
 	d := newTestDecoder()
-	if _, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
+	if _, err := d.Decode(sentFrom(testExporter), v9Packet(1, fixtureV9ODID, fixtureV9Template()), nil); err != nil {
 		b.Fatal(err)
 	}
 
@@ -731,7 +732,7 @@ func BenchmarkDecodeNetFlowV9(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		var err error
-		dst, err = d.Decode(testExporter, payload, dst[:0])
+		dst, err = d.Decode(sentFrom(testExporter), payload, dst[:0])
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -783,7 +784,7 @@ func TestDecodeNetFlowV9_InlineApplicationName(t *testing.T) {
 	t.Parallel()
 
 	d := newTestDecoder()
-	records, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID,
+	records, err := d.Decode(sentFrom(testExporter), v9Packet(1, fixtureV9ODID,
 		fixtureV9AppNameTemplate(),
 		flowSet(fixtureV9TemplateID, fixtureV9AppNameDataRecord()),
 	), nil)
@@ -819,7 +820,7 @@ func TestDecodeNetFlowV9_PanOSStringsAreCarried(t *testing.T) {
 	record = append(record, []byte("ssl\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")...)
 	record = append(record, []byte("alice\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")...)
 
-	records, err := d.Decode(testExporter,
+	records, err := d.Decode(sentFrom(testExporter),
 		v9Packet(1, fixtureV9ODID, tpl, flowSet(fixtureV9TemplateID, record)), nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)
@@ -835,7 +836,7 @@ func TestDecodeNetFlowV9_PanOSStringsAreCarried(t *testing.T) {
 	}
 
 	// A second record with the same strings must intern to the same backing.
-	records2, _ := d.Decode(testExporter,
+	records2, _ := d.Decode(sentFrom(testExporter),
 		v9Packet(2, fixtureV9ODID, flowSet(fixtureV9TemplateID, record)), nil)
 	if len(records2) != 1 || records2[0].AppName != "ssl" {
 		t.Fatalf("second decode = %+v, want the same strings", records2)
@@ -847,7 +848,8 @@ func TestDecodeNetFlowV9_PanOSStringsAreCarried(t *testing.T) {
 // reach the interner by.
 func BenchmarkDecodeNetFlowV9AppName(b *testing.B) {
 	d := newTestDecoder()
-	if _, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID, fixtureV9AppNameTemplate()), nil); err != nil {
+	tpl := v9Packet(1, fixtureV9ODID, fixtureV9AppNameTemplate())
+	if _, err := d.Decode(sentFrom(testExporter), tpl, nil); err != nil {
 		b.Fatal(err)
 	}
 
@@ -861,7 +863,7 @@ func BenchmarkDecodeNetFlowV9AppName(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		var err error
-		dst, err = d.Decode(testExporter, payload, dst[:0])
+		dst, err = d.Decode(sentFrom(testExporter), payload, dst[:0])
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -895,7 +897,7 @@ func TestDecodeV9_InterfacesAtTheDefaultWidth(t *testing.T) {
 	record = be32(record, 8)                          // packets
 
 	d := newTestDecoder()
-	records, err := d.Decode(testExporter, v9Packet(1, fixtureV9ODID,
+	records, err := d.Decode(sentFrom(testExporter), v9Packet(1, fixtureV9ODID,
 		template, flowSet(templateID, record)), nil)
 	if err != nil {
 		t.Fatalf("Decode() error = %v, want nil", err)

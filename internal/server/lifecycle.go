@@ -405,7 +405,7 @@ func decodeLoop(
 
 	for pkt := range packets {
 		var err error
-		records, err = dec.Decode(pkt.Src.Addr(), pkt.Data, records[:0])
+		records, err = dec.Decode(pkt.Src, pkt.Data, records[:0])
 		if err != nil {
 			slog.Debug("Rejected a flow datagram",
 				"exporter", pkt.Src.Addr(), "listener", pkt.Listener, "error", err)
