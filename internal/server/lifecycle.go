@@ -424,11 +424,7 @@ func decodeLoop(
 		}
 		recv.Release(pkt)
 
-		// One datagram is one version, so the batch is an aggregate or none
-		// of it is. An aggregate reaches no table a lookup would fill.
-		if len(records) > 0 && !records[0].Aggregated() {
-			chain.Enrich(records)
-		}
+		chain.Enrich(records)
 
 		if agg != nil {
 			agg.Ingest(records)
