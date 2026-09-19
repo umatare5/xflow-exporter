@@ -267,3 +267,17 @@ func TestServer_MetricsHonoursTheNameFilter(t *testing.T) {
 		t.Errorf("body does not end in the OpenMetrics terminator:\n%s", body)
 	}
 }
+
+// TestServer_BoundsEveryResponseWrite pins the write deadline on the server
+// rather than on one handler. /entries set its own, so a client that stopped
+// reading /metrics or the landing page held its connection until it
+// disconnected, and enough such peers answer nobody.
+func TestServer_BoundsEveryResponseWrite(t *testing.T) {
+	t.Parallel()
+
+	srv := server.New(prometheus.NewRegistry(), ":8080", config.DefaultTelemetryPath, nil, nil)
+
+	if srv.WriteTimeout <= 0 {
+		t.Errorf("WriteTimeout = %v, want a bound covering every route", srv.WriteTimeout)
+	}
+}

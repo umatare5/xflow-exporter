@@ -37,9 +37,9 @@ Every route binds to the address configured via `--web.listen-address` and `--we
 
 The HTTP server binds a unified listener for all internal routes without authentication layers. Unregistered paths act as a catch-all, returning HTTP 200 to prevent scanner enumeration. Disabling an endpoint flag leaves that route unregistered, securely falling back to this default behavior.
 
-The `/metrics` endpoint enforces a hard concurrency limit of 10 to bound memory consumption during in-flight serialization. Slower scrapes are forcefully terminated upon reaching a 30-second header timeout or a 5-second graceful shutdown drain. This strictly bounds process lingering and exhaustion attacks.
+The `/metrics` endpoint enforces a hard concurrency limit of 10 to bound memory consumption during in-flight serialization. Slower scrapes are forcefully terminated upon reaching a 30-second header timeout, the 60-second write deadline every route carries, or a 5-second graceful shutdown drain. This strictly bounds process lingering and exhaustion attacks.
 
-The `/entries` endpoint admits one listing at a time and bounds its write with a 60-second deadline, so a client that stops reading releases the slot on that deadline rather than on disconnect.
+The `/entries` endpoint admits one listing at a time and restarts that deadline at its own body, the largest the process writes, so a client that stops reading releases the slot on the deadline rather than on disconnect.
 
 ## Counter Semantics
 

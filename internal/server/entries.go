@@ -31,12 +31,6 @@ func listerOf(flows *collector.FlowCollector) EntryLister {
 	return flows
 }
 
-// entriesWriteTimeout bounds one listing's write. Without it a client that
-// stops reading holds the single slot below until it disconnects, and one such
-// connection is then all it takes to refuse every other listing. It is
-// generous for the largest body the entry bound can produce.
-const entriesWriteTimeout = 60 * time.Second
-
 // entriesHandler lists what the aggregation tables hold, the entries the
 // scrape-time cuts withhold included.
 //
@@ -72,9 +66,11 @@ func entriesHandler(lister EntryLister) http.HandlerFunc {
 			return
 		}
 
-		// net/http clears the deadline once the handler returns, and a
-		// recorder supports no deadline at all, so the error is dropped.
-		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(entriesWriteTimeout))
+		// The server bounds every route, but this one writes the largest
+		// body on the process, so its own deadline starts at the write.
+		// net/http clears it once the handler returns, and a recorder
+		// supports no deadline at all, so the error is dropped.
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(writeTimeout))
 
 		w.Header().Set("Content-Type", "application/json")
 		writeEntries(w, lister, names)
