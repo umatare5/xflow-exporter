@@ -4,6 +4,28 @@ Notable changes to the metric surface, one section per release, listing the pull
 
 ## [Unreleased]
 
+## [v0.12.0]
+
+- [#67](https://github.com/umatare5/xflow-exporter/pull/67) — Narrow the collector table so no cell wraps on GitHub
+- [#68](https://github.com/umatare5/xflow-exporter/pull/68) — Update README.md
+- [#71](https://github.com/umatare5/xflow-exporter/pull/71) — List every entry an aggregation table holds behind a flag
+- [#72](https://github.com/umatare5/xflow-exporter/pull/72) — Hold the metric pages to what the collectors publish
+- [#73](https://github.com/umatare5/xflow-exporter/pull/73) — Bound flow histogram series and the range one series holds
+- [#74](https://github.com/umatare5/xflow-exporter/pull/74) — Count the records no sampling declaration settles a rate for
+- [#75](https://github.com/umatare5/xflow-exporter/pull/75) — Bound the devices holding domain state
+- [#76](https://github.com/umatare5/xflow-exporter/pull/76) — Hold each wire element to the width and count its spec defines
+- [#77](https://github.com/umatare5/xflow-exporter/pull/77) — Measure each flow clock back from the export or withhold it
+- [#78](https://github.com/umatare5/xflow-exporter/pull/78) — Redact the endpoint, bound the writes, and cut the scrape work
+- [#79](https://github.com/umatare5/xflow-exporter/pull/79) — Number each transport session's export sequence apart
+- [#80](https://github.com/umatare5/xflow-exporter/pull/80) — Restore the absence rule and move the credential out of the URL
+- [#81](https://github.com/umatare5/xflow-exporter/pull/81) — Settle each sampling rate against the declaration that names it
+- [#82](https://github.com/umatare5/xflow-exporter/pull/82) — Route an aggregate by the fold its own template declares
+- [#83](https://github.com/umatare5/xflow-exporter/pull/83) — Key every traffic family on the observation point it was taken at
+- [#84](https://github.com/umatare5/xflow-exporter/pull/84) — Key the service families on the port a service table names
+- [#85](https://github.com/umatare5/xflow-exporter/pull/85) — Withhold the counted family no device measured
+- [#86](https://github.com/umatare5/xflow-exporter/pull/86) — Name the end of a flow the way RFC 5103 names it
+- [#87](https://github.com/umatare5/xflow-exporter/pull/87) — Stop a retry from holding the test stub server open
+
 ## [v0.11.0]
 
 - [#64](https://github.com/umatare5/xflow-exporter/pull/64) — Describe what each series counts and what the sampling audit returns
@@ -95,7 +117,8 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#1](https://github.com/umatare5/xflow-exporter/pull/1) — Start the exporter with its flags, HTTP surface and UDP receiver
 - [#2](https://github.com/umatare5/xflow-exporter/pull/2) — Add the release workflow the tag and the artifacts come from
 
-[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.12.0...HEAD
+[v0.12.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.12.0
 [v0.11.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.11.0
 [v0.10.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.10.0
 [v0.9.1]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.9.1
