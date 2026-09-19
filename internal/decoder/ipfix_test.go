@@ -377,20 +377,21 @@ func TestDecodeIPFIX_TemplateThenData(t *testing.T) {
 	}
 
 	want := flow.Record{
-		Exporter:      testExporter,
-		Version:       flow.VersionIPFIX,
-		ODID:          fixtureIPFIXODID,
-		SrcAddr:       netip.MustParseAddr("2001:db8::1"),
-		DstAddr:       netip.MustParseAddr("2001:db8::2"),
-		SrcPort:       51234,
-		DstPort:       443,
-		Protocol:      6,
-		Bytes:         512000,
-		Packets:       1000,
-		BytesReported: true,
-		Flows:         1,
-		Start:         time.UnixMilli(1_756_400_100_000),
-		End:           time.UnixMilli(1_756_400_160_000),
+		Exporter:        testExporter,
+		Version:         flow.VersionIPFIX,
+		ODID:            fixtureIPFIXODID,
+		SrcAddr:         netip.MustParseAddr("2001:db8::1"),
+		DstAddr:         netip.MustParseAddr("2001:db8::2"),
+		SrcPort:         51234,
+		DstPort:         443,
+		Protocol:        6,
+		Bytes:           512000,
+		Packets:         1000,
+		BytesReported:   true,
+		PacketsReported: true,
+		Flows:           1,
+		Start:           time.UnixMilli(1_756_400_100_000),
+		End:             time.UnixMilli(1_756_400_160_000),
 	}
 	if records[0] != want {
 		t.Errorf("Decode() record =\n%+v\nwant\n%+v", records[0], want)

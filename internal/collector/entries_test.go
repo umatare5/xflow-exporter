@@ -276,3 +276,44 @@ func TestFlowCollector_EntriesRankTheWithheldTail(t *testing.T) {
 		}
 	}
 }
+
+// TestFlowCollector_EntriesReportWhatTheScrapeWithheld pins the listing's
+// answer to the one question /metrics stops answering. An entry whose sum is
+// missing a contribution publishes no series for that family, so without the
+// flags the operator sees a table of rows and a metric with none and has
+// nowhere to tell a withheld family from an absent entry.
+func TestFlowCollector_EntriesReportWhatTheScrapeWithheld(t *testing.T) {
+	t.Parallel()
+
+	cfg := aggConfig()
+	agg := aggregator.New(cfg, aggregator.Modules{Hosts: true})
+
+	complete := flowRecord("10.0.0.1", "10.0.0.9", 5000)
+	complete.PacketsReported, complete.Packets = true, 10
+	partial := flowRecord("10.0.0.2", "10.0.0.9", 0)
+	partial.BytesReported, partial.PacketsReported = false, true
+	partial.Packets = 3
+	agg.Ingest([]flow.Record{complete, partial})
+
+	c := NewFlowCollector(agg, config.Collectors{Hosts: true}, cfg, nil, nil)
+
+	table, ok := c.Entries("hosts")
+	if !ok {
+		t.Fatal(`Entries("hosts") reported the table absent, want it read`)
+	}
+	if len(table.Rows) != 2 {
+		t.Fatalf("rows = %d, want both entries listed", len(table.Rows))
+	}
+
+	// Ranked by bytes, so the complete entry leads and the partial one, whose
+	// sum reads zero, follows.
+	if !table.Rows[0].BytesMeasured || !table.Rows[0].PacketsMeasured {
+		t.Errorf("row 1 = %+v, want both counts reported measured", table.Rows[0])
+	}
+	if table.Rows[1].BytesMeasured || !table.Rows[1].PacketsMeasured {
+		t.Errorf("row 2 = %+v, want the byte count alone reported unmeasured", table.Rows[1])
+	}
+	if !table.Other.BytesMeasured || !table.Other.PacketsMeasured {
+		t.Errorf("other = %+v, want the fold reported whole", table.Other)
+	}
+}
