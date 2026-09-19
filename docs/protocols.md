@@ -372,16 +372,21 @@ It utilizes a 16-byte message header followed by Sets framed identically to v9 F
 
 Variable-length fields carry inline lengths: one byte typically, or `255` followed by a two-byte length for larger payloads. Options templates must declare at least one scope field, positioned first. The enterprise bit explicitly controls the variable size of field specifiers.
 
-| Aspect            | NetFlow v9               | IPFIX                         |
-| :---------------- | :----------------------- | :---------------------------- |
-| Template set ID   | 0                        | 2                             |
-| Options set ID    | 1                        | 3                             |
-| Reserved set IDs  | 2–255                    | 0–1 and 4–255                 |
-| Message length    | Absent, count of records | Bytes 2–3                     |
-| Sequence counts   | Export packets           | Data records                  |
-| Options head      | Two byte lengths         | Field count, scope count      |
-| Enterprise fields | Absent                   | Bit 15 set, then a 4-byte PEN |
-| Variable length   | Absent                   | Declared `65535`              |
+Reduced-size encoding narrows an integer element to any width its value fits, so an odd width carries a reading like the rest. The `dateTime` types are excluded from it and hold their native width, a narrower field landing in 1970 rather than on the instant the device measured.
+
+A field count of zero is a template withdrawal. UDP gives no ordering, so a withdrawal is ignored and the set is walked past its four octets, leaving announcements behind it readable. A data set whose template is known carries at least one record, so a shorter body counts `malformed` instead of passing as padding.
+
+| Aspect            | NetFlow v9               | IPFIX                          |
+| :---------------- | :----------------------- | :----------------------------- |
+| Template set ID   | 0                        | 2                              |
+| Options set ID    | 1                        | 3                              |
+| Reserved set IDs  | 2–255                    | 0–1 and 4–255                  |
+| Message length    | Absent, count of records | Bytes 2–3                      |
+| Sequence counts   | Export packets           | Data records                   |
+| Options head      | Two byte lengths         | Field count, scope count       |
+| Enterprise fields | Absent                   | Bit 15 set, then a 4-byte PEN  |
+| Variable length   | Absent                   | Declared `65535`               |
+| Integer widths    | Native only              | Reduced to any width that fits |
 
 ```text
  0                   1                   2                   3
@@ -502,7 +507,9 @@ Records immediately follow the sample header. Each record is framed with a type,
 
 Pre-parsed records (formats 3/4) report IP packet lengths, deliberately excluding encapsulation bytes. Extended records (formats 1001-1003) annotate samples with VLANs, next hops, or AS paths. These annotations are decoded but currently do not feed any metric series.
 
-Raw packet headers contain the header protocol, original frame length, stripped byte count, and the captured header. Only Ethernet (protocol 1) is supported; others are refused as malformed. The byte counter strictly utilizes the original wire frame length, inclusive of FCS.
+Raw packet headers contain the header protocol, original frame length, stripped byte count, and the captured header. Ethernet (1) walks the frame, and IPv4 (11) and IPv6 (12) walk the packet directly. The enum runs to 14 and a receiver must tolerate values beyond it, so any other layer counts `unsupported_header_protocol` rather than `malformed`.
+
+The byte counter strictly utilizes the original wire frame length, inclusive of FCS. Every packet-describing record in one sample describes the same sampled packet, so a sample yields one flow record. The raw header is the preferred format and wins where a device sends it alongside a pre-parsed twin.
 
 ```text
  0                   1                   2                   3

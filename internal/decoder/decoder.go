@@ -42,6 +42,11 @@ const (
 	// ReasonDomainLimit marks a datagram whose observation domain the
 	// exporter refused, the device being at its domain budget.
 	ReasonDomainLimit = "domain_limit"
+	// ReasonUnsupportedHeaderProtocol marks an sFlow raw packet header whose
+	// link layer this exporter does not walk. The enum runs to fourteen and
+	// the specification tells a receiver to expect values it does not know,
+	// so an unread layer is a gap in coverage rather than a broken sample.
+	ReasonUnsupportedHeaderProtocol = "unsupported_header_protocol"
 )
 
 // decodeError carries the reason a datagram was rejected, for the error

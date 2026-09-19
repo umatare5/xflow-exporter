@@ -43,6 +43,22 @@ func FuzzDecode(f *testing.F) {
 	f.Add(sflowDatagram(2, sflowSample(sflowFlowSample,
 		sflowFlowSampleBody(10, 1, 2, rawHeaderRecord(tcpFrame(true), 900)))))
 
+	// The expanded sample and the withdrawal are the two shapes whose head
+	// differs from the form beside them, so a walk that takes the wrong
+	// length desynchronizes the rest of the datagram rather than failing.
+	f.Add(sflowDatagram(3, sflowSampleWithInterfaces(true,
+		[]uint32{0, 3}, []uint32{0, 4}, rawHeaderRecord(tcpFrame(false), 1518))))
+	f.Add(sflowDatagram(4, sflowSample(sflowFlowSample,
+		sflowFlowSampleBody(100, 1, 2,
+			rawHeaderRecord(tcpFrame(false), 1518),
+			sflowRecord(sflowSampledIPv4, make([]byte, 32))))))
+	f.Add(ipfixMessage(4, ipfixWithdrawal(ipfixTemplateSetID, fixtureIPFIXTemplateID)))
+	f.Add(ipfixMessage(5, ipfixWithdrawal(ipfixOptionsTemplateSetID, ipfixOptionsTemplateSetID)))
+	f.Add(ipfixMessage(6, flowSet(ipfixOptionsTemplateSetID,
+		append(be16(be16(nil, 700), 0), be16(be16(be16(nil, 701), 2), 1)...))))
+	f.Add(ipfixMessage(7, fixtureIPFIXTemplate(),
+		flowSet(fixtureIPFIXTemplateID, nil)))
+
 	exporter := netip.MustParseAddr("192.0.2.99")
 
 	f.Fuzz(func(t *testing.T, payload []byte) {

@@ -97,7 +97,9 @@ func (d *Decoder) decodeIPFIXSet(
 }
 
 // parseIPFIXTemplates compiles every template in one template set. A field
-// count of zero is a withdrawal rather than an announcement.
+// count of zero is a withdrawal, which RFC 7011 section 8.4 tells a collector
+// to ignore over UDP: the set is still walked past it so the announcements
+// behind it are read.
 func (d *Decoder) parseIPFIXTemplates(key domainKey, set []byte, issue func(reason string)) {
 	offset := 0
 	for offset+flowSetHeaderLen <= len(set) {
@@ -106,7 +108,6 @@ func (d *Decoder) parseIPFIXTemplates(key domainKey, set []byte, issue func(reas
 		offset += flowSetHeaderLen
 
 		if fieldCount == 0 {
-			d.withdrawTemplates(key, templateID, false)
 			continue
 		}
 		if templateID < minDataSetID || fieldCount > d.templates.maxFields {
@@ -147,7 +148,6 @@ func (d *Decoder) parseIPFIXOptionsTemplates(key domainKey, set []byte, issue fu
 		fieldCount := int(binary.BigEndian.Uint16(set[offset+2 : offset+4]))
 
 		if fieldCount == 0 {
-			d.withdrawTemplates(key, templateID, true)
 			offset += withdrawalLen
 			continue
 		}
@@ -180,18 +180,6 @@ func (d *Decoder) parseIPFIXOptionsTemplates(key domainKey, set []byte, issue fu
 			scopeCount:  scopeCount,
 			options:     true,
 		}, issue)
-	}
-}
-
-// withdrawTemplates handles an IPFIX withdrawal: one template, or every
-// template of a kind when the withdrawn id names the set id itself.
-func (d *Decoder) withdrawTemplates(key domainKey, templateID uint16, options bool) {
-	switch templateID {
-	case ipfixTemplateSetID, ipfixOptionsTemplateSetID:
-		d.templates.removeAll(key, templateID == ipfixOptionsTemplateSetID)
-	default:
-		_ = options
-		d.templates.remove(key, templateID)
 	}
 }
 
@@ -267,6 +255,16 @@ func (d *Decoder) decodeIPFIXDataSet(
 		}
 		records++
 	}
+
+	// RFC 7011 section 2 defines a Data Set as one or more Data Records, so a
+	// set whose template is known and whose body holds none is malformed
+	// rather than padding. The padding rule cannot say so: a body shorter than
+	// a record satisfies "shorter than any record in the Set".
+	if records == 0 {
+		issue(ReasonMalformed)
+		return dst, 0, false
+	}
+
 	// Leftover bytes shorter than a minimum record are padding, tolerated.
 	return dst, records, complete
 }

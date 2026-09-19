@@ -835,3 +835,123 @@ func TestDecodeSFlowV5_SampledRecordRefusesAnOverlongPacket(t *testing.T) {
 		})
 	}
 }
+
+// sampledIPv4Record wraps a pre-parsed IPv4 record naming one conversation.
+func sampledIPv4Record(srcPort, dstPort uint32) []byte {
+	body := be32(nil, 700)
+	body = be32(body, protocolUDP)
+	body = append(body, 10, 0, 0, 9, 10, 0, 0, 10)
+	body = be32(body, srcPort)
+	body = be32(body, dstPort)
+	body = be32(body, 0)
+	body = be32(body, 0)
+	return sflowRecord(sflowSampledIPv4, body)
+}
+
+// Every packet-describing record in one sample describes the same sampled
+// packet, so the sample yields one record however many the device sends. The
+// specification prefers the raw header and allows the pre-parsed forms only
+// where the header is not available, so the header wins over a twin.
+func TestDecodeSFlowV5_OnePacketRecordPerSample(t *testing.T) {
+	t.Parallel()
+
+	frame := tcpFrame(false)
+
+	tests := []struct {
+		name    string
+		records [][]byte
+		wantSrc uint16
+	}{
+		{
+			name:    "header before the pre-parsed twin",
+			records: [][]byte{rawHeaderRecord(frame, 64), sampledIPv4Record(53000, 53)},
+			wantSrc: 51234,
+		},
+		{
+			name:    "header behind the pre-parsed twin",
+			records: [][]byte{sampledIPv4Record(53000, 53), rawHeaderRecord(frame, 64)},
+			wantSrc: 51234,
+		},
+		{
+			name:    "two pre-parsed records keep the first",
+			records: [][]byte{sampledIPv4Record(53000, 53), sampledIPv4Record(6000, 7000)},
+			wantSrc: 53000,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
+				sflowFlowSampleBody(100, 1, 2, tt.records...)))
+
+			records, err := d.Decode(testExporter, datagram, nil)
+			if err != nil {
+				t.Fatalf("Decode() error = %v, want nil", err)
+			}
+			if len(records) != 1 {
+				t.Fatalf("Decode() returned %d records, want 1 for one sampled packet", len(records))
+			}
+			if got := records[0].SrcPort; got != tt.wantSrc {
+				t.Errorf("SrcPort = %d, want %d", got, tt.wantSrc)
+			}
+		})
+	}
+}
+
+// The header_protocol enum runs to fourteen and the specification tells a
+// receiver to expect values it does not know. An unwalked link layer is a gap
+// in coverage, counted apart from a broken sample, and the IP protocols share
+// the walk a packet section takes.
+func TestDecodeSFlowV5_HeaderProtocols(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		protocol    uint32
+		header      []byte
+		wantRecords int
+		wantReason  string
+	}{
+		{name: "ethernet", protocol: sflowHeaderEthernet, header: tcpFrame(false), wantRecords: 1},
+		{name: "ipv4", protocol: sflowHeaderIPv4, header: tcpFrame(false)[14:], wantRecords: 1},
+		{name: "ppp", protocol: 7, header: tcpFrame(false), wantReason: ReasonUnsupportedHeaderProtocol},
+		{name: "mpls", protocol: 13, header: tcpFrame(false), wantReason: ReasonUnsupportedHeaderProtocol},
+		{name: "past the enum", protocol: 99, header: tcpFrame(false), wantReason: ReasonUnsupportedHeaderProtocol},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			body := be32(nil, tt.protocol)
+			body = be32(body, 64)
+			body = be32(body, 0)
+			body = be32(body, uint32(len(tt.header)))
+			body = append(body, tt.header...)
+
+			datagram := sflowDatagram(1, sflowSample(sflowFlowSample,
+				sflowFlowSampleBody(100, 1, 2, sflowRecord(sflowRawPacketHeader, body))))
+
+			records, err := d.Decode(testExporter, datagram, nil)
+			if err != nil {
+				t.Fatalf("Decode() error = %v, want nil", err)
+			}
+			if len(records) != tt.wantRecords {
+				t.Fatalf("Decode() returned %d records, want %d", len(records), tt.wantRecords)
+			}
+			if got := errorCountFor(d, flow.VersionSFlowV5, ReasonMalformed); got != 0 {
+				t.Errorf("malformed count = %d, want 0", got)
+			}
+			if tt.wantReason == "" {
+				return
+			}
+			if got := errorCountFor(d, flow.VersionSFlowV5, tt.wantReason); got != 1 {
+				t.Errorf("%s count = %d, want 1", tt.wantReason, got)
+			}
+		})
+	}
+}
