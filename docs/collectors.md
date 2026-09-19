@@ -152,7 +152,7 @@ This section covers technical considerations and best practices for development,
 
 **Exporter Behaviors**: `xflow_exporter_*` sums domains (e.g., NetFlow v8 methods, v9 Source IDs). Summing across `odid` counts traffic once per cache view. `_flows_total` relies on cache-reported counts for aggregates, which differ from underlying flows.
 
-**Aggregated Caches**: A record is an aggregate where its version is NetFlow v8 or its template carries IE 3, and an aggregate reaches `xflow_exporter_*` alone — every other family would re-count traffic the device's main cache already reported. The element's presence decides it, so a cache declaring zero flows for an interval it contributed nothing to stays an aggregate and `xflow_aggregate_zero_flows_total` attributes it. An RFC 7015 mediator forwarding only aggregates therefore populates `xflow_exporter_*` and nothing else.
+**Aggregated Caches**: A record is an aggregate where its version is NetFlow v8 or its template carries IE 3, and an aggregate reaches `xflow_exporter_*` alone — every other family would re-count traffic the device's main cache already reported. The element's presence decides it, so a cache declaring zero flows stays an aggregate and `xflow_aggregate_zero_flows_total` attributes it.
 
 **Measured Counts**: `_bytes_total` and `_packets_total` appear only for entries every record of which carried that count, a template keeping its counters in unread elements leaving that family absent for good. Both cuts rank by byte volume, so such an entry ranks last and is withheld whole, the measured packet count included. The `other` fold is exempt, being a lower bound already.
 
