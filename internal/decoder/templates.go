@@ -134,9 +134,14 @@ type samplerTable struct {
 	// to it.
 	inherited atomic.Uint32
 	// sampled marks a device known to sample, by a declaration or by a
-	// record naming its sampler. It never clears, so an expiry that empties
-	// the table still reads as sampling.
+	// record naming its selection process. It never clears, so an expiry
+	// that empties the table still reads as sampling.
 	sampled atomic.Bool
+	// declaredZero marks a device that declared a rate for samplerId 0,
+	// which takes the identifier out of Cisco's unsampled-cache convention
+	// for good. It never clears either: a declaration the device stops
+	// announcing leaves its records owed a rate rather than complete.
+	declaredZero atomic.Bool
 }
 
 // declare records one announcement, reporting whether the table took it and
@@ -171,6 +176,9 @@ func (t *samplerTable) declare(odid, id uint32, named bool, rate uint32, at int6
 
 	t.inherited.Store(t.soleRateLocked())
 	t.sampled.Store(true)
+	if named && id == unsampledSamplerID {
+		t.declaredZero.Store(true)
+	}
 	return true, held && previous.rate != rate
 }
 
@@ -233,8 +241,9 @@ func (t *samplerTable) plainRate(odid uint32) uint32 {
 }
 
 // markSampled records that the device samples on evidence other than a
-// declaration, which is all NetFlow v5 can give: it names a sampler per
-// record and declares no rate anywhere.
+// declaration: a record naming a sampler or a selector. NetFlow v5 has
+// nothing else to give, declaring no rate anywhere, and a v9 or IPFIX device
+// reads as sampling before its first announcement arrives.
 func (t *samplerTable) markSampled() {
 	if !t.sampled.Load() {
 		t.sampled.Store(true)
@@ -358,13 +367,23 @@ func (d *domainState) countClockPair(inverted bool) {
 // Cisco names an unsampled cache with samplerId 0 rather than leaving the
 // element out, so a record naming an undeclared 0 is complete as it stands
 // and inherits nothing. A device that does declare 0 is taken at its word,
-// neither RFC 5477 nor IANA reserving the value.
+// neither RFC 5477 nor IANA reserving the value, and an expiry then owes
+// those records a rate rather than handing them one the device never tied to
+// that cache.
+//
+// Naming any other identifier is the device saying it samples, which every
+// protocol states the same way while only v9 and IPFIX can also declare it.
 func (d *domainState) correctionFor(id uint32, isSampler bool) (rate uint32, owed bool) {
+	unsampled := isSampler && id == unsampledSamplerID
+	if !unsampled {
+		d.declared.markSampled()
+	}
+
 	if rate, decided := d.declared.declaredRate(d.odid, id, isSampler); decided {
 		return rate, rate == 0
 	}
-	if isSampler && id == unsampledSamplerID {
-		return 0, false
+	if unsampled {
+		return 0, d.declared.declaredZero.Load()
 	}
 	return d.inheritedCorrection()
 }
@@ -877,7 +896,7 @@ type DomainSnapshot struct {
 	OptionsTemplates int
 	SequenceMissed   uint64
 	// SamplingUnresolved counts the records taken uncorrected, and Sampled
-	// carries whether the device ever declared, which a zero cannot.
+	// carries whether the device is known to sample, which a zero cannot.
 	SamplingUnresolved uint64
 	Sampled            bool
 	// SamplerRateChanges counts the declarations that replaced a rate this

@@ -86,7 +86,6 @@ func netflowV5SamplerRate(domain *domainState, samplerID uint32) uint32 {
 		return 0
 	}
 
-	domain.declared.markSampled()
 	rate, owed := domain.correctionFor(samplerID, true)
 	if owed {
 		domain.samplingUnresolved.Add(1)

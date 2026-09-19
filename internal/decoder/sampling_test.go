@@ -639,3 +639,107 @@ func TestSelectorRate_ResolvesWithinItsObservationDomain(t *testing.T) {
 		t.Errorf("xflow_sampling_unresolved_flows_total = %d, want the record counted", count)
 	}
 }
+
+// TestSamplingUnresolved_OwesTheExpiredZeroWithoutInheriting pins what a
+// device that declared a rate for samplerId 0 gets once that declaration ages
+// out. Naming a rate for 0 takes the identifier out of Cisco's
+// unsampled-cache convention, so its records are owed one afterwards rather
+// than complete as they stand.
+//
+// They inherit nothing. The rate another sampler still declares measured a
+// different cache, and handing it over would multiply an unsampled count by
+// that sampler's rate.
+//
+// The domain has to be fed before the sweep: a domain idle past the TTL is
+// evicted whole, and its device's table goes with it.
+func TestSamplingUnresolved_OwesTheExpiredZeroWithoutInheriting(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	at := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+	d.now = func() time.Time { return at }
+	d.templates.now = func() time.Time { return at }
+
+	decodeSampling(t, d, samplingDeclaration(1, true, [2]uint32{unsampledSamplerID, 32}, [2]uint32{5, 1024}))
+	decodeSampling(t, d, v9Packet(2, samplingODID, samplingTemplate(true)))
+
+	read := func(sequence uint32) uint32 {
+		records := decodeSampling(t, d, v9Packet(sequence, samplingODID,
+			flowSet(samplingTemplateID, samplingRecord(unsampledSamplerID, true))))
+		return records[0].SamplingRate
+	}
+	if got := read(3); got != 32 {
+		t.Fatalf("SamplingRate = %d, want 32 while the device stands by its declaration", got)
+	}
+	before, _ := domainSampling(d, samplingODID)
+
+	// Sampler 5 keeps being announced; only the declaration for 0 goes idle.
+	at = at.Add(config.DefaultParserTemplateTTL + time.Minute)
+	decodeSampling(t, d, samplingDeclaration(4, true, [2]uint32{5, 1024}))
+	decodeSampling(t, d, v9Packet(5, samplingODID, samplingTemplate(true)))
+	d.SweepDomains()
+
+	if got := read(6); got != 0 {
+		t.Errorf("SamplingRate = %d, want 0 rather than the rate sampler 5 declares", got)
+	}
+	if count, _ := domainSampling(d, samplingODID); count != before+1 {
+		t.Errorf("xflow_sampling_unresolved_flows_total = %d, want %d", count, before+1)
+	}
+}
+
+// TestSamplerTable_ReadsWhatTheDeviceSaidAboutItsSelection pins what the
+// table concludes from a declaration and from the identifier a record names.
+//
+// Naming a selection process is the device saying it samples, which v5 states
+// the only way it can and v9 and IPFIX state before their first options
+// record arrives -- a window a switch spends a minute or more in after every
+// restart. Naming nothing is not that evidence: a device that never samples
+// would otherwise publish a counter rising once per record.
+//
+// Naming samplerId 0 is not that evidence either. Cisco marks a cache it did
+// not sample that way, and a declaration that named no sampler says nothing
+// about 0, so the convention stands and the record is complete.
+func TestSamplerTable_ReadsWhatTheDeviceSaidAboutItsSelection(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		plainRate      uint32
+		named          bool
+		sampler        uint32
+		wantSampled    bool
+		wantUnresolved uint64
+	}{
+		"a record naming an undeclared sampler": {
+			named: true, sampler: 7, wantSampled: true, wantUnresolved: 1,
+		},
+		"a record naming nothing": {
+			wantUnresolved: 1,
+		},
+		"a record naming the unsampled cache": {
+			named: true, sampler: unsampledSamplerID,
+		},
+		"a rate declared for the domain, and a record naming the unsampled cache": {
+			plainRate: 32, named: true, sampler: unsampledSamplerID, wantSampled: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			if tc.plainRate != 0 {
+				decodeSampling(t, d, samplingDeclaration(1, false, [2]uint32{0, tc.plainRate}))
+			}
+			decodeSampling(t, d, v9Packet(2, samplingODID, samplingTemplate(tc.named)))
+			decodeSampling(t, d, v9Packet(3, samplingODID,
+				flowSet(samplingTemplateID, samplingRecord(tc.sampler, tc.named))))
+
+			count, sampled := domainSampling(d, samplingODID)
+			if sampled != tc.wantSampled {
+				t.Errorf("sampled = %v, want %v", sampled, tc.wantSampled)
+			}
+			if count != tc.wantUnresolved {
+				t.Errorf("xflow_sampling_unresolved_flows_total = %d, want %d", count, tc.wantUnresolved)
+			}
+		})
+	}
+}
