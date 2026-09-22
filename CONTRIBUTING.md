@@ -1,37 +1,33 @@
 # Contributing
 
-**[The shared contribution guide](https://github.com/umatare5/.github/blob/main/CONTRIBUTING.md)** defines the toolchain, the make targets and the conventions every exporter here shares.
+Thank you for your interest in contributing to the xflow-exporter.
 
-This page specifies what is particular to this one: what CI enforces, how a fixture is built and which page owns which fact.
+Please follow **[the shared contribution guide](https://github.com/umatare5/.github/blob/main/CONTRIBUTING.md)**, which covers:
+
+- **Development** – the tools to install and the order the pre-commit hooks run in.
+- **Command** – the `make` targets and what each one does.
+- **Testing** – test placement, mutation checks and what a fixture must carry.
+- **Documentation** – page ownership, pinned headings and the verbatim `--help` transcript.
+- **Release** – the three files a release touches and what a push to `main` triggers.
+- **Pull Requests** – the branch, commit and changelog steps, and what never enters a commit.
+
+This page specifies what is particular to this one.
 
 ## Development
 
-**The shared contribution guide** defines the general rules and conventions for contributing to this codebase.
+These points are where this repository departs from the shared defaults.
 
-- **Four checks are path-filtered** — govulncheck, markdownlint, Link Check and actionlint.
-- **Coverage fails below 80 percent** — `make test-unit` writes the profile without judging it.
-- **actionlint in CI never fails** — it reports and exits zero, so the pre-commit hook enforces it.
-- **`make lint` differs from CI** — CI pins the linter's version and runs `go mod verify` first.
+- **Do not assume every check runs.** Four are path-filtered: govulncheck, markdownlint, Link Check and actionlint.
+- **Keep coverage above 80 percent.** `make test-unit` writes the profile, and the coverage workflow is what judges it.
+- **Clear an actionlint finding before pushing.** The shared workflow lets a finding fail the step rather than exiting zero.
+- **Do not read `make lint` as the CI gate.** CI pins the linter to the version the caller names and runs `go mod verify` first.
+- **Stamp the version with `make build`.** The `--help` transcript reads `dev` until the build stamps it.
 
 ## Testing
 
-**The shared contribution guide** defines the general approach to the testing in this codebase.
+These points are where this repository's tests depart from the shared approach.
 
-- **Decoder fixtures are datagrams** — each is built byte by byte, as a device lays it on the wire.
-- **One skip is normal** — one test skips unless `XFLOW_TEST_ASN_DATABASE` names a MaxMind database.
-
-## Documentation
-
-The shared guide defines one owner per fact, and this table names the owner of each.
-
-| Page                   | Owns                                                |
-| :--------------------- | :-------------------------------------------------- |
-| `README.md`            | What it is, how to run and scrape it                |
-| `SECURITY.md`          | The exposure, the egress paths and redaction        |
-| `docs/README.md`       | The index of the documentation                      |
-| `docs/architecture.md` | The foundational architecture and design principles |
-| `docs/collectors.md`   | The traffic metric catalogues and technical notes   |
-| `docs/health.md`       | The health metric catalogues and technical notes    |
-| `docs/enrichment.md`   | The operator's files, and the reload path           |
-| `docs/help.md`         | The verbatim `--help` transcript                    |
-| `docs/protocols.md`    | The wire formats and the verified devices           |
+- **Lay a decoder fixture out byte by byte.** Each one is built the way a device puts it on the wire rather than by a helper.
+- **Assert absence rather than presence alone.** A field no record carried must publish no series the complete gather did.
+- **Keep a new family `promlint`-clean.** One test lints every gathered family rather than a sampled few.
+- **Expect one skip.** One test skips unless `XFLOW_TEST_ASN_DATABASE` names a MaxMind-format ASN database.

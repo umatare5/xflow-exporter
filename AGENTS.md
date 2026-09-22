@@ -1,7 +1,7 @@
 # Repository Instructions
 
 > [!IMPORTANT]
-> Read [`README.md`](README.md) for project overview and architecture.
+> Read [`README.md`](README.md) for project overview.
 
 ## Tech Stack
 
@@ -12,7 +12,24 @@
 
 ## Repository Structure
 
-See [`README.md`](README.md) for an overview of the repository structure.
+Read from `cmd/main.go`. Each package is named for what it owns.
+
+- [`cmd/main.go`](cmd/main.go) – application entry point
+- [`internal/cli/`](internal/cli) – command-line flags, defaults and app wiring
+- [`internal/config/`](internal/config) – flag reads and configuration validation
+- [`internal/receiver/`](internal/receiver) – UDP listeners and the bounded ingest queue
+- [`internal/decoder/`](internal/decoder) – datagram parsing, template cache and sampling
+- [`internal/flow/`](internal/flow) – the normalized record every decoder produces
+- [`internal/enrich/`](internal/enrich) – label fills from the local enrichment sources
+- [`internal/aggregator/`](internal/aggregator) – bounded in-memory tables and their sweeps
+- [`internal/collector/`](internal/collector) – metric descriptions and collection logic
+- [`internal/server/`](internal/server) – HTTP server, routing and process lifecycle
+- [`internal/remotewrite/`](internal/remotewrite) – Remote Write 2.0 client for the registry
+- [`internal/pool/`](internal/pool) – type-safe buffer pool the receive path reuses
+- [`internal/log/`](internal/log) – logger setup
+- [`docs/`](docs) – reference pages behind the README
+- [`scripts/`](scripts) – helper scripts the pre-commit hooks run
+- [`examples/`](examples) – Prometheus configuration, rules and the Grafana dashboard
 
 ## Setup and Commands
 
@@ -31,9 +48,10 @@ Follow [Effective Go](https://go.dev/doc/effective_go) conventions and the softw
 
 ## Testing
 
-Follow [`CONTRIBUTING.md` - Testing](CONTRIBUTING.md#testing).
+Follow [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 - Run `make test-unit` before creating a commit.
+- One snapshot backs every collector test – see [`CONTRIBUTING.md`](CONTRIBUTING.md) for why a private one hides absence.
 
 ## Commits and PRs
 
@@ -71,6 +89,6 @@ How the network devices behave and interact with the collectors. See also [Colle
 
 How the source of the enrichment data behaves and interacts with the collectors. See also [Enrichment](docs/enrichment.md).
 
-- **Enrichment data may be delayed or missing** — collectors must handle the absence gracefully and not assume immediate availability. See [Absence](docs/architecture.md#absence).
-- **Enrichment sources may update their data independently** — collectors should reconcile updates without duplicating or losing information. See [Enrichment](docs/enrichment.md#sources).
-- **A collector must validate enrichment data** — incorrect or malformed enrichment data should be rejected to maintain data integrity. See [Enrichment](docs/enrichment.md#threat-lists).
+- **Every enrichment source is a file on local disk** – a lookup reads memory and fetches nothing, so an absent source leaves the label unfilled rather than failing the scrape. See [Enrichment](docs/enrichment.md#sources).
+- **A reload swaps a source whole** – the new set is built before it replaces the old, and a source that fails to load keeps what it held, so no lookup sees a partial file. See [Enrichment](docs/enrichment.md#sources).
+- **A line naming no address is skipped rather than fatal** – `xflow_threat_skipped_lines` counts them, a CIDR prefix included, so a list that loaded is not a list that matched. See [Threat lists](docs/enrichment.md#threat-lists).

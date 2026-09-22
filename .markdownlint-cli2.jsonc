@@ -60,8 +60,7 @@
           "headings": [
             "# Contributing",
             "## Development", "*",
-            "## Testing", "*",
-            "## Documentation"
+            "## Testing"
           ]
         }
       }
@@ -81,12 +80,12 @@
             "## Overview", "*",
             "## Architecture", "*",
             "## Supported Protocols", "*",
+            "## Installation", "*",
             "## Quick Start", "*",
-            "## Collectors", "*",
-            "## Flags", "*",
-            "## Endpoints", "*",
+            "## Configuration", "*",
             "## Metrics", "*",
             "## Examples", "*",
+            "## Documentation", "*",
             "## Contributing", "*",
             "## License"
           ]
@@ -103,6 +102,8 @@
             "# Security Policy",
             "## What to Include", "*",
             "## Exposure", "*",
+            "## Endpoints", "*",
+            "## Ingress Paths", "*",
             "## Egress Paths", "*",
             "## Out of Scope"
           ]
@@ -118,7 +119,7 @@
           "headings": [
             "# Documentation",
             "## For Users Docs", "*",
-            "## For Developers Docs", "*"
+            "## For Developers Docs"
           ]
         }
       }
@@ -131,13 +132,13 @@
           "match_case": true,
           "headings": [
             "# Architecture",
-            "## Push and Pull", "*",
-            "## Decoder", "*",
+            "## Scrape Path", "*",
             "## Endpoints", "*",
-            "## Counter Semantics", "*",
+            "## Absence", "*",
+            "## Decoder", "*",
             "## Sampling Correction", "*",
-            "## Bounded State", "*",
-            "## Absence"
+            "## Counter Semantics", "*",
+            "## Bounded State"
           ]
         }
       }

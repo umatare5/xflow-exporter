@@ -115,7 +115,7 @@ Records endpoint write performance and limits observation exclusively to HTTP re
 
 ## Technical Notes
 
-This section covers technical considerations and best practices for development, configuration, and operation.
+These notes hold across the subsystems rather than for one metric.
 
 **Domain Identification**: A domain is strictly defined by the triple `exporter_address`, `version`, and `odid`. Removing `version` could merge unrelated protocols on the same device. `odid` represents Source ID on v9, Observation Domain ID on IPFIX, and sub-agent ID on sFlow.
 

@@ -85,7 +85,7 @@ GLOBAL OPTIONS:
 
 ## Technical Notes
 
-This section covers technical considerations and best practices for development, configuration, and operation.
+These notes cover what the transcript above states as a default but not as an effect.
 
 **Socket Buffer Tuning**: `--receiver.buffer-bytes` sets `SO_RCVBUF`, clamped by `net.core.rmem_max`. Tune both this and `--receiver.queue-size` to absorb burst cache flushes.
 

@@ -187,9 +187,9 @@ Summing these caches counts one flow multiple times. A device exporting an aggre
 
 ## NetFlow v9
 
-The template-based record format. It supports dynamic field definitions utilizing template and data flowsets.
+The template-based record format. A template declares the fields a data record carries, and the two flowset kinds interleave freely within one datagram.
 
-The template cache key is strictly evaluated as `(exporter_address, protocol, observation_domain_id)`.
+The template cache is keyed on `(exporter_address, protocol, observation_domain_id)`. A **Cisco C9800-CL-K9** exporting IPFIX and NetFlow v9 from one address announces options templates 256 and 257 under observation domain 1 in both. A key without the protocol therefore resolves one protocol's record against the other's layout.
 
 IE 61 carries the observation point, `0` for ingress and `1` for egress. RFC 5102 defines no other value, so anything else leaves the point unknown, as does a template omitting the element.
 

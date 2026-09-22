@@ -2,32 +2,31 @@
 
 This document preserves the foundational design and architectural principles of the xflow-exporter.
 
-## Push and Pull
+## Scrape Path
 
-The system employs a non-blocking scrape architecture utilizing lock-based concurrency control on aggregation tables. This decouples query responses from high-velocity ingest rates. Traditional liveness probes are omitted by design since push-based protocols inherently lack pollable endpoints.
-
-The receive pipeline is strictly bounded by configurable threshold flags. The ingestion layer optimizes batching via `recvmmsg` on Linux, falling back to sequential reads on other kernels. The bounded ingestion queue routes datagrams to specific decode workers via source address hashing, ensuring lock-free arrival ordering per device.
+Every scrape is served from the aggregation tables where they stand. No scrape waits on a datagram.
 
 ```mermaid
 flowchart LR
     L["UDP listeners"] --> Q[["Bounded queue"]]
-    Q -- "hashed by device" --> W["Decode workers"]
-    W -- "write lock" --> T[("Aggregation tables")]
+    Q --> D{"Dispatcher"}
+    D -- "hashed by device" --> W["Decode workers"]
+    W -- "read lock, write on a new key" --> T[("Aggregation tables")]
     SW["Idle sweeper"] -. "evict on the TTL" ..-> T
     COL["Collector"] -- "read lock, then the cut" ---> T
 ```
 
-## Decoder
+Ingest adds to a present entry's counters as [atomics](../internal/aggregator/table.go#L117) under the table's read lock, which is the lock a scrape takes as well. Only [creating an entry](../internal/aggregator/table.go#L139) or evicting one takes the write lock, so those are the two moments a reader waits for.
 
-The parsing engine maintains a stateful template cache for NetFlow v9 and IPFIX records. This cache is strictly partitioned by a composite key comprising the exporter address, protocol, and Observation Domain ID. This isolation prevents structural collisions when edge devices reuse template IDs across multiple internal domains.
+Each listener reads a whole batch per `recvmmsg` round trip on Linux and one datagram per call elsewhere. It then offers the datagram to the queue `--receiver.queue-size` bounds with a [non-blocking send](../internal/receiver/receiver.go#L207), and a datagram meeting a full queue is dropped and counted as `queue_full` against its listener.
 
-Records transporting sampled packet headers bypass standard field extraction. They are delegated to a dedicated sFlow header walk routine. Strict precedence rules govern element decoding and padding ambiguity resolution, ensuring deterministic parsing outcomes.
+One dispatcher drains that queue and hands each datagram to the shard of the worker its source address [hashes to](../internal/server/lifecycle.go#L404), which keeps one device's records in arrival order. That hand-off blocks on a shard [64 datagrams deep](../internal/server/lifecycle.go#L375), so a worker falling behind stops the dispatcher and the shared queue then drops for every device on the listener rather than for the slow one alone.
 
 ## Endpoints
 
-Every route binds to the address configured via `--web.listen-address` and `--web.listen-port`, and none of them authenticates — [`SECURITY.md`](../SECURITY.md) specifies the network path they belong on.
+The exporter serves `/metrics`, `/entries`, `/healthz`, `/-/reload` and a landing page at `/`. None of them authenticates – [`SECURITY.md`](../SECURITY.md) specifies the network path they belong on.
 
-| Path        | Methods   | Status             | Behaviour                                  |
+| Path        | Methods   | Status             | Behavior                                   |
 | :---------- | :-------- | :----------------- | :----------------------------------------- |
 | `/metrics`  | Any       | 200, 503           | 503 past ten concurrent gathers            |
 | `/entries`  | GET       | 200, 400, 405, 503 | 400 names the values, 503 past one listing |
@@ -35,23 +34,45 @@ Every route binds to the address configured via `--web.listen-address` and `--we
 | `/-/reload` | POST, PUT | 200, 405, 500      | 405 sets `Allow`, 500 names the error      |
 | `/`         | Any       | 200                | Catch-all landing page, never 404          |
 
-The HTTP server binds a unified listener for all internal routes without authentication layers. Unregistered paths act as a catch-all, returning HTTP 200 to prevent scanner enumeration. Disabling an endpoint flag leaves that route unregistered, securely falling back to this default behavior.
+The `/` route matches every unclaimed path, so an unknown one returns the landing page. A flag left unset leaves its route unregistered, so a disabled `/entries` and a misspelled path answer alike.
 
-The `/metrics` endpoint enforces a hard concurrency limit of 10 to bound memory consumption during in-flight serialization. Slower scrapes are forcefully terminated upon reaching a 30-second header timeout, the 60-second write deadline every route carries, or a 5-second graceful shutdown drain. This strictly bounds process lingering and exhaustion attacks.
+The `/healthz` endpoint returns a static 200 without reading the registry or the tables. That makes it a liveness probe and never a readiness one, because a push protocol offers no arrival an endpoint could wait for.
 
-The `/entries` endpoint admits one listing at a time and restarts that deadline at its own body, the largest the process writes, so a client that stops reading releases the slot on the deadline rather than on disconnect.
+The `/metrics` handler admits [ten concurrent gathers](../internal/server/server.go#L56) and answers the eleventh with 503. Every route carries a [60-second write deadline](../internal/server/server.go#L21) and a 30-second header timeout. The `/entries` body is the largest the process writes, so that route [restarts the deadline](../internal/server/entries.go#L73) at its own body and frees its slot rather than waiting on a disconnect.
 
-## Counter Semantics
+## Absence
 
-The aggregation model utilizes ephemeral counters that accumulate from entry creation and reset upon eviction. Prometheus staleness markers demarcate these lifecycles, ensuring `rate()` calculations gracefully handle metric reincarnation. Flow counts reflect raw device exports and are deliberately decoupled from sampling correction logic.
+A device omits a field its template never declared. Absence on the wire is not a reading, and publishing `0` for it invents one.
 
-The engine segregates capacity-induced ingest rejections into an isolated `other` fold. Evicted entries and dynamically shifting Top-K tails are intentionally excluded from this fold. This isolation prevents duplicate volume aggregation and safeguards the mathematical integrity of `sum(rate())` operations.
+A dimension no record carried opens no entry and publishes no series, never `0`, `false`, `NaN` or an epoch instant. An aggregated cache feeds `xflow_exporter_*` alone for the same reason, because every other family would re-count traffic the device's main cache already reported.
+
+The counts follow that rule per family. An entry [latches](../internal/aggregator/table.go#L42) on the first record that kept its byte or packet total in unread elements and [withholds that family](../internal/collector/flows.go#L89) from then on, a partial sum reading exactly like a complete one. The latch never clears, because an entry whose sum lost a contribution stays short however many complete records follow.
+
+Eviction is the push model's spelling of absence. A conversation nobody has seen for `--aggregation.entry-ttl` is not a zero, it is gone, and its series goes with it. Instants and rates are read at decode rather than at scrape, so a series carries what the device reported and not what Prometheus asked for.
+
+## Decoder
+
+A template cache holds every NetFlow v9 and IPFIX layout, keyed on [the exporter address, the protocol and the observation domain](../internal/decoder/templates.go#L91). The address and the domain scope a template the way RFC 7011 does, and the protocol joins them because three decoders share this store, each numbering its templates from 256 in a space of its own.
+
+A v9 Source ID, an IPFIX Observation Domain ID and an sFlow sub-agent id are unrelated numbers that collide freely. A device exporting two protocols from one address would otherwise decode a data set against whichever protocol announced the id last. That miss is silent, because the record walks to a length the fields agree on and reaches the aggregator as a measurement.
+
+sFlow ships sampled packet headers rather than flow state, so each readable record decodes into one single-packet record the sample's own rate then scales. A packet section is [kept until every field is read](../internal/decoder/fields.go#L89), so a device's own parsed fields win over the header the exporter would otherwise walk.
 
 ## Sampling Correction
 
-The engine computes sampling-corrected volumes proactively during decoding and stores the resulting products. Operands exceeding `uint64` capacities are clamped rather than wrapped, explicitly preventing false counter resets. Correction precedence strictly follows a deterministic protocol matrix.
+The product is formed at decode and stored, so every table holds corrected volumes and no consumer re-applies a rate. A record carrying no rate multiplies by one, and both products [saturate rather than wrap](../internal/flow/flow.go#L224), because a counter handed a reading below the one before it reads as a reset.
 
-Correction factors are dynamically sourced from v5 headers, options templates, or inline samples. Inline rates travel statelessly with the payload and produce no audit trails. Conversely, complex domain sampling rates are persistently tracked and exposed via dedicated health metrics for observability.
+The rate comes from a v5 header, an options declaration or an sFlow sample's own field. An sFlow rate rides its sample and reaches no health series, while a v9 or IPFIX declaration is tracked per domain and published.
+
+[Correction precedence](health.md#technical-notes) carries the order a record resolves in, and `xflow_sampling_unresolved_flows_total` counts the records reaching its end with nothing to apply.
+
+## Counter Semantics
+
+An entry's counters start at its creation and end at its eviction, and its series ends with it. Prometheus marks a series absent from the next scrape stale, so the entry's next incarnation reads as a new series rather than as a counter that fell. Flow counts are the figures the records reported and take no sampling correction.
+
+The `other` series carries the keys `--aggregation.max-entries` refused at ingest, and nothing else. An evicted entry is not folded into it: its bytes already reached Prometheus as increments on its own series. Publishing that lifetime a second time would make `sum(rate())` over the family read double.
+
+The tail below the [Top-K and min-bytes cuts](../internal/collector/flows.go#L531) is withheld rather than folded, for the same reason. Its entries are still accumulating, so summing them per scrape would make a counter that falls whenever one is evicted or grows into the cut. Entries the byte counts cannot separate are ordered by age, because at one in N a tie group straddling the cut would otherwise churn the series set on every scrape.
 
 ## Bounded State
 
@@ -73,14 +94,6 @@ Every map keyed by wire data takes a bound, because a push protocol cannot choos
 
 A device reporting both observation points of one path keys each conversation twice, so the aggregation entry bound covers roughly half as many of them. A device reporting one point, or none, is unaffected.
 
-The six `_refused_total` counters track attempts rather than entities, acting as capacity saturation indicators. Application bounds safely accommodate ten times the capacity of a standard NBAR2 pack. Aggregation tables are bounded by `--aggregation.max-entries`, histograms by their bucket cap and the device budget.
+The six `_refused_total` counters rise per attempt rather than per entity, so one flooding sender moves them faster than the state it failed to open. The application bounds hold ten times a standard NBAR2 pack, aggregation tables are bounded by `--aggregation.max-entries`, and the two histograms by their bucket cap and the device budget.
 
-Memory reclamation operates asynchronously via sweeps. Idle domains, sampler declarations and application tables are garbage-collected via TTL expiry, while devices are reclaimed only upon reaching fleet budgets. Refused devices keep decoding and feeding aggregation tables, losing their decode counters and timestamps alone, and the two domain budgets bound a product: a full fleet holds 256 domains per device.
-
-## Absence
-
-The aggregation engine strictly omits unsupplied dimensions rather than fabricating `0` or `false` values. This guarantees mathematical purity in downstream Prometheus aggregations. For example, an aggregated cache strictly feeds its own domain, completely bypassing downstream volumetric tables.
-
-The same rule covers the counts. An entry one of whose records kept its byte or packet total in unread elements publishes no such series, a partial sum reading exactly like a complete one, and the byte-ranked scrape cut withholds it whole. `/entries` reports both flags per row.
-
-Memory pressure is managed via temporal eviction strategies. Entries idling beyond configured TTLs are purged alongside their associated metrics series. Timestamps and rates are strictly generated at the point of decode, ensuring absolute temporal accuracy.
+Idle domains, sampler declarations and application tables expire on `--parser.template-ttl` in a sweep, while a device is reclaimed only once the fleet budget is reached. A refused device keeps decoding and feeding the aggregation tables, losing its decode counters and timestamps alone. The two domain budgets bound a product: a full fleet holds 256 domains per device.
