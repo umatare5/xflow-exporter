@@ -83,16 +83,37 @@ GLOBAL OPTIONS:
    --remote-write.username string                                 Basic auth username for the endpoint [$XFLOW_REMOTE_WRITE_USERNAME]
 ```
 
+## Flags
+
+The flags divide into a few families. These notes carry only what the transcript cannot.
+
+### --dry-run
+
+It validates the flags and reads every `--enrich.*` file. It binds no UDP or HTTP port and contacts no remote endpoint, so a dry run passes against a configuration already in service.
+
+### --receiver.buffer-bytes and --receiver.queue-size
+
+The first sets `SO_RCVBUF`, which `net.core.rmem_max` clamps. Size both against a cache flush rather than the average rate – [Scrape Path](architecture.md#scrape-path) carries why a full queue drops for every device on the listener.
+
+### --receiver.workers
+
+Each device hashes to one worker, so a count above the active device total leaves the extra workers idle. Zero sizes the pool to `GOMAXPROCS`.
+
+### --receiver.address
+
+The flag repeats, and every listener reads all five protocols on its own socket. One listener per device stream keeps a burst from one device off the others.
+
+### --remote-write.username and --remote-write.password
+
+The flag wins over `XFLOW_REMOTE_WRITE_USERNAME` and `XFLOW_REMOTE_WRITE_PASSWORD`.
+
+> [!IMPORTANT]
+> Pass the credential in the environment. A flag puts it in the process table, where `ps` shows it to every account on the host.
+
 ## Technical Notes
 
-These notes cover what the transcript above states as a default but not as an effect.
+The transcript above prints a default rather than an effect, and these hold across the flags rather than for one.
 
-**Socket Buffer Tuning**: `--receiver.buffer-bytes` sets `SO_RCVBUF`, clamped by `net.core.rmem_max`. Tune both this and `--receiver.queue-size` to absorb burst cache flushes.
+**Unstamped builds**: The `VERSION:` line reads `dev` unless the build stamped it, so a transcript taken from `go build` contradicts the release it ships with. `make build` stamps it.
 
-**Worker Allocation**: Ingest workers hash by exporter IP. Setting `--receiver.workers` beyond total active devices provides no concurrency benefit.
-
-**Protocol Multiplexing**: Listeners ingest all supported protocols on the same socket. Dedicate one listener per device stream to prevent packet reordering across threads.
-
-**Dry-Run Validation**: `--dry-run` validates flags and verifies readability of `--enrich.*` files without binding UDP/HTTP ports or testing remote endpoints.
-
-**Credential Precedence**: `--remote-write.*` CLI flags override `XFLOW_REMOTE_WRITE_*` environment variables. Prefer environment variables to prevent leaking credentials into the OS process table.
+**Flag order**: No flag depends on its position, and a repeated non-repeatable flag takes the last value rather than failing.

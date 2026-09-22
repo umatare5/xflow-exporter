@@ -53,7 +53,29 @@ The following table lists the metrics exposed by each subsystem.
 
 ## Labels
 
-Refer to the [Collectors](collectors.md#labels) for standard label definitions.
+Every decoder family is labeled with the domain it measures – `exporter_address`, `version` and `odid` – which [Collectors](collectors.md#labels) defines. The labels below appear on health families alone.
+
+| Label         | Value domain                                       |
+| :------------ | :------------------------------------------------- |
+| `listener`    | Receive address, as `--receiver.address` spells it |
+| `reason`      | Why a counter rose, a closed set per family        |
+| `type`        | `template` or `options_template`                   |
+| `sampler`     | Sampler identifier a device declared               |
+| `aggregation` | One of the eleven aggregation tables               |
+| `enricher`    | Enrichment source a lookup went through            |
+| `result`      | What that source made of the record                |
+
+**`reason`**
+
+a closed set that differs per family. `xflow_receiver_dropped_packets_total` takes `queue_full` at the queue handoff and `truncated` at the size check, both before a datagram is decoded. `xflow_decode_errors_total` takes `unsupported_version`, `unsupported_aggregation`, `unsupported_header_protocol`, `malformed`, `missing_template`, `invalid_template`, `reserved_set` or `domain_limit`.
+
+**`aggregation`**
+
+the table an entry count belongs to, one of `exporters`, `hosts`, `services`, `destinations`, `tcp_flags`, `dscp`, `asns`, `applications`, `countries`, `threats` and `vlans`. Only the tables their collector flags registered appear, so a disabled collector leaves no series rather than a zero.
+
+**`enricher` and `result`**
+
+the source a record passed through and what it made of the record. The sources are `asn`, `country`, `mapping`, `services`, `threat` and `vlan`, and each reports `filled`, `unknown` or `skipped` – [Annotations](#annotations) carries which of the six ever skip.
 
 ## Annotations
 

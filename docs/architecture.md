@@ -97,3 +97,11 @@ A device reporting both observation points of one path keys each conversation tw
 The six `_refused_total` counters rise per attempt rather than per entity, so one flooding sender moves them faster than the state it failed to open. The application bounds hold ten times a standard NBAR2 pack, `--aggregation.max-entries` bounds the aggregation tables, and their bucket cap and the device budget bound the two histograms.
 
 Idle domains, sampler declarations and application tables expire on `--parser.template-ttl` in a sweep, while the sweep reclaims a device only once the fleet reaches its budget. A refused device keeps decoding and feeding the aggregation tables, losing its decode counters and timestamps alone. The two domain budgets bound a product: a full fleet holds 256 domains per device.
+
+## Dashboards
+
+The bundled dashboard joins a traffic family onto an `_info` series to recover a readable name. Every `_info` series is keyed by a single label, `xflow_asn_info` by `asn` and `xflow_vlan_info` by `vlan`, while the family carrying the traffic keys on a pair. A join on the bare label therefore matches nothing, and `label_replace` has to rename one side first.
+
+A plain `group_left` then drops every row the `_info` series has no entry for, because a multiplication keeps only the matched side. The bundled panels pair each join with an `unless on (...)` fallback that labels those rows from the number itself. An AS the database cannot name therefore still ranks, rather than disappearing from the panel.
+
+Two row classes never match a name whatever the fallback: an entry the exporter keyed `0` because the device reported no value, and the `other` fold, which names no entity at all. Filter both out of a ranking panel with `exporter_address!="other"` and a `!="0"` matcher on the keyed label, or they outrank the traffic the panel is for.
