@@ -41,7 +41,7 @@ Network devices push flow datagrams into the exporter, and Prometheus pulls aggr
 This architecture suits **lightweight traffic analysis** in enterprise and small-to-medium data centers, where the resource and cost budgets are small. It does not suit **heavy traffic analysis** in large-scale data centers, clouds or ISPs, nor **digital forensics** in the security domain.
 
 > [!NOTE]
-> Scrapes read the aggregation tables where they stand, never waiting on flow arrival. See [Scrape Path](docs/architecture.md#scrape-path) for the details.
+> Scrapes read the aggregation tables as they stand, never waiting for a flow. See [Scrape Path](docs/architecture.md#scrape-path) for the details.
 
 ## Supported Protocols
 
@@ -170,7 +170,7 @@ The `--collector.*` flags toggle these collectors. See [Collectors](docs/collect
 > All collectors are **disabled by default**. Enable them based on the requirements.
 
 > [!TIP]
-> `--collector.distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration.
+> `--collector.distributions` needs Prometheus v3.8+ with native histogram ingestion in the scrape config.
 
 ### Endpoints
 
@@ -283,7 +283,6 @@ The following pages detail additional information.
 - **[Architecture](docs/architecture.md)** – the receive path, the bounded state and the absence rules.
 - **[Protocols](docs/protocols.md)** – the wire formats and the devices each decoder was read on.
 - **[Enrichment](docs/enrichment.md)** – the local files that fill labels, and what a reload re-reads.
-- **[Help](docs/help.md)** – the verbatim `--help` transcript and its notes.
 
 ## Contributing
 
