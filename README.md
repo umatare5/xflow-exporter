@@ -48,7 +48,7 @@ This architecture suits **lightweight traffic analysis** in enterprise and small
 **NetFlow v5, v8, v9, IPFIX** and **sFlow v5**, every one of them on the same receiver port.
 
 > [!TIP]
-> The protocol is resolved from a datagram's leading bytes rather than from the port it arrived on. See [Version Identification](docs/protocols.md#version-identification) for how a datagram is detected.
+> A datagram's leading bytes name the protocol, not the port it arrived on. See [Version Identification](docs/protocols.md#version-identification) for how the decoder reads them.
 
 ## Installation
 

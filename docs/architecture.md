@@ -18,7 +18,7 @@ flowchart LR
 
 Ingest adds to a present entry's counters as [atomics](../internal/aggregator/table.go#L117) under the table's read lock, which is the lock a scrape takes as well. Only [creating an entry](../internal/aggregator/table.go#L139) or evicting one takes the write lock, so those are the two moments a reader waits for.
 
-Each listener reads a whole batch per `recvmmsg` round trip on Linux and one datagram per call elsewhere. It then offers the datagram to the queue `--receiver.queue-size` bounds with a [non-blocking send](../internal/receiver/receiver.go#L207), and a datagram meeting a full queue is dropped and counted as `queue_full` against its listener.
+Each listener reads a whole batch per `recvmmsg` round trip on Linux and one datagram per call elsewhere. It then offers the datagram to the queue `--receiver.queue-size` bounds with a [non-blocking send](../internal/receiver/receiver.go#L207), and a listener that meets a full queue drops the datagram and counts it as `queue_full`.
 
 One dispatcher drains that queue and hands each datagram to the shard of the worker its source address [hashes to](../internal/server/lifecycle.go#L404), which keeps one device's records in arrival order. That hand-off blocks on a shard [64 datagrams deep](../internal/server/lifecycle.go#L375), so a worker falling behind stops the dispatcher and the shared queue then drops for every device on the listener rather than for the slow one alone.
 
@@ -60,9 +60,9 @@ sFlow ships sampled packet headers rather than flow state, so each readable reco
 
 ## Sampling Correction
 
-The product is formed at decode and stored, so every table holds corrected volumes and no consumer re-applies a rate. A record carrying no rate multiplies by one, and both products [saturate rather than wrap](../internal/flow/flow.go#L224), because a counter handed a reading below the one before it reads as a reset.
+The decoder forms the product and stores it, so every table holds corrected volumes and no consumer re-applies a rate. A record carrying no rate multiplies by one, and both products [saturate rather than wrap](../internal/flow/flow.go#L224), because a counter handed a reading below the one before it reads as a reset.
 
-The rate comes from a v5 header, an options declaration or an sFlow sample's own field. An sFlow rate rides its sample and reaches no health series, while a v9 or IPFIX declaration is tracked per domain and published.
+The rate comes from a v5 header, an options declaration or an sFlow sample's own field. An sFlow rate rides its sample and reaches no health series, while the decoder tracks a v9 or IPFIX declaration per domain and publishes it.
 
 [Correction precedence](health.md#technical-notes) carries the order a record resolves in, and `xflow_sampling_unresolved_flows_total` counts the records reaching its end with nothing to apply.
 
@@ -72,7 +72,7 @@ An entry's counters start at its creation and end at its eviction, and its serie
 
 The `other` series carries the keys `--aggregation.max-entries` refused at ingest, and nothing else. An evicted entry is not folded into it: its bytes already reached Prometheus as increments on its own series. Publishing that lifetime a second time would make `sum(rate())` over the family read double.
 
-The tail below the [Top-K and min-bytes cuts](../internal/collector/flows.go#L531) is withheld rather than folded, for the same reason. Its entries are still accumulating, so summing them per scrape would make a counter that falls whenever one is evicted or grows into the cut. Entries the byte counts cannot separate are ordered by age, because at one in N a tie group straddling the cut would otherwise churn the series set on every scrape.
+The [Top-K and min-bytes cuts](../internal/collector/flows.go#L531) withhold the tail below them rather than folding it, for the same reason. Its entries are still accumulating, so summing them per scrape would make a counter that falls whenever the sweep evicts one or one grows into the cut. The cut orders entries the byte counts cannot separate by age, because at one in N a tie group straddling the cut would otherwise churn the series set on every scrape.
 
 ## Bounded State
 
@@ -94,6 +94,6 @@ Every map keyed by wire data takes a bound, because a push protocol cannot choos
 
 A device reporting both observation points of one path keys each conversation twice, so the aggregation entry bound covers roughly half as many of them. A device reporting one point, or none, is unaffected.
 
-The six `_refused_total` counters rise per attempt rather than per entity, so one flooding sender moves them faster than the state it failed to open. The application bounds hold ten times a standard NBAR2 pack, aggregation tables are bounded by `--aggregation.max-entries`, and the two histograms by their bucket cap and the device budget.
+The six `_refused_total` counters rise per attempt rather than per entity, so one flooding sender moves them faster than the state it failed to open. The application bounds hold ten times a standard NBAR2 pack, `--aggregation.max-entries` bounds the aggregation tables, and their bucket cap and the device budget bound the two histograms.
 
-Idle domains, sampler declarations and application tables expire on `--parser.template-ttl` in a sweep, while a device is reclaimed only once the fleet budget is reached. A refused device keeps decoding and feeding the aggregation tables, losing its decode counters and timestamps alone. The two domain budgets bound a product: a full fleet holds 256 domains per device.
+Idle domains, sampler declarations and application tables expire on `--parser.template-ttl` in a sweep, while the sweep reclaims a device only once the fleet reaches its budget. A refused device keeps decoding and feeding the aggregation tables, losing its decode counters and timestamps alone. The two domain budgets bound a product: a full fleet holds 256 domains per device.
