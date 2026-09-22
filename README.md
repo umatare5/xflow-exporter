@@ -47,7 +47,7 @@ This architecture suits **lightweight traffic analysis** in enterprise and small
 > [!NOTE]
 > Scrapes read the aggregation tables as they stand, never waiting for a flow. See [Scrape Path](docs/architecture.md#scrape-path) for the details.
 
-## Supported Protocols
+## Supported Environment
 
 **NetFlow v5, v8, v9, IPFIX** and **sFlow v5**, every one of them on the same receiver port.
 

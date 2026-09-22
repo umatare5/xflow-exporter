@@ -79,7 +79,7 @@
           "headings": [
             "## Overview", "*",
             "## Architecture", "*",
-            "## Supported Protocols", "*",
+            "## Supported Environment", "*",
             "## Installation", "*",
             "## Quick Start", "*",
             "## Configuration", "*",
@@ -138,7 +138,8 @@
             "## Decoder", "*",
             "## Sampling Correction", "*",
             "## Counter Semantics", "*",
-            "## Bounded State"
+            "## Bounded State", "*",
+            "## Dashboards"
           ]
         }
       }
@@ -184,6 +185,7 @@
           "match_case": true,
           "headings": [
             "# Help",
+            "## Flags", "*",
             "## Technical Notes"
           ]
         }
