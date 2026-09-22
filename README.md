@@ -34,9 +34,13 @@ This exporter allows a Prometheus instance to scrape metrics from the NetFlow/IP
 
 Network devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it.
 
-<picture>
-  <img alt="Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it" src="./docs/assets/readme_architecture.png" width="705px">
-</picture>
+```mermaid
+flowchart LR
+    EXP["Flow Exporters<br>(Catalyst / SRX ...)"] -- "NetFlow / IPFIX / sFlow<br>UDP push" --> RCV["Flow Receiver<br>(xflow-exporter)"]
+    PRM["Flow Analyzer<br>(Prometheus)"] -- "scrape /metrics<br>HTTP pull" --> RCV
+    GRF["Grafana"] -- "PromQL" --> PRM
+    PRM -- "alerts" --> AM["Alertmanager"]
+```
 
 This architecture suits **lightweight traffic analysis** in enterprise and small-to-medium data centers, where the resource and cost budgets are small. It does not suit **heavy traffic analysis** in large-scale data centers, clouds or ISPs, nor **digital forensics** in the security domain.
 
