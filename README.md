@@ -23,7 +23,7 @@
 
 ## Overview
 
-xflow-exporter receives flow datagrams from networking devices and exposes them as Prometheus metrics.
+This exporter allows a Prometheus instance to scrape metrics from the NetFlow/IPFIX/sFlow datagrams.
 
 - ⚙️ **Unifies Workflow**: Bundles collection, aggregation, and enrichment features into a single exporter
 - 🧮 **In-Memory Aggregation**: Summarizes bounded-cardinality tables with Top-K and idle eviction
@@ -32,28 +32,47 @@ xflow-exporter receives flow datagrams from networking devices and exposes them 
 
 ## Architecture
 
-Networking devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it.
+Network devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it.
 
-<picture>
-  <img alt="Devices push flow datagrams into the exporter, and Prometheus pulls aggregates out of it" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/readme_architecture.png" width="705px">
-</picture>
+```mermaid
+flowchart LR
+    EXP["Flow Exporters<br>(Catalyst / SRX ...)"] -- "NetFlow / IPFIX / sFlow<br>UDP push" --> RCV["Flow Receiver<br>(xflow-exporter)"]
+    PRM["Flow Analyzer<br>(Prometheus)"] -- "scrape /metrics<br>HTTP pull" --> RCV
+    GRF["Grafana"] -- "PromQL" --> PRM
+    PRM -- "alerts" --> AM["Alertmanager"]
+```
 
-This architecture is **suitable for lightweight traffic analysis** in enterprise and small-to-medium data center environments with minimal resource and cost requirements, **but not for heavy traffic analysis** in large-scale data centers, clouds, ISPs, or **the digital forensics in the security domain.**
+This architecture suits **lightweight traffic analysis** in enterprise and small-to-medium data centers, where the resource and cost budgets are small. It does not suit **heavy traffic analysis** in large-scale data centers, clouds or ISPs, nor **digital forensics** in the security domain.
 
 > [!NOTE]
-> Scrapes read in-memory tables asynchronously, never waiting on flow arrival. See [Push and Pull](docs/architecture.md#push-and-pull) for the details.
+> Scrapes read the aggregation tables as they stand, never waiting for a flow. See [Scrape Path](docs/architecture.md#scrape-path) for the details.
 
 ## Supported Protocols
 
-**NetFlow v5, v8, v9, IPFIX and sFlow v5.** See [Protocols](docs/protocols.md) for wire formats and devices each decoder was read on.
+**NetFlow v5, v8, v9, IPFIX** and **sFlow v5**, every one of them on the same receiver port.
+
+> [!TIP]
+> A datagram's leading bytes name the protocol, not the port it arrived on. See [Version Identification](docs/protocols.md#version-identification) for how the decoder reads them.
+
+## Installation
+
+This exporter supports container images and OS-specific binaries.
+
+```bash
+docker pull ghcr.io/umatare5/xflow-exporter
+```
+
+Or, download the binaries from [Releases](https://github.com/umatare5/xflow-exporter/releases). `(linux|darwin)_(amd64|arm64)` and `windows_amd64` are supported.
 
 ## Quick Start
 
-### 1. Send flow records from the networking devices
+This exporter needs a network device exporting flows to it first.
 
-Export flows to the xflow-exporter's `4739/udp` — the default IANA registered port for IPFIX.
+### 1. Export flows from the network device
 
-For example, on **Cisco C2960CX** and **Netflow v9**, use the following configuration to export flows:
+Send flows to the exporter's `4739/udp`, the IANA registered port for IPFIX.
+
+For example, on **Cisco C2960CX** and **NetFlow v9**, use the following configuration to export flows:
 
 ```bash
 # 1. Create minimum set of flow records
@@ -98,38 +117,49 @@ show flow monitor EXAMPLE_FLOW_MONITOR
 # show flow monitor EXAMPLE_FLOW_MONITOR cache
 ```
 
-> [!TIP]
-> All protocols reach that same port. See [Version Identification](docs/protocols.md#version-identification) for how a datagram is detected.
-
-### 2. Run the exporter and start receiving flow records
-
-Run the exporter using Docker as shown below, and start to receive the flow records.
+### 2. Run the exporter with Docker
 
 ```bash
-docker run -p 10053:10053 -p 4739:4739/udp ghcr.io/umatare5/xflow-exporter:latest
+docker run -p 10053:10053 -p 4739:4739/udp \
+  ghcr.io/umatare5/xflow-exporter:v0.12.0 --collector.exporters
 ```
 
-> [!TIP]
-> See [Releases](https://github.com/umatare5/xflow-exporter/releases) for OS-specific binaries. `(linux|darwin)_(amd64|arm64)` and `windows_amd64` are supported.
-
-### 3. Scrape it
+### 3. Scrape the metrics
 
 ```bash
 curl http://localhost:10053/metrics
 ```
 
 > [!TIP]
-> See [Metrics](#metrics) for available metrics, and [Prometheus Configuration](#prometheus-configuration) for the job and the alerting rules.
+> See [Collectors](#collectors) for the complete metrics, and [Prometheus Configuration](#prometheus-configuration) for scrape jobs and alerting rules.
 
-## Collectors
+## Configuration
 
-This exporter supports multiple collectors. See [Collectors](docs/collectors.md) for the details.
+This exporter uses command-line flags for all configuration.
 
-| Collector     | Flag                        | Exposes                                    |
+### Flags
+
+`xflow-exporter --help` prints full flags. See [Help](docs/help.md) for details.
+
+| Component    | Flag               | Description                                                             |
+| :----------- | :----------------- | :---------------------------------------------------------------------- |
+| Collector    | `--collector.*`    | Which collectors register. See [Collectors](#collectors).               |
+| Endpoint     | `--web.*`          | The listen address and the telemetry path. See [Endpoints](#endpoints). |
+| Receiver     | `--receiver.*`     | The sockets, the ingest queue and the decode workers.                   |
+| Parser       | `--parser.*`       | The NetFlow v9 and IPFIX template cache.                                |
+| Aggregation  | `--aggregation.*`  | The entry bound, the idle TTL and the scrape-time cut.                  |
+| Enrichment   | `--enrich.*`       | The local files that fill the labels a device omits.                    |
+| Remote Write | `--remote-write.*` | The Remote Write 2.0 endpoint and its credential.                       |
+
+### Collectors
+
+The `--collector.*` flags toggle these collectors. See [Collectors](docs/collectors.md) for details.
+
+| Collector     | Flag                        | Description                                |
 | :------------ | :-------------------------- | :----------------------------------------- |
-| Applications  | `--collector.applications`  | Traffic per application — `--enrich.*`     |
-| BGP AS        | `--collector.asns`          | Traffic per AS pair — `--enrich.*`         |
-| Countries     | `--collector.countries`     | Traffic per country pair — `--enrich.*`    |
+| Applications  | `--collector.applications`  | Traffic per application – `--enrich.*`     |
+| BGP AS        | `--collector.asns`          | Traffic per AS pair – `--enrich.*`         |
+| Countries     | `--collector.countries`     | Traffic per country pair – `--enrich.*`    |
 | Destinations  | `--collector.destinations`  | Traffic per destination, protocol, port    |
 | Distributions | `--collector.distributions` | Flow size and duration native histograms   |
 | DSCP          | `--collector.dscp`          | Traffic per DSCP class                     |
@@ -137,48 +167,37 @@ This exporter supports multiple collectors. See [Collectors](docs/collectors.md)
 | Hosts         | `--collector.hosts`         | Traffic per source-destination pair        |
 | Services      | `--collector.services`      | Traffic per address pair, protocol, port   |
 | TCP Flags     | `--collector.tcp-flags`     | Traffic per TCP control-bit profile        |
-| Threats       | `--collector.threats`       | Traffic per flagged address — `--enrich.*` |
-| VLANs         | `--collector.vlans`         | Traffic per VLAN pair — `--enrich.*`       |
+| Threats       | `--collector.threats`       | Traffic per flagged address – `--enrich.*` |
+| VLANs         | `--collector.vlans`         | Traffic per VLAN pair – `--enrich.*`       |
 
 > [!IMPORTANT]
-> All collectors are **disabled by default** to bound cardinality, and `--collector.distributions` needs Prometheus v3.8+ with native histogram ingestion enabled in the scrape configuration.
+> All collectors are **disabled by default**. Enable them based on the requirements.
 
-## Flags
+> [!TIP]
+> `--collector.distributions` needs Prometheus v3.8+ with native histogram ingestion in the scrape config.
 
-`xflow-exporter --help` prints full flags. See [Help](docs/help.md) for the details.
+### Endpoints
 
-| Flag               | Description                                                                                                           |
-| :----------------- | :-------------------------------------------------------------------------------------------------------------------- |
-| `--aggregation.*`  | For controlling how flow records are combined and published. See [Push and Pull](docs/architecture.md#push-and-pull). |
-| `--enrich.*`       | For filling missing labels from local files. See [Enrichment](docs/enrichment.md).                                    |
-| `--parser.*`       | For NetFlow v9 and IPFIX templates. See [Decoder](docs/architecture.md#decoder).                                      |
-| `--receiver.*`     | For incoming flow datagrams. See [Push and Pull](docs/architecture.md#push-and-pull).                                 |
-| `--remote-write.*` | For shipping the registry to a Remote Write 2.0 endpoint. See [Remote Write](SECURITY.md#remote-write).               |
+The exporter exposes these endpoints. See [Endpoints](docs/architecture.md#endpoints) for what each status code means.
 
-## Endpoints
+| Path        | Description                                      |
+| :---------- | :----------------------------------------------- |
+| `/`         | Landing page, confirming the exporter is up      |
+| `/metrics`  | Metrics endpoint, set by `--web.telemetry-path`  |
+| `/entries`  | Entry listing, ranking every entry a table holds |
+| `/healthz`  | Liveness probe, ignoring flow data               |
+| `/-/reload` | Reload endpoint, re-reading the enrichment files |
 
-The exporter serves these endpoints. See [Endpoints](docs/architecture.md#endpoints) for the details, and [Sources](docs/enrichment.md#sources) for what a reload does.
-
-| Path        | Detail                                                                         |
-| :---------- | :----------------------------------------------------------------------------- |
-| `/`         | Landing page – confirming the exporter is up at <http://localhost:10053/>      |
-| `/metrics`  | Metrics endpoint – set via `--web.telemetry-path`                              |
-| `/entries`  | Entry listing – ranks every entry, needs `--web.enable-aggregation-entries`    |
-| `/healthz`  | Liveness endpoint – returns static 200 and deliberately ignores flow data      |
-| `/-/reload` | Reload endpoint – re-reads sources on POST/PUT, needs `--web.enable-lifecycle` |
+> [!NOTE]
+> `/entries` needs `--web.enable-aggregation-entries` and `/-/reload` needs `--web.enable-lifecycle`. A flag left unset leaves its route unregistered, and the landing page answers that path instead.
 
 ## Metrics
 
 This exporter exposes metrics for various aspects of network traffic.
 
-| Page                                  | Covers                                                        |
-| :------------------------------------ | :------------------------------------------------------------ |
-| **[Collectors](docs/collectors.md)**  | The twelve collectors, their metrics and their labels         |
-| **[Exporter health](docs/health.md)** | Reception, decoding, aggregation, enrichment and remote write |
-
 ### Collector Metrics
 
-The following table summarizes the popular metrics of this collector. See [`docs/collectors.md`](docs/collectors.md) for the full list.
+The following table summarizes the popular metrics. See [Collectors](docs/collectors.md) for the complete metrics.
 
 | Collector     | Metric                          | Type      | Description            |
 | :------------ | :------------------------------ | :-------- | :--------------------- |
@@ -190,7 +209,7 @@ The following table summarizes the popular metrics of this collector. See [`docs
 
 ### Exporter Health Metrics
 
-The following table summarizes the health metrics of the exporter itself. See [`docs/health.md`](docs/health.md) for the full list.
+The following table summarizes the health metrics of the exporter itself. See [Exporter Health](docs/health.md) for details.
 
 | Metric                                 | Type    | Description                            |
 | :------------------------------------- | :------ | :------------------------------------- |
@@ -203,51 +222,76 @@ The following table summarizes the health metrics of the exporter itself. See [`
 
 ## Examples
 
+There are several operational examples below.
+
 ### Exporter Configuration
 
-With no collector enabled the receiver counts every datagram and publishes no traffic series:
+The three patterns below cover the common use cases.
+
+**Minimal Pattern**: With no collector enabled, the receiver counts every datagram and publishes no traffic series.
 
 ```bash
-$ ./xflow-exporter --log.format text
-time=2026-08-26T19:58:24.288+09:00 level=INFO msg="Starting xflow-exporter" version=0.1.0 listen_address=0.0.0.0 listen_port=10053 telemetry_path=/metrics
-time=2026-08-26T19:58:24.291+09:00 level=INFO msg="Flow receiver listening" listener=:4739
-time=2026-08-26T19:58:24.292+09:00 level=INFO msg="HTTP server listening" addr=0.0.0.0:10053
+./xflow-exporter
 ```
 
-The three collectors usually start from:
+**Standard Pattern**: The three collectors most deployments start from.
 
 ```bash
 ./xflow-exporter --collector.exporters --collector.hosts --collector.services
 ```
 
+**Complete Pattern**: Every collector registers, and every enrichment source is named.
+
+```bash
+./xflow-exporter \
+  --collector.exporters --collector.hosts --collector.services \
+  --collector.destinations --collector.tcp-flags --collector.dscp \
+  --collector.asns --collector.applications --collector.countries \
+  --collector.threats --collector.vlans --collector.distributions \
+  --enrich.services \
+    --enrich.asn-database ./tmp/asn.mmdb \
+    --enrich.country-database ./tmp/country.mmdb \
+    --enrich.threat-file ./tmp/threat-ips.txt \
+    --enrich.mapping-file ./tmp/mapping.yml \
+  --web.enable-lifecycle --web.enable-aggregation-entries
+```
+
 > [!NOTE]
-> See [`.air.toml`](https://github.com/umatare5/xflow-exporter/blob/main/.air.toml) for the complete configuration, which enables every collector.
+> See [`.air.toml`](./.air.toml) for the development configuration this pattern is taken from.
 
 ### Prometheus Configuration
 
-There are several Prometheus configuration examples provided below:
+See the following Prometheus configuration examples:
 
-- **Example Job:** [`examples/prometheus.yml`](./examples/prometheus.yml)
-- **Example Recording Rules:** [`examples/prometheus_record_rules.yml`](./examples/prometheus_record_rules.yml)
-- **Example Alerting Rules:** [`examples/prometheus_alert_rules.yml`](./examples/prometheus_alert_rules.yml)
+- **Example Job**: Add from [`examples/prometheus.yml`](./examples/prometheus.yml) to your Prometheus.
+- **Example Recording Rules**: Add from [`examples/prometheus_record_rules.yml`](./examples/prometheus_record_rules.yml) to your Prometheus.
+- **Example Alerting Rules**: Add from [`examples/prometheus_alert_rules.yml`](./examples/prometheus_alert_rules.yml) to your Prometheus.
 
-### Grafana Configuration
+### Grafana Dashboard
 
 Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json) and visualize the metrics.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard_dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard.png">
-  <img alt="Grafana dashboard showing flow volume, composition and exporter health panels" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard.png">
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/xflow-exporter-dashboard_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="./docs/assets/xflow-exporter-dashboard.png">
+  <img alt="Grafana dashboard showing flow volume, composition and exporter health panels" src="./docs/assets/xflow-exporter-dashboard.png">
 </picture>
 
 > [!TIP]
-> See [`docs/assets/xflow-exporter-dashboard_full.png`](https://github.com/umatare5/xflow-exporter/blob/main/docs/assets/xflow-exporter-dashboard_full.png) for the full capture image of the example.
+> See [`docs/assets/xflow-exporter-dashboard_full.png`](./docs/assets/xflow-exporter-dashboard_full.png) for the full capture.
+
+## Documentation
+
+The following pages detail additional information.
+
+- **[Architecture](docs/architecture.md)** – the receive path, the bounded state and the absence rules.
+- **[Protocols](docs/protocols.md)** – the wire formats and the devices each decoder was read on.
+- **[Enrichment](docs/enrichment.md)** – the local files that fill labels, and what a reload re-reads.
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the development, the tests, the documentation conventions and the release process.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup, test conventions and others.
 
 ## License
 
-MIT. The binary statically links Apache-2.0, MIT, ISC and BSD 3-Clause dependencies, whose notices are reproduced in [`NOTICE`](NOTICE) and shipped alongside [`LICENSE`](LICENSE) in every release archive and container image.
+MIT. The binary statically links Apache-2.0, MIT, ISC and BSD 3-Clause dependencies. Their notices are reproduced in [`NOTICE`](NOTICE) and shipped alongside [`LICENSE`](LICENSE) in every release archive and container image.

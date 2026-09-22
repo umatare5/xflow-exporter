@@ -144,7 +144,7 @@ Native histograms observing flow byte sizes and durations, excluding unmeasured 
 
 ## Technical Notes
 
-This section covers technical considerations and best practices for development, configuration, and operation.
+These notes hold across the traffic families rather than for one of them.
 
 **Interface Identifiers (`0`)**: `input_ifindex`/`output_ifindex` resolve to `0` when: the template omits IE 10 or 14; the device exported `0`; sFlow format 0 sets `0x3FFFFFFF` (agent is source/sink); sFlow format 1/2 indicate discard codes/counts; or the field width is unsupported by readers. RFC 2863 numbers interfaces from 1, preventing collision.
 

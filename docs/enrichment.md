@@ -37,7 +37,7 @@ This populates AS numbers and ISO country codes where omitted by the device. Loo
 
 `--enrich.mapping-file` labels devices, interfaces, VLANs, and extra transport ports.
 
-See [examples/mapping.yml](../examples/mapping.yml) for the example with the detailed configuration comments.
+See [`examples/mapping.yml`](../examples/mapping.yml) for the example with the detailed configuration comments.
 
 ## Service Names
 

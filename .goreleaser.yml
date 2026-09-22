@@ -90,18 +90,15 @@ release:
     This release contains the Prometheus Exporter for NetFlow, IPFIX and sFlow.
 
     > [!IMPORTANT]
-    > A minor release may rename or remove a metric, change a default, or drop a built-in application name. Read the [CHANGELOG](https://github.com/umatare5/xflow-exporter/blob/{{ .Tag }}/CHANGELOG.md) before upgrading.
+    > A minor release may remove a metric, drop a label, or change what one reports. Read the [CHANGELOG](https://github.com/umatare5/xflow-exporter/blob/{{ .Tag }}/CHANGELOG.md) before upgrading.
 
     ### 🐳 Container Images
 
     ```bash
-    # Latest version
-    docker run --rm ghcr.io/umatare5/xflow-exporter:latest --help
-
-    # Specific version
+    # Show the help
     docker run --rm ghcr.io/umatare5/xflow-exporter:{{ .Tag }} --help
 
-    # With the default ports published
+    # Run with the default ports published
     docker run --rm -p 10053:10053 -p 4739:4739/udp ghcr.io/umatare5/xflow-exporter:{{ .Tag }}
     ```
 
@@ -118,7 +115,7 @@ release:
     - [CHANGELOG](https://github.com/umatare5/xflow-exporter/blob/{{ .Tag }}/CHANGELOG.md)
     - [Container Registry](https://github.com/umatare5/xflow-exporter/pkgs/container/xflow-exporter)
 
-# Checksums for the release archives
+# Generate checksums for source archives
 checksum:
   name_template: "{{ .ProjectName }}-v{{ .Version }}_checksums.txt"
 
