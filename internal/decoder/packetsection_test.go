@@ -2,6 +2,7 @@ package decoder
 
 import (
 	"net/netip"
+	"slices"
 	"testing"
 
 	"github.com/umatare5/xflow-exporter/internal/flow"
@@ -211,6 +212,63 @@ func TestDecodeSection_ParsedFieldsWinOverSection(t *testing.T) {
 	}
 	if got.Bytes != 5555 {
 		t.Errorf("Bytes = %d, want the device-parsed count kept", got.Bytes)
+	}
+}
+
+// TestDecodeSection_ReportedCountsWinOverSection pins that a section fills
+// only the counters the template left out: a count the record carried, zero
+// included and an OUT_ one alike, is the device's reading.
+func TestDecodeSection_ReportedCountsWinOverSection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		fields      [][2]uint16
+		counters    []byte
+		wantBytes   uint64
+		wantPackets uint64
+	}{
+		{
+			name:     "zero IN_ counters",
+			fields:   [][2]uint16{{fieldInBytes, 4}, {fieldInPackets, 4}},
+			counters: be32(be32(nil, 0), 0),
+		},
+		{
+			name:        "the OUT_ pair",
+			fields:      [][2]uint16{{fieldOutBytes, 4}, {fieldOutPackets, 4}},
+			counters:    be32(be32(nil, 12345), 9),
+			wantBytes:   12345,
+			wantPackets: 9,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+
+			fields := slices.Concat(tc.fields, [][2]uint16{
+				{fieldDataLinkFrameSize, 4},
+				{fieldPacketSectionV9Data, fixtureSectionSize},
+			})
+			tpl := flowSet(templateFlowSetID, templateSpec(fixtureV9TemplateID, fields...))
+
+			record := be32(tc.counters, 1500)
+			record = append(record, padTo(tcpFrame(false))...)
+
+			records, err := d.Decode(sentFrom(testExporter),
+				v9Packet(1, fixtureV9ODID, tpl, flowSet(fixtureV9TemplateID, record)), nil)
+			if err != nil || len(records) != 1 {
+				t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
+			}
+
+			got := records[0]
+			if got.Bytes != tc.wantBytes || got.Packets != tc.wantPackets {
+				t.Errorf("counts = %d bytes, %d packets; want %d, %d reported by the device",
+					got.Bytes, got.Packets, tc.wantBytes, tc.wantPackets)
+			}
+		})
 	}
 }
 

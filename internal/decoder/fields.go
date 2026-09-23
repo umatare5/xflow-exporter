@@ -106,17 +106,17 @@ type addrPair struct {
 // domain sampling rate where the record carried none.
 func finishRecord(r *flow.Record, state *fieldState, clock exportClock, domain *domainState) {
 	resolveAddrs(r, state)
-	resolvePacketSection(r, state)
 
 	// An egress-only template carries OUT_* alone; both present would double
 	// the flow if summed, so IN_* wins.
-	if r.Bytes == 0 && state.outBytesReported {
+	if !r.BytesReported && state.outBytesReported {
 		r.Bytes, r.BytesReported = state.outBytes, true
 	}
-	if r.Packets == 0 && state.outPacketsReported {
+	if !r.PacketsReported && state.outPacketsReported {
 		r.Packets, r.PacketsReported = state.outPackets, true
 	}
 
+	resolvePacketSection(r, state)
 	resolveFlowClock(r, state, clock, domain)
 
 	if r.FlowsReported {
@@ -269,10 +269,10 @@ func resolvePacketSection(r *flow.Record, state *fieldState) {
 	// One record describes one sampled packet, which is the protocol's own
 	// semantics rather than a fabricated reading. The frame length is the
 	// original frame's, a-la the sFlow frameLength.
-	if r.Packets == 0 {
+	if !r.PacketsReported {
 		r.Packets, r.PacketsReported = 1, true
 	}
-	if r.Bytes == 0 && state.frameSize > 0 {
+	if !r.BytesReported && state.frameSize > 0 {
 		r.Bytes, r.BytesReported = state.frameSize, true
 	}
 }
