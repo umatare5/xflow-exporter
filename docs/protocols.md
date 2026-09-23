@@ -10,7 +10,8 @@ Each row records one protocol decoded from the device's own export, on the relea
 | :--------------------- | :--------------- | :--------- | :----------------------------------------- |
 | Cisco C891FJ-K9        | `IOS 15.9(3)M13` | NetFlow v5 | Main cache, Random Sampled NetFlow         |
 | Cisco C891FJ-K9        | `IOS 15.9(3)M13` | NetFlow v8 | Aggregation caches, methods 1–5 and 9–14   |
-| Cisco C891FJ-K9        | `IOS 15.9(3)M13` | NetFlow v9 | One `bgp-nexthop-tos` aggregation cache    |
+| Cisco C891FJ-K9        | `IOS 15.9(3)M13` | NetFlow v9 | Main and `bgp-nexthop-tos` caches          |
+| Cisco C891FJ-K9        | `IOS 15.9(3)M13` | NetFlow v9 | Flexible NetFlow monitor, custom record    |
 | Cisco WS-C2960CX-8PC-L | `IOS 15.2(7)E3`  | NetFlow v9 | Custom record, two samplers declared       |
 | Cisco C9800-CL-K9      | `IOS-XE 17.15.6` | NetFlow v9 | `record wireless avc basic`                |
 | Cisco C9800-CL-K9      | `IOS-XE 17.15.6` | IPFIX      | `record wireless avc basic`                |
@@ -189,7 +190,9 @@ Summing these caches counts one flow multiple times. A device exporting an aggre
 
 The template-based record format. A template declares the fields a data record carries, and the two flowset kinds interleave freely within one datagram.
 
-The template cache is keyed on `(exporter_address, protocol, observation_domain_id)`. A **Cisco C9800-CL-K9** exporting IPFIX and NetFlow v9 from one address announces options templates 256 and 257 under observation domain 1 in both. A key without the protocol therefore resolves one protocol's record against the other's layout.
+The template cache is keyed on `(exporter_address, protocol, observation_domain_id, source_port)`. A **Cisco C9800-CL-K9** exporting IPFIX and NetFlow v9 from one address announces options templates 256 and 257 under observation domain 1 in both. A key without the protocol therefore resolves one protocol's record against the other's layout.
+
+A **Cisco C891FJ-K9** runs its traditional cache and a Flexible NetFlow monitor as two export processes under Source ID 0, each from a source port of its own. Each numbers its templates independently, and the monitor took the next ID for each layout it exported, so the two collided on 257 and later on 258. The device breaks the uniqueness RFC 3954 section 9 expects per exporter and domain, so only the session tells the two layouts apart.
 
 IE 61 carries the observation point, `0` for ingress and `1` for egress. RFC 5102 defines no other value, so anything else leaves the point unknown, as does a template omitting the element.
 

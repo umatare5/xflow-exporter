@@ -68,7 +68,7 @@ func (d *Decoder) decodeIPFIX(
 
 		set := payload[offset+flowSetHeaderLen : offset+setLen]
 		var records int
-		dst, records, complete = d.decodeIPFIXSet(key, domain, setID, set, clock, dst, complete, issue)
+		dst, records, complete = d.decodeIPFIXSet(key, port, domain, setID, set, clock, dst, complete, issue)
 		dataRecords += records
 		offset += setLen
 	}
@@ -89,18 +89,18 @@ func (d *Decoder) decodeIPFIX(
 // decodeIPFIXSet routes one set by its id, reporting how many data records it
 // held and whether that count is trustworthy.
 func (d *Decoder) decodeIPFIXSet(
-	key domainKey, domain *domainState, setID uint16, set []byte, clock exportClock,
+	key domainKey, port uint16, domain *domainState, setID uint16, set []byte, clock exportClock,
 	dst []flow.Record, complete bool, issue func(reason string),
 ) ([]flow.Record, int, bool) {
 	switch {
 	case setID == ipfixTemplateSetID:
-		d.parseIPFIXTemplates(key, set, issue)
+		d.parseIPFIXTemplates(key, port, set, issue)
 		return dst, 0, complete
 	case setID == ipfixOptionsTemplateSetID:
-		d.parseIPFIXOptionsTemplates(key, set, issue)
+		d.parseIPFIXOptionsTemplates(key, port, set, issue)
 		return dst, 0, complete
 	case setID >= minDataSetID:
-		return d.decodeIPFIXDataSet(key, domain, setID, set, clock, dst, complete, issue)
+		return d.decodeIPFIXDataSet(key, port, domain, setID, set, clock, dst, complete, issue)
 	default:
 		issue(ReasonReservedSet)
 		return dst, 0, false
@@ -111,7 +111,7 @@ func (d *Decoder) decodeIPFIXSet(
 // count of zero is a withdrawal, which RFC 7011 section 8.4 tells a collector
 // to ignore over UDP: the set is still walked past it so the announcements
 // behind it are read.
-func (d *Decoder) parseIPFIXTemplates(key domainKey, set []byte, issue func(reason string)) {
+func (d *Decoder) parseIPFIXTemplates(key domainKey, port uint16, set []byte, issue func(reason string)) {
 	offset := 0
 	for offset+flowSetHeaderLen <= len(set) {
 		templateID := binary.BigEndian.Uint16(set[offset : offset+2])
@@ -133,7 +133,7 @@ func (d *Decoder) parseIPFIXTemplates(key domainKey, set []byte, issue func(reas
 		}
 		offset = next
 
-		d.registerTemplate(key, templateID, &template{
+		d.registerTemplate(key, port, templateID, &template{
 			fields:      fields,
 			recordLen:   minLen,
 			hasVariable: hasVariable,
@@ -143,7 +143,7 @@ func (d *Decoder) parseIPFIXTemplates(key domainKey, set []byte, issue func(reas
 
 // parseIPFIXOptionsTemplates compiles every options template in one set. The
 // head differs from v9: a total field count and a scope field count.
-func (d *Decoder) parseIPFIXOptionsTemplates(key domainKey, set []byte, issue func(reason string)) {
+func (d *Decoder) parseIPFIXOptionsTemplates(key domainKey, port uint16, set []byte, issue func(reason string)) {
 	// RFC 7011 figures T and V put no scope field count on a withdrawal, so
 	// it is the template id and a field count of zero and nothing else. An
 	// all-options withdrawal is therefore a set of length 8, whose body falls
@@ -184,7 +184,7 @@ func (d *Decoder) parseIPFIXOptionsTemplates(key domainKey, set []byte, issue fu
 		}
 		offset = next
 
-		d.registerTemplate(key, templateID, &template{
+		d.registerTemplate(key, port, templateID, &template{
 			fields:      fields,
 			recordLen:   minLen,
 			hasVariable: hasVariable,
@@ -246,10 +246,10 @@ func parseIPFIXFieldSpecs(
 // the record boundaries come from the records themselves, so a walk failure
 // abandons the rest of the set rather than guessing an offset.
 func (d *Decoder) decodeIPFIXDataSet(
-	key domainKey, domain *domainState, setID uint16, set []byte, clock exportClock,
+	key domainKey, port uint16, domain *domainState, setID uint16, set []byte, clock exportClock,
 	dst []flow.Record, complete bool, issue func(reason string),
 ) ([]flow.Record, int, bool) {
-	tpl, ok := d.templates.lookup(key, setID)
+	tpl, ok := d.templates.lookup(key, port, setID)
 	if !ok {
 		issue(ReasonMissingTemplate)
 		return dst, 0, false

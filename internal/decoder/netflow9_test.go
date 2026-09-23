@@ -241,6 +241,67 @@ func TestDecodeNetFlowV9_TemplatesAreScopedPerDomain(t *testing.T) {
 	}
 }
 
+// TestDecode_TemplatesAreScopedPerTransportSession is the same regression one
+// level down. A Cisco router exporting its traditional cache beside a Flexible
+// NetFlow monitor runs two export processes numbering templates independently
+// under one Source ID, each from its own source port. Keyed without the
+// session, whichever announced last decoded the other's data against its
+// layout, and two counters in swapped order still walk to a valid record.
+func TestDecode_TemplatesAreScopedPerTransportSession(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		template func(first, second uint16) []byte
+		data     func(body []byte) []byte
+	}{
+		{
+			"netflow v9",
+			func(first, second uint16) []byte {
+				return v9Packet(1, fixtureV9ODID, flowSet(templateFlowSetID,
+					templateSpec(fixtureV9TemplateID, [2]uint16{first, 4}, [2]uint16{second, 4})))
+			},
+			func(body []byte) []byte {
+				return v9Packet(2, fixtureV9ODID, flowSet(fixtureV9TemplateID, body))
+			},
+		},
+		{
+			"ipfix",
+			func(first, second uint16) []byte {
+				return ipfixMessage(0, ipfixTemplateSet(ipfixSpec(first, 4, 0), ipfixSpec(second, 4, 0)))
+			},
+			func(body []byte) []byte {
+				return ipfixMessage(0, flowSet(fixtureIPFIXTemplateID, body))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			cache := sentFrom(testExporter)
+			monitor := netip.AddrPortFrom(testExporter, testPort+1)
+
+			if _, err := d.Decode(cache, tt.template(fieldInBytes, fieldInPackets), nil); err != nil {
+				t.Fatalf("cache template error = %v, want nil", err)
+			}
+			if _, err := d.Decode(monitor, tt.template(fieldInPackets, fieldInBytes), nil); err != nil {
+				t.Fatalf("monitor template error = %v, want nil", err)
+			}
+
+			records, err := d.Decode(cache, tt.data(be32(be32(nil, 111), 7)), nil)
+			if err != nil {
+				t.Fatalf("cache data error = %v, want nil", err)
+			}
+			if len(records) != 1 || records[0].Bytes != 111 || records[0].Packets != 7 {
+				t.Fatalf("cache decoded %+v, want its own template applied", records)
+			}
+		})
+	}
+}
+
 func TestDecodeNetFlowV9_MissingTemplateIsCountedNotFatal(t *testing.T) {
 	t.Parallel()
 
