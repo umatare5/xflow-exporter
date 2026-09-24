@@ -25,6 +25,7 @@ Redact these before reporting, in addition to the credentials the shared policy 
 This exporter receives NetFlow, IPFIX and sFlow records from network devices over UDP, and exposes them as Prometheus metrics.
 
 - **Datagrams** – each incoming packet is treated as untrusted input and processed accordingly.
+- **Transport** – UDP alone, without the SCTP and DTLS RFC 7011 requires of an IPFIX collector, so every datagram arrives unauthenticated and in the clear.
 - **Records** – the aggregates disclose who talked to whom, with addresses, ports and volumes.
 - **Labels** – collectors are off by default, and enabling one publishes monitored addresses.
 - **Names** – `--enrich.mapping-file` adds internal device and interface names to those series.
@@ -50,9 +51,7 @@ A datagram's source address is the sender's identity and the key both template s
 - **Spoofing** – a forged source address and port write into the template cache the real device keys.
 - **Corruption** – that device's later records decode against the template an attacker announced.
 - **Address alone** – a forged address still acts on that device's series, budgets and declarations.
-- **Unbounded by sender count** – application tables and histograms take no budget per device.
-- **Bounded within a device** – field counts, observation domains and interned strings take one.
-- **Budgets** – [Bounded state](docs/architecture.md#bounded-state) tabulates every limit and its action.
+- **Budgets** – every table a sender fills is bounded, and [Bounded state](docs/architecture.md#bounded-state) lists each bound.
 - **A UDP proxy translates the source** – every device then arrives at the receiver as one address.
 - **Device state merges** – declarations cross devices, and one proxy port lets templates collide.
 

@@ -148,9 +148,13 @@ These notes hold across the traffic families rather than for one of them.
 
 **Interface Identifiers (`0`)**: `input_ifindex`/`output_ifindex` resolve to `0` when: the template omits IE 10 or 14; the device exported `0`; sFlow format 0 sets `0x3FFFFFFF` (agent is source/sink); sFlow format 1/2 indicate discard codes/counts; or the field width is unsupported by readers. RFC 2863 numbers interfaces from 1, preventing collision.
 
+**Ports (`0`)**: `port` resolves to `0` when no service table names either port and the destination is `0`: the template omits IE 11, the device exported `0`, or the header walk reaches no TCP or UDP header.
+
 **Address Localization**: The `private` country designation is strictly bound to RFC 1918 and RFC 4193 unique local ranges. Shared address space, loopback, and link-local are not designated private, avoiding semantic guesswork.
 
 **Exporter Behaviors**: `xflow_exporter_*` sums domains (e.g., NetFlow v8 methods, v9 Source IDs). Summing across `odid` counts traffic once per cache view. `_flows_total` relies on cache-reported counts for aggregates, which differ from underlying flows.
+
+**Dual-Protocol Export**: A device sending one monitor over both NetFlow v9 and IPFIX reports each flow twice. Every family without a `version` label sums the two exports because none of its keys tells them apart, while `xflow_exporter_*` keeps them apart by it.
 
 **Aggregated Caches**: A record is an aggregate where its version is NetFlow v8 or its template carries IE 3, and an aggregate reaches `xflow_exporter_*` alone — every other family would re-count traffic the device's main cache already reported. The element's presence decides it, so a cache declaring zero flows stays an aggregate and `xflow_aggregate_zero_flows_total` attributes it.
 

@@ -64,8 +64,8 @@ groups:
           summary: "xflow-exporter still lacks templates from {{ $labels.exporter_address }}"
           description: >-
             Data flowsets keep arriving without their template half an hour
-            after the counter started rising. Devices resend templates every
-            few minutes, so check the device's template refresh settings.
+            after the counter started rising. Check the device's template
+            refresh against the parser's template TTL.
 
       - alert: XflowSequenceLoss
         expr: increase(xflow_sequence_missed_total[15m]) > 0

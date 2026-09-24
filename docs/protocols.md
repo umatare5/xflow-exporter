@@ -194,6 +194,8 @@ The template cache is keyed on `(exporter_address, protocol, observation_domain_
 
 A **Cisco C891FJ-K9** runs its traditional cache and a Flexible NetFlow monitor as two export processes under Source ID 0, each from a source port of its own. Each numbers its templates independently, and the monitor took the next ID for each layout it exported, so the two collided on 257 and later on 258. The device breaks the uniqueness RFC 3954 section 9 expects per exporter and domain, so only the session tells the two layouts apart.
 
+A data flowset arriving before its template counts `missing_template` and is dropped, and a clock change on the device leaves its templates in place. RFC 3954 section 9 recommends holding such records and flushing templates on a clock change. Held records are memory a forged sender can fill, and a flush on every NTP step would make each device's next records miss their templates.
+
 IE 61 carries the observation point, `0` for ingress and `1` for egress. RFC 5102 defines no other value, so anything else leaves the point unknown, as does a template omitting the element.
 
 ```text
@@ -256,7 +258,7 @@ Every FlowSet opens with a 4-byte header comprising the FlowSet ID and the TLV l
 | 2–255      | Reserved         | Refused as `reserved_set` |
 | ≥ 256      | Data             | ID equals the Template ID |
 
-Padding aligns each FlowSet to a 32-bit boundary and is included in the length. Trailing bytes shorter than a FlowSet header are treated as padding and safely ignored.
+RFC 3954 asks the exporter to pad data and options FlowSets to a 32-bit boundary, which every NetFlow v9 device in the verification matrix omits, so the decoder follows each length as given. Trailing bytes shorter than a FlowSet header are treated as padding and safely ignored.
 
 ```text
  0                   1                   2                   3
@@ -365,7 +367,7 @@ Field types are 16-bit and vendor-assigned. Cisco defines types 1–104, reserve
 
 Classic NetFlow exports uptime-relative clocks (21, 22). Flexible NetFlow may export absolute clocks (150–153) instead. [`fields.go`](../internal/decoder/fields.go) defines all consumed fields; any undeclared type is skipped using its specified length.
 
-Variable-width integers strictly support 1, 2, 4, or 8 octets. Unsupported widths omit the value entirely to prevent corrupt truncations. For instance, a 3-octet `INPUT_SNMP` leaves the interface unread, yielding `0`.
+Variable-width integers are read at any width from 1 to 8 octets. A wider or empty field is left unread rather than truncated, so an interface carried that way reads `0`.
 
 </p></details>
 
@@ -382,6 +384,8 @@ Variable-length fields carry inline lengths: one byte typically, or `255` follow
 Reduced-size encoding narrows an integer element to any width its value fits, so an odd width carries a reading like the rest. The `dateTime` types are excluded from it and hold their native width, a narrower field landing in 1970 rather than on the instant the device measured.
 
 A field count of zero is a template withdrawal. UDP gives no ordering, so a withdrawal is ignored and the set is walked past its four octets, leaving announcements behind it readable. A data set whose template is known carries at least one record, so a shorter body counts `malformed` instead of passing as padding.
+
+A device whose messages keep arriving malformed is still read. RFC 7011 section 9.1 advises stopping, but on UDP that is a switch a forged sender could flip for a real one.
 
 | Aspect            | NetFlow v9               | IPFIX                          |
 | :---------------- | :----------------------- | :----------------------------- |

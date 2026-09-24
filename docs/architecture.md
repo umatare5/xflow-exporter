@@ -44,9 +44,9 @@ The `/metrics` handler admits [ten concurrent gathers](../internal/server/server
 
 A device omits a field its template never declared. Absence on the wire is not a reading, and publishing `0` for it invents one.
 
-A dimension no record carried opens no entry and publishes no series, never `0`, `false`, `NaN` or an epoch instant. An aggregated cache feeds `xflow_exporter_*` alone for the same reason, because every other family would re-count traffic the device's main cache already reported.
+A dimension no record carried opens no entry and publishes no series, never `0`, `false`, `NaN` or an epoch instant, save a key label's `0`, which [Collectors](collectors.md#labels) defines. An aggregated cache feeds `xflow_exporter_*` alone for the same reason, because every other family would re-count traffic the device's main cache already reported.
 
-The counts follow that rule per family. An entry [latches](../internal/aggregator/table.go#L42) on the first record that kept its byte or packet total in unread elements and [withholds that family](../internal/collector/flows.go#L89) from then on, a partial sum reading exactly like a complete one. The latch never clears, because an entry whose sum lost a contribution stays short however many complete records follow.
+The counts follow that rule per family. An entry [latches](../internal/aggregator/table.go#L42) on the first record that kept its byte or packet total in unread elements, or carried none, and [withholds that family](../internal/collector/flows.go#L89) from then on, a partial sum reading exactly like a complete one. The latch never clears, because an entry whose sum lost a contribution stays short however many complete records follow.
 
 Eviction is the push model's spelling of absence. A conversation nobody has seen for `--aggregation.entry-ttl` is not a zero, it is gone, and its series goes with it. Instants and rates are read at decode rather than at scrape, so a series carries what the device reported and not what Prometheus asked for.
 
@@ -78,20 +78,20 @@ The [Top-K and min-bytes cuts](../internal/collector/flows.go#L531) withhold the
 
 Every map keyed by wire data takes a bound, because a push protocol cannot choose its senders.
 
-| Bounded                           | Limit                                         | Action at the limit                              |
-| :-------------------------------- | :-------------------------------------------- | :----------------------------------------------- |
-| Observation domains per device    | [256](../internal/decoder/templates.go#L43)   | Discard the record; v5 and v8 lose sequence      |
-| Devices holding domain state      | [65536](../internal/decoder/stats.go#L29)     | Discard the datagram; v5 and v8 lose sequence    |
-| Templates per domain              | [8192](../internal/decoder/templates.go#L18)  | Prune expired, then reject as `invalid_template` |
-| Template fields per device        | [65536](../internal/decoder/templates.go#L24) | Prune the domain's expired, then reject          |
-| Samplers per domain               | [4096](../internal/decoder/templates.go#L29)  | Prune idle, then leave the sampler untracked     |
-| Transport sessions per domain     | [16](../internal/decoder/templates.go#L50)    | Leave that session's sequence unfollowed         |
-| Sampler declarations per device   | [256](../internal/decoder/templates.go#L55)   | Refuse; records take the device's own rate       |
-| Interned vendor strings           | [65536](../internal/decoder/apps.go#L173)     | Copy per occurrence rather than refuse           |
-| One vendor string                 | [255 B](../internal/decoder/apps.go#L180)     | Refuse like invalid UTF-8, once per field        |
-| Announced applications per device | [16384](../internal/decoder/apps.go#L38)      | Leave the application numbered, never named      |
-| Devices with decode statistics    | [65536](../internal/decoder/stats.go#L29)     | Decode on, but publish no decode counters        |
-| AS names cached from the database | [65536](../internal/enrich/mmdb.go#L86)       | Leave the AS unnamed; a join finds no name       |
+| Bounded                                      | Limit                                         | Action at the limit                              |
+| :------------------------------------------- | :-------------------------------------------- | :----------------------------------------------- |
+| Observation domains per device               | [256](../internal/decoder/templates.go#L43)   | Discard the record; v5 and v8 lose sequence      |
+| Devices holding domain state                 | [65536](../internal/decoder/stats.go#L29)     | Discard the datagram; v5 and v8 lose sequence    |
+| Templates per domain                         | [8192](../internal/decoder/templates.go#L18)  | Prune expired, then reject as `invalid_template` |
+| Template fields per device                   | [65536](../internal/decoder/templates.go#L24) | Prune the domain's expired, then reject          |
+| Samplers per domain                          | [4096](../internal/decoder/templates.go#L29)  | Prune idle, then leave the sampler untracked     |
+| Transport sessions per domain                | [16](../internal/decoder/templates.go#L50)    | Leave that session's sequence unfollowed         |
+| Sampler declarations per device and protocol | [256](../internal/decoder/templates.go#L55)   | Refuse; records take the device's own rate       |
+| Interned vendor strings                      | [65536](../internal/decoder/apps.go#L173)     | Copy per occurrence rather than refuse           |
+| One vendor string                            | [255 B](../internal/decoder/apps.go#L180)     | Refuse like invalid UTF-8, once per field        |
+| Announced applications per device            | [16384](../internal/decoder/apps.go#L38)      | Leave the application numbered, never named      |
+| Devices with decode statistics               | [65536](../internal/decoder/stats.go#L29)     | Decode on, but publish no decode counters        |
+| AS names cached from the database            | [65536](../internal/enrich/mmdb.go#L86)       | Leave the AS unnamed; a join finds no name       |
 
 A device reporting both observation points of one path keys each conversation twice, so the aggregation entry bound covers roughly half as many of them. A device reporting one point, or none, is unaffected.
 
