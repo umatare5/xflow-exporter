@@ -49,12 +49,12 @@ A datagram's source address is the sender's identity and the key both template s
 - **No allowlist** – the exporter filters no sender, which leaves the packet filter to enforce it.
 - **Spoofing** – a forged source address and port write into the template cache the real device keys.
 - **Corruption** – that device's later records decode against the template an attacker announced.
-- **Address alone** – a forged address still publishes series as that device, spends its budgets and rewrites the sampling rates and application names it declared.
+- **Address alone** – a forged address still acts on that device's series, budgets and declarations.
 - **Unbounded by sender count** – application tables and histograms take no budget per device.
 - **Bounded within a device** – field counts, observation domains and interned strings take one.
 - **Budgets** – [Bounded state](docs/architecture.md#bounded-state) tabulates every limit and its action.
 - **A UDP proxy translates the source** – every device then arrives at the receiver as one address.
-- **Device state merges** – one device's declarations then apply to another's records, and a proxy sending from one port lets their templates overwrite each other.
+- **Device state merges** – declarations cross devices, and one proxy port lets templates collide.
 
 ```bash
 nft add rule inet filter input udp dport 4739 ip saddr { 10.0.0.0/24, 192.0.2.10 } accept
