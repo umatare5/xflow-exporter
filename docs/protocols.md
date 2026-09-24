@@ -367,6 +367,8 @@ Field types are 16-bit and vendor-assigned. Cisco defines types 1–104, reserve
 
 Classic NetFlow exports uptime-relative clocks (21, 22). Flexible NetFlow may export absolute clocks (150–153) instead. [`fields.go`](../internal/decoder/fields.go) defines all consumed fields; any undeclared type is skipped using its specified length.
 
+RFC 7011 section 9 requires a collector to note every element it does not read, so a template carrying an undeclared type is logged at `info` when it arrives or changes layout. A refresh repeating a logged layout logs nothing. The lines stop at 60 a minute because a forged sender can change a layout with every datagram, and a withheld layout is logged on its next refresh, each line counting those withheld before it.
+
 Variable-width integers are read at any width from 1 to 8 octets. A wider or empty field is left unread rather than truncated, so an interface carried that way reads `0`.
 
 </p></details>

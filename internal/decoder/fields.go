@@ -278,14 +278,16 @@ func resolvePacketSection(r *flow.Record, state *fieldState) {
 	}
 }
 
-// applyField maps one field into the record. An unknown element is skipped by
-// length, which is what lets a template carry fields this exporter does not
-// model without desynchronizing the ones it does.
-func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise uint32, value []byte) {
+// applyField maps one field into the record and reports whether the element
+// is one this exporter reads. An unknown element is skipped by length, which
+// is what lets a template carry fields this exporter does not model without
+// desynchronizing the ones it does. The report depends on the element alone,
+// so a template's unread elements are named before any record arrives.
+func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise uint32, value []byte) bool {
 	if enterprise != 0 {
 		// No enterprise element is mapped inside data records yet; the AVC
 		// attributes arrive through options records instead.
-		return
+		return false
 	}
 
 	switch fieldType {
@@ -398,8 +400,9 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 	case fieldSelectorID:
 		state.selectorID, state.hasSelectorID = beUint32(value)
 	default:
-		applyRareField(r, state, fieldType, value)
+		return applyRareField(r, state, fieldType, value)
 	}
+	return true
 }
 
 // applySectionField captures the sampled packet section elements.
@@ -418,10 +421,10 @@ func applySectionField(state *fieldState, fieldType uint16, value []byte) bool {
 }
 
 // applyRareField maps the elements off the hot path: the flow clocks, the
-// packet sections and the vendor strings.
-func applyRareField(r *flow.Record, state *fieldState, fieldType uint16, value []byte) {
+// packet sections and the vendor strings. It reports as applyField does.
+func applyRareField(r *flow.Record, state *fieldState, fieldType uint16, value []byte) bool {
 	if applySectionField(state, fieldType, value) {
-		return
+		return true
 	}
 
 	switch fieldType {
@@ -455,7 +458,10 @@ func applyRareField(r *flow.Record, state *fieldState, fieldType uint16, value [
 		r.AppName = state.intern.intern(value)
 	case fieldPanAppID:
 		r.AppName = state.intern.intern(value)
+	default:
+		return false
 	}
+	return true
 }
 
 // addrFrom16 reads a 16-byte address, returning the IPv4 form of one written

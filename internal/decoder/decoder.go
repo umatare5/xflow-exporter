@@ -6,6 +6,7 @@ package decoder
 import (
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"time"
 
@@ -91,9 +92,13 @@ type Decoder struct {
 	templates *templateStore
 	apps      *appTables
 	strings   *interner
-	// now stamps the decode accounting and the exporter idle-sweep cutoff; a
-	// test pins it. Flow times are never taken from it: those come from the
-	// datagram.
+	// logger receives the notes of unread template elements; a test captures
+	// it.
+	logger *slog.Logger
+	notes  noteLimiter
+	// now stamps the decode accounting, the exporter idle-sweep cutoff and
+	// the note window; a test pins it. Flow times are never taken from it:
+	// those come from the datagram.
 	now func() time.Time
 }
 
@@ -109,6 +114,7 @@ func New(cfg config.Parser) *Decoder {
 		templates: newTemplateStore(cfg),
 		apps:      newAppTables(intern),
 		strings:   intern,
+		logger:    slog.Default(),
 		now:       time.Now,
 	}
 }
