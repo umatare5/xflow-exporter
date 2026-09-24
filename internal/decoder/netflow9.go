@@ -226,6 +226,12 @@ func (d *Decoder) registerTemplate(key domainKey, port, id uint16, t *template, 
 		// The domain or its device is at its template bound; treat the
 		// announcement like an invalid template so the loss is visible.
 		issue(ReasonInvalidTemplate)
+		return
+	}
+	// RFC 7011 section 8.4 asks for no log line on a refresh, so a noted
+	// layout's refresh writes none.
+	if !t.noted.Load() {
+		t.noted.Store(d.noteUnread(key, port, id, t))
 	}
 }
 

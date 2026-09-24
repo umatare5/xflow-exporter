@@ -52,7 +52,7 @@ Eviction is the push model's spelling of absence. A conversation nobody has seen
 
 ## Decoder
 
-A template cache holds every NetFlow v9 and IPFIX layout, keyed on [the exporter address, the protocol and the observation domain](../internal/decoder/templates.go#L98) and then on [the source port](../internal/decoder/templates.go#L111). The port names the transport session RFC 7011 scopes a template to, so two export processes numbering one ID under one domain keep their layouts apart. The protocol joins the key because three decoders share this store, each numbering its templates from 256 in a space of its own.
+A template cache holds every NetFlow v9 and IPFIX layout, keyed on [the exporter address, the protocol and the observation domain](../internal/decoder/templates.go#L103) and then on [the source port](../internal/decoder/templates.go#L116). The port names the transport session RFC 7011 scopes a template to, so two export processes numbering one ID under one domain keep their layouts apart. The protocol joins the key because three decoders share this store, each numbering its templates from 256 in a space of its own.
 
 A v9 Source ID, an IPFIX Observation Domain ID and an sFlow sub-agent id are unrelated numbers that collide freely. A device exporting two protocols from one address would otherwise decode a data set against whichever protocol announced the id last. That miss is silent, because the record walks to a length the fields agree on and reaches the aggregator as a measurement.
 
@@ -80,13 +80,13 @@ Every map keyed by wire data takes a bound, because a push protocol cannot choos
 
 | Bounded                                      | Limit                                         | Action at the limit                              |
 | :------------------------------------------- | :-------------------------------------------- | :----------------------------------------------- |
-| Observation domains per device               | [256](../internal/decoder/templates.go#L43)   | Discard the record; v5 and v8 lose sequence      |
+| Observation domains per device               | [256](../internal/decoder/templates.go#L44)   | Discard the record; v5 and v8 lose sequence      |
 | Devices holding domain state                 | [65536](../internal/decoder/stats.go#L29)     | Discard the datagram; v5 and v8 lose sequence    |
-| Templates per domain                         | [8192](../internal/decoder/templates.go#L18)  | Prune expired, then reject as `invalid_template` |
-| Template fields per device                   | [65536](../internal/decoder/templates.go#L24) | Prune the domain's expired, then reject          |
-| Samplers per domain                          | [4096](../internal/decoder/templates.go#L29)  | Prune idle, then leave the sampler untracked     |
-| Transport sessions per domain                | [16](../internal/decoder/templates.go#L50)    | Leave that session's sequence unfollowed         |
-| Sampler declarations per device and protocol | [256](../internal/decoder/templates.go#L55)   | Refuse; records take the device's own rate       |
+| Templates per domain                         | [8192](../internal/decoder/templates.go#L19)  | Prune expired, then reject as `invalid_template` |
+| Template fields per device                   | [65536](../internal/decoder/templates.go#L25) | Prune the domain's expired, then reject          |
+| Samplers per domain                          | [4096](../internal/decoder/templates.go#L30)  | Prune idle, then leave the sampler untracked     |
+| Transport sessions per domain                | [16](../internal/decoder/templates.go#L51)    | Leave that session's sequence unfollowed         |
+| Sampler declarations per device and protocol | [256](../internal/decoder/templates.go#L56)   | Refuse; records take the device's own rate       |
 | Interned vendor strings                      | [65536](../internal/decoder/apps.go#L173)     | Copy per occurrence rather than refuse           |
 | One vendor string                            | [255 B](../internal/decoder/apps.go#L180)     | Refuse like invalid UTF-8, once per field        |
 | Announced applications per device            | [16384](../internal/decoder/apps.go#L38)      | Leave the application numbered, never named      |

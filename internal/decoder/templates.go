@@ -5,6 +5,7 @@ package decoder
 
 import (
 	"net/netip"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -64,10 +65,10 @@ type templateField struct {
 	enterprise uint32
 }
 
-// template is one compiled template. Every field, refreshedAt included, is
-// fixed before the store publishes it: a re-announcement swaps in a new
-// template under the domain lock rather than restamping this one, which is
-// what lets lookup hand its pointer out past the lock.
+// template is one compiled template. Every field but noted, refreshedAt
+// included, is fixed before the store publishes it: a re-announcement swaps in
+// a new template under the domain lock rather than restamping this one, which
+// is what lets lookup hand its pointer out past the lock.
 type template struct {
 	fields []templateField
 	// recordLen is the fixed record length the fields sum to. When
@@ -80,6 +81,10 @@ type template struct {
 	scopeCount  int
 	options     bool
 	refreshedAt time.Time
+	// noted records that the layout's unread elements were logged, or that
+	// it has none. A refresh repeating the layout carries it over, so a note
+	// the limit withheld is retried rather than lost.
+	noted atomic.Bool
 }
 
 // domainKey scopes templates to one exporter address and one Observation
@@ -826,11 +831,12 @@ func (s *templateStore) refusedSamplers() uint64 {
 	return s.samplersRefused.Load()
 }
 
-// add registers or refreshes one template. A domain or device at its bound
-// drops the domain's expired templates first and rejects the addition when
-// that frees too little. A rejected redefinition still withdraws the layout
-// its ID held: RFC 3954 section 9 and RFC 7011 section 8.4 replace it with
-// the one announced, so the device's data no longer fits it.
+// add registers or refreshes one template, and reports whether it stored it.
+// A domain or device at its bound drops the domain's expired templates first
+// and rejects the addition when that frees too little. A rejected
+// redefinition still withdraws the layout its ID held: RFC 3954 section 9 and
+// RFC 7011 section 8.4 replace it with the one announced, so the device's
+// data no longer fits it.
 func (s *templateStore) add(key domainKey, port, id uint16, t *template) bool {
 	d := s.domain(key)
 	if d == nil {
@@ -851,9 +857,18 @@ func (s *templateStore) add(key domainKey, port, id uint16, t *template) bool {
 		}
 	}
 
+	if held, ok := d.templates[ref]; ok && held.sameLayout(t) {
+		t.noted.Store(held.noted.Load())
+	}
 	d.chargeLocked(len(t.fields) - d.heldFieldsLocked(ref))
 	d.templates[ref] = t
 	return true
+}
+
+// sameLayout reports whether t declares the fields u does, in the same order
+// and roles.
+func (t *template) sameLayout(u *template) bool {
+	return t.options == u.options && t.scopeCount == u.scopeCount && slices.Equal(t.fields, u.fields)
 }
 
 // fitsLocked reports whether the domain and its device can hold t under ref,

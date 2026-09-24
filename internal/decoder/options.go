@@ -67,20 +67,18 @@ type optionsState struct {
 	hasScopeDomain    bool
 }
 
-// apply captures one field this exporter consumes, scope or not. RFC 6759
-// scopes the application name and attribute mappings on applicationId, so the
-// field naming what a record describes is in the scope area: skipping it left
-// the table empty on every Cisco AVC export. Nothing else consumed here is an
-// identifier a template scopes on.
-func (o *optionsState) apply(fieldType uint16, enterprise uint32, value []byte) {
-	if enterprise == ciscoPEN {
-		if fieldType == fieldCiscoAppCategory {
-			o.appCategory = value
-		}
-		return
+// apply captures one field this exporter consumes, scope or not, and reports
+// as applyField does. RFC 6759 scopes the application name and attribute
+// mappings on applicationId, so the field naming what a record describes is
+// in the scope area: skipping it left the table empty on every Cisco AVC
+// export. Nothing else consumed here is an identifier a template scopes on.
+func (o *optionsState) apply(fieldType uint16, enterprise uint32, value []byte) bool {
+	if enterprise == ciscoPEN && fieldType == fieldCiscoAppCategory {
+		o.appCategory = value
+		return true
 	}
 	if enterprise != 0 {
-		return
+		return false
 	}
 
 	switch fieldType {
@@ -105,7 +103,10 @@ func (o *optionsState) apply(fieldType uint16, enterprise uint32, value []byte) 
 		o.appID, _ = beUint32(value)
 	case fieldApplicationName:
 		o.appName = value
+	default:
+		return false
 	}
+	return true
 }
 
 // applyV9Scope captures one v9 scope field.
@@ -118,10 +119,11 @@ func (o *optionsState) applyV9Scope(scopeType uint16, value []byte) {
 	}
 }
 
-// applyIPFIXScope captures one IPFIX scope field.
-func (o *optionsState) applyIPFIXScope(fieldType uint16, enterprise uint32, value []byte) {
+// applyIPFIXScope captures one IPFIX scope field and reports as applyField
+// does.
+func (o *optionsState) applyIPFIXScope(fieldType uint16, enterprise uint32, value []byte) bool {
 	if enterprise != 0 {
-		return
+		return false
 	}
 
 	switch fieldType {
@@ -131,7 +133,10 @@ func (o *optionsState) applyIPFIXScope(fieldType uint16, enterprise uint32, valu
 		o.scopeInterface, o.hasScopeInterface = beUint32(value)
 	case fieldObservationDomainID:
 		o.scopeDomain, o.hasScopeDomain = beUint32(value)
+	default:
+		return false
 	}
+	return true
 }
 
 // commit publishes what the record declared: the sampling rate onto the
