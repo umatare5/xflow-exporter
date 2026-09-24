@@ -235,6 +235,41 @@ func TestTemplateStore_SweepSparesLiveDomains(t *testing.T) {
 	}
 }
 
+// TestTemplateStore_SweepFreesExpiredTemplates pins that a domain its device
+// keeps speaking to sheds the templates past the TTL. A restart onto a new
+// source port leaves the old session's templates unreachable, and short of a
+// full domain nothing else frees them.
+func TestTemplateStore_SweepFreesExpiredTemplates(t *testing.T) {
+	t.Parallel()
+
+	d := New(config.Parser{MaxFieldsPerTemplate: 128, TemplateTTL: time.Minute})
+	now := time.Unix(1_756_600_000, 0)
+	d.templates.now = func() time.Time { return now }
+
+	before := netip.AddrPortFrom(testExporter, 61301)
+	after := netip.AddrPortFrom(testExporter, 61999)
+	_, _ = d.Decode(before, v9Packet(1, fixtureV9ODID, fixtureV9Template()), nil)
+	now = now.Add(30 * time.Second)
+	_, _ = d.Decode(after, v9Packet(1, fixtureV9ODID, fixtureV9Template()), nil)
+	now = now.Add(45 * time.Second)
+	if evicted := d.SweepDomains(); evicted != 0 {
+		t.Fatalf("SweepDomains() evicted %d, want the live domain kept", evicted)
+	}
+
+	key := domainKey{exporter: testExporter, proto: flow.VersionNetFlowV9, odid: fixtureV9ODID}
+	d.templates.mu.RLock()
+	dom := d.templates.domains[key]
+	d.templates.mu.RUnlock()
+
+	dom.mu.RLock()
+	_, stale := dom.templates[templateRef{port: before.Port(), id: fixtureV9TemplateID}]
+	_, fresh := dom.templates[templateRef{port: after.Port(), id: fixtureV9TemplateID}]
+	dom.mu.RUnlock()
+	if stale || !fresh {
+		t.Errorf("held the old session's template %t, the live one's %t; want only the live one", stale, fresh)
+	}
+}
+
 // TestInterner_RefusesUnrepresentableStrings pins the guard on the one label
 // value this exporter takes from the wire. A name cut through a multi-byte
 // rune by a fixed export width is not valid UTF-8, and Prometheus cannot hold

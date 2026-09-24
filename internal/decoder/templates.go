@@ -595,10 +595,28 @@ func (s *templateStore) domain(key domainKey) *domainState {
 // sweepDomains drops every domain idle since before cutoff, returning its slot
 // to the exporter's budget, and reports how many went.
 func (s *templateStore) sweepDomains(cutoff int64) int {
+	evicted, live := s.evictIdleDomains(cutoff)
+
+	// A domain a device still speaks to survives the sweep whole, so its own
+	// idle state is freed here rather than with it. Each is walked under its
+	// own lock alone: the store lock held across every template would stall
+	// every device's decode for the walk.
+	now := s.now()
+	for _, d := range live {
+		d.mu.Lock()
+		d.pruneIdleSessionsLocked(cutoff)
+		d.pruneExpiredLocked(now, s.ttl)
+		d.mu.Unlock()
+	}
+	return evicted
+}
+
+// evictIdleDomains drops every domain idle since before cutoff and the
+// declarations its device stopped announcing, and returns the domains left.
+func (s *templateStore) evictIdleDomains(cutoff int64) (evicted int, live []*domainState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	evicted := 0
 	for key, d := range s.domains {
 		if d.lastSeen.Load() >= cutoff {
 			continue
@@ -611,16 +629,13 @@ func (s *templateStore) sweepDomains(cutoff int64) int {
 		}
 		evicted++
 	}
-
-	// A domain a device still speaks to survives the sweep whole, so its own
-	// idle state is freed here rather than with it.
-	for _, d := range s.domains {
-		d.mu.Lock()
-		d.pruneIdleSessionsLocked(cutoff)
-		d.mu.Unlock()
-	}
 	s.sweepSamplerTablesLocked(cutoff)
-	return evicted
+
+	live = make([]*domainState, 0, len(s.domains))
+	for _, d := range s.domains {
+		live = append(live, d)
+	}
+	return evicted, live
 }
 
 // sweepSamplerTablesLocked drops every declaration the device stopped

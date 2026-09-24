@@ -96,7 +96,7 @@ A device reporting both observation points of one path keys each conversation tw
 
 The six `_refused_total` counters rise per attempt rather than per entity, so one flooding sender moves them faster than the state it failed to open. The application bounds hold ten times a standard NBAR2 pack, `--aggregation.max-entries` bounds the aggregation tables, and their bucket cap and the device budget bound the two histograms.
 
-Idle domains, sampler declarations and application tables expire on `--parser.template-ttl` in a sweep, while the sweep reclaims a device only once the fleet reaches its budget. A refused device keeps decoding and feeding the aggregation tables, losing its decode counters and timestamps alone. The two domain budgets bound a product: a full fleet holds 256 domains per device.
+Idle domains, templates, sampler declarations and application tables expire on `--parser.template-ttl` in a sweep, while the sweep reclaims a device only once the fleet reaches its budget. A refused device keeps decoding and feeding the aggregation tables, losing its decode counters and timestamps alone. The two domain budgets bound a product: a full fleet holds 256 domains per device.
 
 ## Dashboards
 
