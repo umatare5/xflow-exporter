@@ -2,6 +2,7 @@ package decoder
 
 import (
 	"encoding/binary"
+	"errors"
 	"net/netip"
 	"testing"
 	"time"
@@ -442,44 +443,50 @@ func TestDecodeIPFIX_VariableLengthFields(t *testing.T) {
 	}
 }
 
-func TestDecodeIPFIX_VariableLengthOverrunIsCounted(t *testing.T) {
-	t.Parallel()
-
-	d := newTestDecoder()
-
-	tpl := ipfixTemplateSet(
-		ipfixSpec(fieldApplicationName, variableFieldLength, 0),
-	)
-
-	// The record claims 200 bytes of value with 3 present.
-	record := []byte{200, 'a', 'b', 'c'}
-	message := ipfixMessage(0, tpl, flowSet(fixtureIPFIXTemplateID, record))
-
-	records, err := d.Decode(sentFrom(testExporter), message, nil)
-	if err != nil {
-		t.Fatalf("Decode() error = %v, want the message tolerated", err)
-	}
-	if len(records) != 0 {
-		t.Errorf("Decode() returned %d records, want 0 from the overrunning record", len(records))
-	}
-	if got := errorCountFor(d, flow.VersionIPFIX, ReasonMalformed); got != 1 {
-		t.Errorf("malformed count = %d, want 1", got)
-	}
+// messageEndingIn is one IPFIX message opening on sets that each take
+// effect, a sampling declaration and two templates, and ending in tail.
+func messageEndingIn(tail ...[]byte) []byte {
+	optionsTemplate := ipfixOptionsTemplate(300, ipfixSpec(144, 4, 0), ipfixSpec(fieldSamplingInterval, 4, 0))
+	declaration := flowSet(300, be32(be32(nil, 1), 100))
+	dataTemplate := ipfixTemplateSet(
+		ipfixSpec(fieldInBytes, 4, 0), ipfixSpec(fieldApplicationName, variableFieldLength, 0))
+	return ipfixMessage(0, append([][]byte{optionsTemplate, declaration, dataTemplate}, tail...)...)
 }
 
-// RFC 7011 section 2 defines a Data Set as one or more Data Records, so a set
-// whose template is known and whose body holds none is malformed. The padding
-// rule cannot decide it: a body shorter than a record satisfies "shorter than
-// any record in the Set" and would pass as padding.
-func TestDecodeIPFIX_ShortDataSetIsCounted(t *testing.T) {
+// TestDecodeIPFIX_DiscardsAMalformedMessageWhole pins RFC 7011 section 9.1: a
+// length that does not fit what encloses it discards the message whole, so
+// no record, template or declaration in it takes effect, those ahead of the
+// fault included.
+func TestDecodeIPFIX_DiscardsAMalformedMessageWhole(t *testing.T) {
 	t.Parallel()
 
+	record := append(be32(nil, 10), 3, 'a', 'b', 'c')
 	tests := []struct {
-		name string
-		body []byte
+		name      string
+		message   []byte
+		malformed bool
 	}{
-		{name: "empty body"},
-		{name: "one octet short", body: fixtureIPFIXRecord()[:len(fixtureIPFIXRecord())-1]},
+		{name: "well formed", message: messageEndingIn(flowSet(fixtureIPFIXTemplateID, record))},
+		{
+			name:      "variable-length value past its set",
+			message:   messageEndingIn(flowSet(fixtureIPFIXTemplateID, record, append(be32(nil, 20), 200, 'x'))),
+			malformed: true,
+		},
+		{
+			name:      "data set shorter than a record",
+			message:   messageEndingIn(flowSet(fixtureIPFIXTemplateID, record[:3])),
+			malformed: true,
+		},
+		{
+			name:      "set running past the message",
+			message:   messageEndingIn(flowSet(fixtureIPFIXTemplateID, record), be16(be16(nil, 400), 60000)),
+			malformed: true,
+		},
+		{
+			name:      "set shorter than its header",
+			message:   messageEndingIn(flowSet(fixtureIPFIXTemplateID, record), be16(be16(nil, 400), 2)),
+			malformed: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -487,21 +494,124 @@ func TestDecodeIPFIX_ShortDataSetIsCounted(t *testing.T) {
 			t.Parallel()
 
 			d := newTestDecoder()
-			message := ipfixMessage(0, fixtureIPFIXTemplate(),
-				flowSet(fixtureIPFIXTemplateID, tt.body))
-
-			records, err := d.Decode(sentFrom(testExporter), message, nil)
-			if err != nil {
-				t.Fatalf("Decode() error = %v, want the message tolerated", err)
+			records, err := d.Decode(sentFrom(testExporter), tt.message, nil)
+			domain := oneDomain(t, d)
+			if !tt.malformed {
+				if err != nil || len(records) != 1 || domain.Templates != 1 || domain.OptionsTemplates != 1 ||
+					domain.SamplingRate != 100 {
+					t.Fatalf("Decode() = %d records, %v, domain %+v, want every set in effect",
+						len(records), err, domain)
+				}
+				return
 			}
-			if len(records) != 0 {
-				t.Errorf("Decode() returned %d records, want 0", len(records))
+
+			var de *decodeError
+			if !errors.As(err, &de) || de.Reason() != ReasonMalformed {
+				t.Fatalf("Decode() error = %v, want a malformed rejection", err)
+			}
+			if len(records) != 0 || domain.Templates != 0 || domain.OptionsTemplates != 0 || domain.SamplingRate != 0 {
+				t.Errorf("Decode() = %d records, domain %+v, want nothing from the message in effect",
+					len(records), domain)
 			}
 			if got := errorCountFor(d, flow.VersionIPFIX, ReasonMalformed); got != 1 {
 				t.Errorf("malformed count = %d, want 1", got)
 			}
-			if got := errorCountFor(d, flow.VersionIPFIX, ReasonMissingTemplate); got != 0 {
-				t.Errorf("missing_template count = %d, want 0 for a known template", got)
+		})
+	}
+}
+
+// TestDecodeIPFIX_DiscardsAgainstAStoredTemplate pins the check to the
+// template an earlier message stored, which a data-only message names.
+func TestDecodeIPFIX_DiscardsAgainstAStoredTemplate(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	announce := ipfixMessage(0, ipfixTemplateSet(ipfixSpec(fieldApplicationName, variableFieldLength, 0)))
+	if _, err := d.Decode(sentFrom(testExporter), announce, nil); err != nil {
+		t.Fatalf("Decode() error = %v announcing the template", err)
+	}
+
+	message := ipfixMessage(1, flowSet(fixtureIPFIXTemplateID, []byte{3, 'a', 'b', 'c'}, []byte{200, 'x'}))
+	records, err := d.Decode(sentFrom(testExporter), message, nil)
+	if err == nil || len(records) != 0 {
+		t.Errorf("Decode() = %d records, %v, want the message discarded", len(records), err)
+	}
+}
+
+// TestDecodeIPFIX_RefusedTemplateJudgesNoData pins the check to the templates
+// registration would store: one whose record cannot fit a set is refused, so
+// the data set naming it is missing its template rather than malformed.
+func TestDecodeIPFIX_RefusedTemplateJudgesNoData(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	message := ipfixMessage(0,
+		ipfixTemplateSet(ipfixSpec(fieldInBytes, 40000, 0), ipfixSpec(fieldInPackets, 40000, 0)),
+		flowSet(fixtureIPFIXTemplateID, be32(nil, 1)))
+	if _, err := d.Decode(sentFrom(testExporter), message, nil); err != nil {
+		t.Fatalf("Decode() error = %v, want the message read", err)
+	}
+	for _, reason := range []string{ReasonInvalidTemplate, ReasonMissingTemplate} {
+		if got := errorCountFor(d, flow.VersionIPFIX, reason); got != 1 {
+			t.Errorf("%s count = %d, want 1", reason, got)
+		}
+	}
+}
+
+// TestDecodeIPFIX_DiscardWithdrawsARedefinedLayout pins what a discarded
+// message leaves of the IDs it announces: one it redefines, ahead of the fault
+// or behind a data set that fails, is withdrawn, and one it refreshes keeps
+// its layout.
+func TestDecodeIPFIX_DiscardWithdrawsARedefinedLayout(t *testing.T) {
+	t.Parallel()
+
+	held := ipfixTemplateSet(ipfixSpec(fieldIPv4SrcAddr, 4, 0), ipfixSpec(fieldInBytes, 4, 0))
+	redefined := ipfixTemplateSet(
+		ipfixSpec(fieldIPv4SrcAddr, 4, 0), ipfixSpec(fieldIPv4DstAddr, 4, 0), ipfixSpec(fieldInBytes, 4, 0))
+	short := flowSet(fixtureIPFIXTemplateID, []byte{10, 0, 0, 1, 0})
+	// Two records of the redefined layout, which the held one reads as three.
+	next := flowSet(fixtureIPFIXTemplateID, be32(be32(be32(be32(be32(be32(nil,
+		0x0a000001), 0x0a000002), 1000), 0x0a000003), 0x0a000004), 2000))
+
+	tests := []struct {
+		name      string
+		sets      [][]byte
+		withdrawn bool
+	}{
+		{"redefined ahead of a short data set", [][]byte{redefined, short}, true},
+		{"redefined behind a short data set", [][]byte{short, redefined}, true},
+		{"redefined ahead of a set shorter than its header", [][]byte{redefined, be16(be16(nil, 500), 2)}, true},
+		{"redefined ahead of a set running past the message", [][]byte{redefined, be16(be16(nil, 500), 60000)}, true},
+		{"refreshed ahead of a short data set", [][]byte{held, short}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			decode := func(sequence uint32, sets ...[]byte) ([]flow.Record, error) {
+				return d.Decode(sentFrom(testExporter), ipfixMessage(sequence, sets...), nil)
+			}
+			if _, err := decode(0, held); err != nil {
+				t.Fatalf("Decode() error = %v announcing the held layout", err)
+			}
+			if _, err := decode(1, tt.sets...); err == nil {
+				t.Fatal("Decode() error = nil, want the message discarded")
+			}
+
+			if !tt.withdrawn {
+				if got := oneDomain(t, d).Templates; got != 1 {
+					t.Errorf("templates = %d, want the refreshed layout kept", got)
+				}
+				return
+			}
+			records, _ := decode(2, next)
+			if len(records) != 0 {
+				t.Errorf("Decode() = %d records, want none from the layout the device left", len(records))
+			}
+			if got := errorCountFor(d, flow.VersionIPFIX, ReasonMissingTemplate); got != 1 {
+				t.Errorf("missing_template count = %d, want 1", got)
 			}
 		})
 	}
