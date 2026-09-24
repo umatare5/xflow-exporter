@@ -17,6 +17,17 @@ const (
 	fieldSamplingPopulation = 310
 )
 
+// The scopes that tie a declaration to less than the device. The v9 scope
+// types are RFC 3954 section 6.1's own numbering, which overlaps the field
+// types, so only a field's position marks it a scope; IPFIX names each scope
+// by its element.
+const (
+	v9ScopeInterface         = 2
+	v9ScopeTemplate          = 5
+	fieldTemplateID          = 145
+	fieldObservationDomainID = 149
+)
+
 // unsampledSamplerID is the samplerId Cisco gives a cache it does not sample.
 // The value is an ordinary identifier to RFC 5477 and to IANA, so it carries
 // the convention only until a device declares a rate for it.
@@ -46,6 +57,14 @@ type optionsState struct {
 	appID       uint32
 	appName     []byte
 	appCategory []byte
+
+	// The scope fields a declaration can be tied to, each flagged on its own.
+	scopeTemplate     uint16
+	hasScopeTemplate  bool
+	scopeInterface    uint32
+	hasScopeInterface bool
+	scopeDomain       uint32
+	hasScopeDomain    bool
 }
 
 // apply captures one field this exporter consumes, scope or not. RFC 6759
@@ -89,17 +108,57 @@ func (o *optionsState) apply(fieldType uint16, enterprise uint32, value []byte) 
 	}
 }
 
+// applyV9Scope captures one v9 scope field.
+func (o *optionsState) applyV9Scope(scopeType uint16, value []byte) {
+	switch scopeType {
+	case v9ScopeTemplate:
+		o.scopeTemplate, o.hasScopeTemplate = beUint16(value)
+	case v9ScopeInterface:
+		o.scopeInterface, o.hasScopeInterface = beUint32(value)
+	}
+}
+
+// applyIPFIXScope captures one IPFIX scope field.
+func (o *optionsState) applyIPFIXScope(fieldType uint16, enterprise uint32, value []byte) {
+	if enterprise != 0 {
+		return
+	}
+
+	switch fieldType {
+	case fieldTemplateID:
+		o.scopeTemplate, o.hasScopeTemplate = beUint16(value)
+	case fieldInputSNMP:
+		o.scopeInterface, o.hasScopeInterface = beUint32(value)
+	case fieldObservationDomainID:
+		o.scopeDomain, o.hasScopeDomain = beUint32(value)
+	}
+}
+
 // commit publishes what the record declared: the sampling rate onto the
 // device's sampler table, and the application strings into its application
-// table. A declaration naming no sampler also lands on the domain, which is
-// the only scope its announcement can claim.
-func (o *optionsState) commit(d *Decoder, key domainKey, domain *domainState) {
+// table. A declaration naming no sampler lands on the first scope it carries
+// of template, interface and another domain, and on its own domain where it
+// carries none of them.
+func (o *optionsState) commit(d *Decoder, key domainKey, port uint16, domain *domainState) {
 	if rate := o.samplingRate(); rate > 0 {
 		id, named := o.declaredID()
-		if !named {
+		switch {
+		case named:
+			d.templates.declareSampler(domain, key.odid, id, named, rate)
+		case o.hasScopeTemplate:
+			d.templates.declareScoped(domain, scopedRef{
+				kind: scopeTemplate, odid: key.odid, port: port, value: uint32(o.scopeTemplate),
+			}, rate)
+		case o.hasScopeInterface:
+			d.templates.declareScoped(domain, scopedRef{
+				kind: scopeInterface, odid: key.odid, value: o.scopeInterface,
+			}, rate)
+		case o.hasScopeDomain && o.scopeDomain != key.odid:
+			d.templates.declareScoped(domain, scopedRef{kind: scopeDomain, value: o.scopeDomain}, rate)
+		default:
 			domain.samplingRate.Store(rate)
+			d.templates.declareSampler(domain, key.odid, id, named, rate)
 		}
-		d.templates.declareSampler(domain, key.odid, id, named, rate)
 	}
 
 	if o.appID != 0 {

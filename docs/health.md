@@ -109,7 +109,7 @@ Counts the records routed as an aggregate that declared a flow count of zero. RF
 
 **`xflow_sampling_rate`**
 
-Reflects the rate in force for a domain, declared by its own options or inherited from the device.
+Reflects the rate in force for a domain, declared by its own options or by options naming it, or inherited from the device. A device declaring its rates per template or interface declares none for the domain, which then reports no series.
 
 **`xflow_sampler_rate`**
 
@@ -141,9 +141,9 @@ These notes hold across the subsystems rather than for one metric.
 
 **Domain Identification**: A domain is strictly defined by the triple `exporter_address`, `version`, and `odid`. Removing `version` could merge unrelated protocols on the same device. `odid` represents Source ID on v9, Observation Domain ID on IPFIX, and sub-agent ID on sFlow.
 
-**Sampling Declarations**: `xflow_sampling_rate` tracks singular v9/IPFIX Options Templates, while `xflow_sampler_rate` resolves mappings for devices declaring multiple samplers, keyed per device, protocol and declaring domain. The domain is the unit a record resolves in, so auditing the domains with multiple rates can be achieved via: `count by (exporter_address, version, odid) (count_values by (exporter_address, version, odid) ("rate", (xflow_sampling_rate or xflow_sampler_rate))) > 1`. A domain it returns has lost a correction only where `xflow_sampling_unresolved_flows_total` is also rising.
+**Sampling Declarations**: `xflow_sampling_rate` tracks the rate declared for a whole domain and `xflow_sampler_rate` each declared sampler, so a rate scoped to a template or an interface appears in neither. The domain is the unit a record resolves in, so auditing the domains with multiple rates can be achieved via: `count by (exporter_address, version, odid) (count_values by (exporter_address, version, odid) ("rate", (xflow_sampling_rate or xflow_sampler_rate))) > 1`. A domain it returns has lost a correction only where `xflow_sampling_unresolved_flows_total` is also rising.
 
-**Correction Precedence**: A record takes the rate its own domain declared for the sampler it names. A samplerId then reaches the device's other domains and stops undecided where those disagree, while a selectorId is looked up in its own domain alone, IANA numbering it within the domain. A record the precedence has not settled takes its domain's own declaration, then the one rate the whole device agrees on, and is corrected by one where neither answers. `xflow_sampling_unresolved_flows_total` separates that from a genuine 1:1, appearing once the device is known to sample.
+**Correction Precedence**: A record takes the rate its own domain declared for the sampler it names, or, naming none, the rate scoped to its template and then to the interface it arrived on. A samplerId then reaches the device's other domains and stops undecided where those disagree, while a selectorId is looked up in its own domain alone, IANA numbering it within the domain. A record the precedence has not settled takes the rate `xflow_sampling_rate` reports for its domain, which no rate scoped below the domain joins, and is corrected by one where there is none. A declaration carrying several scopes keys on the first of template, interface and domain alone, where RFC 7011 section 3.4.2.1 has a record match every scope it carries.
 
 **Unsampled Caches**: A router exporting one sampled cache and one unsampled names samplerId `0` for every record of the second, Cisco marking the absence of a sampler rather than leaving the element out. Those records inherit no rate and are not counted uncorrected. The value is ordinary to RFC 5477 and to IANA, so a device declaring a rate for `0` is taken at its word, and an expiry then leaves its records owed one.
 

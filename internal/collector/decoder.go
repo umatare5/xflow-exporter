@@ -119,7 +119,7 @@ func NewDecoderCollector(src DecoderSource) *DecoderCollector {
 		),
 		samplingDesc: prometheus.NewDesc(
 			"xflow_sampling_rate",
-			"Packet sampling rate in force for the domain, declared by its own options or inherited from the device",
+			"Packet sampling rate in force for the domain, declared by options naming it or inherited from the device",
 			[]string{labelExporter, labelVersion, labelODID}, nil,
 		),
 		samplerRateDesc: prometheus.NewDesc(

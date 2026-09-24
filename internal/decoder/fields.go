@@ -86,6 +86,10 @@ type fieldState struct {
 	selectorID    uint32
 	hasSelectorID bool
 
+	// template is the template the record arrived under, session included,
+	// which a declaration scoped to one template names.
+	template templateRef
+
 	// A sampled packet section, kept for resolution after every field is
 	// read so the device's own parsed fields can take precedence.
 	frameSection []byte
@@ -121,7 +125,7 @@ func finishRecord(r *flow.Record, state *fieldState, clock exportClock, domain *
 
 	if r.SamplingRate == 0 {
 		owed := false
-		r.SamplingRate, owed = rateInForce(state, domain)
+		r.SamplingRate, owed = rateInForce(state, r.InputIf, domain)
 		if owed {
 			domain.samplingUnresolved.Add(1)
 		}
@@ -163,16 +167,19 @@ func flowClockPair(state *fieldState, clock exportClock) (start, end time.Time, 
 
 // rateInForce resolves the rate that measured one record from whichever
 // element named its selection process, and reports whether a rate is still
-// owed to it.
-func rateInForce(state *fieldState, domain *domainState) (rate uint32, owed bool) {
+// owed to it. A record naming none takes a rate scoped to its template or
+// interface before the domain's.
+func rateInForce(state *fieldState, inputIf uint32, domain *domainState) (rate uint32, owed bool) {
 	switch {
 	case state.hasSamplerID:
 		return domain.correctionFor(state.samplerID, true)
 	case state.hasSelectorID:
 		return domain.correctionFor(state.selectorID, false)
-	default:
-		return domain.inheritedCorrection()
 	}
+	if rate, held := domain.scopedCorrection(state.template, inputIf); held {
+		return rate, false
+	}
+	return domain.inheritedCorrection()
 }
 
 // flowDirection reads IE 61. RFC 5102 assigns 0 and 1 alone, so any other

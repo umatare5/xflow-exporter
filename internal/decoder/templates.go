@@ -139,6 +139,26 @@ type samplerRef struct {
 	id   uint32
 }
 
+// scopedRef names a declaration an options record tied to less than the
+// device: one template of one transport session, the records arriving on one
+// interface, or a whole domain named by its identifier. A template ID means
+// something only inside its session (RFC 7011 section 3.4.1), so port joins it.
+type scopedRef struct {
+	kind  scopeKind
+	odid  uint32
+	port  uint16
+	value uint32
+}
+
+// scopeKind is what a scoped declaration's value identifies.
+type scopeKind uint8
+
+const (
+	scopeTemplate scopeKind = iota + 1
+	scopeInterface
+	scopeDomain
+)
+
 // samplerTable holds one device's sampling declarations for one protocol.
 // named is keyed by the samplerId (IE 48) or selectorId (IE 302) a data
 // record names; plain holds the rate a domain declared without naming one,
@@ -147,10 +167,16 @@ type samplerTable struct {
 	mu    sync.RWMutex
 	named map[samplerRef]samplerEntry
 	plain map[uint32]samplerEntry
+	// scoped holds the rates tied to what a scopedRef names. None of them is
+	// lent to a record it does not name, so none feeds inherited either.
+	scoped map[scopedRef]samplerEntry
+	// hasScoped lets a record skip the table lock on a device that scopes
+	// nothing, which is every device before its first scoped declaration.
+	hasScoped atomic.Bool
 	// inherited is the one rate every declaration on this device agrees on,
-	// and zero where they carry more than one. A record whose own domain
-	// declared nothing takes it rather than a rate the device never tied
-	// to it.
+	// and zero where they carry more than one. A domain no declaration names,
+	// its own or another's scoped to it, takes it rather than a rate the
+	// device never tied to it.
 	inherited atomic.Uint32
 	// sampled marks a device known to sample, by a declaration or by a
 	// record naming its selection process. It never clears, so an expiry
@@ -176,7 +202,7 @@ func (t *samplerTable) declare(odid, id uint32, named bool, rate uint32, at int6
 	if named {
 		previous, held = t.named[ref]
 	}
-	if !held && len(t.named)+len(t.plain) >= maxSamplersPerExporter {
+	if !held && t.sizeLocked() >= maxSamplersPerExporter {
 		return false, false
 	}
 
@@ -201,10 +227,53 @@ func (t *samplerTable) declare(odid, id uint32, named bool, rate uint32, at int6
 	return true, held && previous.rate != rate
 }
 
+// declareScoped records one scoped announcement, reporting as declare does.
+func (t *samplerTable) declareScoped(ref scopedRef, rate uint32, at int64) (ok, changed bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	previous, held := t.scoped[ref]
+	if !held && t.sizeLocked() >= maxSamplersPerExporter {
+		return false, false
+	}
+	if t.scoped == nil {
+		t.scoped = make(map[scopedRef]samplerEntry)
+	}
+	t.scoped[ref] = samplerEntry{rate: rate, lastSeen: at}
+	t.hasScoped.Store(true)
+	t.sampled.Store(true)
+	return true, held && previous.rate != rate
+}
+
+// scopedRate returns the rate declared for exactly what ref names.
+func (t *samplerTable) scopedRate(ref scopedRef) (uint32, bool) {
+	if !t.hasScoped.Load() {
+		return 0, false
+	}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	entry, held := t.scoped[ref]
+	return entry.rate, held
+}
+
+// sizeLocked is how many declarations the budget counts. The table lock is
+// held by the caller.
+func (t *samplerTable) sizeLocked() int {
+	return len(t.named) + len(t.plain) + len(t.scoped)
+}
+
 // expire drops every declaration the device stopped announcing before cutoff.
 func (t *samplerTable) expire(cutoff int64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	for ref, entry := range t.scoped {
+		if entry.lastSeen < cutoff {
+			delete(t.scoped, ref)
+		}
+	}
+	t.hasScoped.Store(len(t.scoped) > 0)
 
 	for ref, entry := range t.named {
 		if entry.lastSeen < cutoff {
@@ -433,16 +502,35 @@ func (d *domainState) correctionFor(id uint32, isSampler bool) (rate uint32, owe
 	return d.inheritedCorrection()
 }
 
-// inheritedCorrection is what a record naming no sampler takes: the domain's
-// own declaration, then the one rate the whole device agrees on.
+// scopedCorrection is what a declaration scoped below the domain settles for
+// a record naming no sampler: its own template's rate, then the rate of the
+// interface it arrived on. An ifIndex of zero names no interface (RFC 2863).
+func (d *domainState) scopedCorrection(tpl templateRef, inputIf uint32) (rate uint32, held bool) {
+	ref := scopedRef{kind: scopeTemplate, odid: d.odid, port: tpl.port, value: uint32(tpl.id)}
+	if rate, held := d.declared.scopedRate(ref); held {
+		return rate, true
+	}
+	if inputIf == 0 {
+		return 0, false
+	}
+	return d.declared.scopedRate(scopedRef{kind: scopeInterface, odid: d.odid, value: inputIf})
+}
+
+// inheritedCorrection is what a record the precedence has not settled takes:
+// the rate in force for its domain.
 func (d *domainState) inheritedCorrection() (rate uint32, owed bool) {
 	rate = d.rateInForce()
 	return rate, rate == 0
 }
 
-// rateInForce is the rate in force for the domain itself.
+// rateInForce is the rate in force for the domain itself: its own
+// declaration, then one another domain's options scoped to it, then the rate
+// the device agrees on.
 func (d *domainState) rateInForce() uint32 {
 	if rate := d.samplingRate.Load(); rate != 0 {
+		return rate
+	}
+	if rate, held := d.declared.scopedRate(scopedRef{kind: scopeDomain, value: d.odid}); held {
 		return rate
 	}
 	return d.declared.inherited.Load()
@@ -689,6 +777,18 @@ func (s *templateStore) sweepSamplerTablesLocked(cutoff int64) {
 		if _, held := live[key]; !held {
 			delete(s.samplerTables, key)
 		}
+	}
+}
+
+// declareScoped records one scoped announcement onto the device's table,
+// counting as declareSampler does.
+func (s *templateStore) declareScoped(d *domainState, ref scopedRef, rate uint32) {
+	ok, changed := d.declared.declareScoped(ref, rate, d.lastSeen.Load())
+	if !ok {
+		s.declarationsRefused.Add(1)
+	}
+	if changed {
+		d.samplerRateChanges.Add(1)
 	}
 }
 
@@ -1026,9 +1126,9 @@ type DomainSnapshot struct {
 	// SamplerRateChanges counts the declarations that replaced a rate this
 	// domain had already declared for the same identifier.
 	SamplerRateChanges uint64
-	// SamplingRate is the rate in force for the domain, declared by its own
-	// options or inherited from the device's single declaration. It is zero
-	// where neither settles on one.
+	// SamplingRate is the rate in force for the domain: its own declaration,
+	// one another domain's options scoped to it, or the device's single rate.
+	// It is zero where none settles on one.
 	SamplingRate uint32
 	// SamplePool and SamplesDropped are the sFlow samplers' own counters,
 	// summed across the domain. The Measured flags carry whether a difference
