@@ -908,6 +908,20 @@ func (d *domainState) pruneExpiredLocked(now time.Time, ttl time.Duration) {
 	}
 }
 
+// withdraw drops the layout an ID held, opening no domain for a device that
+// holds none.
+func (s *templateStore) withdraw(key domainKey, port, id uint16) {
+	s.mu.RLock()
+	d := s.domains[key]
+	s.mu.RUnlock()
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	d.dropLocked(templateRef{port: port, id: id})
+	d.mu.Unlock()
+}
+
 // dropLocked removes the template under ref, if one is held, and returns its
 // fields to the budget. The domain lock is held by the caller.
 func (d *domainState) dropLocked(ref templateRef) {

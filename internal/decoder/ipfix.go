@@ -3,6 +3,7 @@
 package decoder
 
 import (
+	"cmp"
 	"encoding/binary"
 	"net/netip"
 	"time"
@@ -25,7 +26,8 @@ const (
 )
 
 // decodeIPFIX parses one IPFIX message. Like v9, per-set problems are counted
-// through issue without failing the message.
+// through issue without failing the message, save the lengths RFC 7011
+// section 9.1 names malformed, which discard it whole.
 func (d *Decoder) decodeIPFIX(
 	exporter netip.Addr, port uint16, payload []byte, dst []flow.Record, issue func(reason string),
 ) ([]flow.Record, *decodeError) {
@@ -46,6 +48,10 @@ func (d *Decoder) decodeIPFIX(
 		issue(ReasonDomainLimit)
 		return dst, nil
 	}
+	msg := payload[:msgLen]
+	if err := d.checkIPFIXLengths(key, port, msg); err != nil {
+		return dst, err
+	}
 
 	// Export Time is seconds (RFC 7011 section 3.1), and the header states no
 	// uptime: a record's own IE 160 is what supplies one.
@@ -53,20 +59,10 @@ func (d *Decoder) decodeIPFIX(
 
 	dataRecords, complete := 0, true
 
-	offset := ipfixHeaderLen
-	for offset+flowSetHeaderLen <= msgLen {
-		setID := binary.BigEndian.Uint16(payload[offset : offset+2])
-		setLen := int(binary.BigEndian.Uint16(payload[offset+2 : offset+4]))
-
-		if setLen < flowSetHeaderLen {
-			return dst, malformed("ipfix set %d declares length %d, below the %d-byte set header",
-				setID, setLen, flowSetHeaderLen)
-		}
-		if offset+setLen > msgLen {
-			return dst, malformed("ipfix set %d of %d bytes runs past the message", setID, setLen)
-		}
-
-		set := payload[offset+flowSetHeaderLen : offset+setLen]
+	for offset := ipfixHeaderLen; offset+flowSetHeaderLen <= msgLen; {
+		setID := binary.BigEndian.Uint16(msg[offset : offset+2])
+		setLen := int(binary.BigEndian.Uint16(msg[offset+2 : offset+4]))
+		set := msg[offset+flowSetHeaderLen : offset+setLen]
 		var records int
 		dst, records, complete = d.decodeIPFIXSet(key, port, domain, setID, set, clock, dst, complete, issue)
 		dataRecords += records
@@ -86,18 +82,104 @@ func (d *Decoder) decodeIPFIX(
 	return dst, nil
 }
 
+// checkIPFIXLengths reports the first length in one message that does not fit
+// what encloses it, before anything in the message takes effect: a set
+// against the message, or a data set against the records of its template,
+// one announced earlier in the message included. A message it fails still
+// withdraws each ID it redefines, so the device's next data miss their
+// template rather than decode against the layout the device left.
+func (d *Decoder) checkIPFIXLengths(key domainKey, port uint16, msg []byte) *decodeError {
+	var announced map[uint16]*template
+	announce := func(id uint16, t *template) {
+		if !t.fitsASet() {
+			return
+		}
+		if announced == nil {
+			announced = make(map[uint16]*template)
+		}
+		announced[id] = t
+	}
+	// The pass applying the message counts the templates it refuses.
+	ignore := func(string) {}
+
+	var err *decodeError
+	for offset := ipfixHeaderLen; offset+flowSetHeaderLen <= len(msg); {
+		setID := binary.BigEndian.Uint16(msg[offset : offset+2])
+		setLen := int(binary.BigEndian.Uint16(msg[offset+2 : offset+4]))
+		if setLen < flowSetHeaderLen {
+			err = cmp.Or(err, malformed("ipfix set %d declares length %d, below the %d-byte set header",
+				setID, setLen, flowSetHeaderLen))
+			break
+		}
+		if offset+setLen > len(msg) {
+			err = cmp.Or(err, malformed("ipfix set %d of %d bytes runs past the message", setID, setLen))
+			break
+		}
+		set := msg[offset+flowSetHeaderLen : offset+setLen]
+		offset += setLen
+
+		switch {
+		case setID == ipfixTemplateSetID:
+			d.parseIPFIXTemplates(set, ignore, announce)
+		case setID == ipfixOptionsTemplateSetID:
+			d.parseIPFIXOptionsTemplates(set, ignore, announce)
+		case setID >= minDataSetID && err == nil:
+			tpl, ok := announced[setID]
+			if !ok {
+				tpl, ok = d.templates.lookup(key, port, setID)
+			}
+			// The sets behind a failed data set stay framed, so the walk
+			// reads on to the announcements among them.
+			if ok && !holdsRecords(tpl, set) {
+				err = malformed("ipfix data set %d does not hold whole records of its template", setID)
+			}
+		}
+	}
+
+	if err != nil {
+		for id, t := range announced {
+			if held, ok := d.templates.lookup(key, port, id); ok && !held.sameLayout(t) {
+				d.templates.withdraw(key, port, id)
+			}
+		}
+	}
+	return err
+}
+
+// holdsRecords reports whether set carries at least one record of tpl, RFC
+// 7011 section 2 giving a data set one or more, and ends each variable-length
+// value inside itself.
+func holdsRecords(tpl *template, set []byte) bool {
+	if len(set) < tpl.recordLen {
+		return false
+	}
+	if !tpl.hasVariable {
+		return true
+	}
+	for offset := 0; len(set)-offset >= tpl.recordLen; {
+		for _, f := range tpl.fields {
+			var ok bool
+			if _, offset, ok = nextFieldValue(f, set, offset); !ok {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // decodeIPFIXSet routes one set by its id, reporting how many data records it
 // held and whether that count is trustworthy.
 func (d *Decoder) decodeIPFIXSet(
 	key domainKey, port uint16, domain *domainState, setID uint16, set []byte, clock exportClock,
 	dst []flow.Record, complete bool, issue func(reason string),
 ) ([]flow.Record, int, bool) {
+	register := func(id uint16, t *template) { d.registerTemplate(key, port, id, t, issue) }
 	switch {
 	case setID == ipfixTemplateSetID:
-		d.parseIPFIXTemplates(key, port, set, issue)
+		d.parseIPFIXTemplates(set, issue, register)
 		return dst, 0, complete
 	case setID == ipfixOptionsTemplateSetID:
-		d.parseIPFIXOptionsTemplates(key, port, set, issue)
+		d.parseIPFIXOptionsTemplates(set, issue, register)
 		return dst, 0, complete
 	case setID >= minDataSetID:
 		return d.decodeIPFIXDataSet(key, port, domain, setID, set, clock, dst, complete, issue)
@@ -107,11 +189,11 @@ func (d *Decoder) decodeIPFIXSet(
 	}
 }
 
-// parseIPFIXTemplates compiles every template in one template set. A field
-// count of zero is a withdrawal, which RFC 7011 section 8.4 tells a collector
-// to ignore over UDP: the set is still walked past it so the announcements
-// behind it are read.
-func (d *Decoder) parseIPFIXTemplates(key domainKey, port uint16, set []byte, issue func(reason string)) {
+// parseIPFIXTemplates compiles every template in one template set and hands
+// each to register. A field count of zero is a withdrawal, which RFC 7011
+// section 8.4 tells a collector to ignore over UDP: the set is still walked
+// past it so the announcements behind it are read.
+func (d *Decoder) parseIPFIXTemplates(set []byte, issue func(reason string), register func(id uint16, t *template)) {
 	offset := 0
 	for offset+flowSetHeaderLen <= len(set) {
 		templateID := binary.BigEndian.Uint16(set[offset : offset+2])
@@ -133,17 +215,20 @@ func (d *Decoder) parseIPFIXTemplates(key domainKey, port uint16, set []byte, is
 		}
 		offset = next
 
-		d.registerTemplate(key, port, templateID, &template{
+		register(templateID, &template{
 			fields:      fields,
 			recordLen:   minLen,
 			hasVariable: hasVariable,
-		}, issue)
+		})
 	}
 }
 
-// parseIPFIXOptionsTemplates compiles every options template in one set. The
-// head differs from v9: a total field count and a scope field count.
-func (d *Decoder) parseIPFIXOptionsTemplates(key domainKey, port uint16, set []byte, issue func(reason string)) {
+// parseIPFIXOptionsTemplates compiles every options template in one set and
+// hands each to register. The head differs from v9: a total field count and a
+// scope field count.
+func (d *Decoder) parseIPFIXOptionsTemplates(
+	set []byte, issue func(reason string), register func(id uint16, t *template),
+) {
 	// RFC 7011 figures T and V put no scope field count on a withdrawal, so
 	// it is the template id and a field count of zero and nothing else. An
 	// all-options withdrawal is therefore a set of length 8, whose body falls
@@ -184,13 +269,13 @@ func (d *Decoder) parseIPFIXOptionsTemplates(key domainKey, port uint16, set []b
 		}
 		offset = next
 
-		d.registerTemplate(key, port, templateID, &template{
+		register(templateID, &template{
 			fields:      fields,
 			recordLen:   minLen,
 			hasVariable: hasVariable,
 			scopeCount:  scopeCount,
 			options:     true,
-		}, issue)
+		})
 	}
 }
 
@@ -274,15 +359,6 @@ func (d *Decoder) decodeIPFIXDataSet(
 			return dst, records, false
 		}
 		records++
-	}
-
-	// RFC 7011 section 2 defines a Data Set as one or more Data Records, so a
-	// set whose template is known and whose body holds none is malformed
-	// rather than padding. The padding rule cannot say so: a body shorter than
-	// a record satisfies "shorter than any record in the Set".
-	if records == 0 {
-		issue(ReasonMalformed)
-		return dst, 0, false
 	}
 
 	// Leftover bytes shorter than a minimum record are padding, tolerated.

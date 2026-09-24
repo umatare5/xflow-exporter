@@ -213,11 +213,7 @@ func (d *Decoder) parseV9FieldSpecs(
 // registerTemplate checks a compiled template's record length and registers
 // it. The caller has computed recordLen, fixed or minimum.
 func (d *Decoder) registerTemplate(key domainKey, port, id uint16, t *template, issue func(reason string)) {
-	// A record must fit a set alongside its header, and must consume input.
-	// A v9 options template may declare a zero-length scope, so one whose
-	// every field is such a scope sums to nothing, and the data sets naming
-	// it divide their length by it.
-	if t.recordLen < 1 || t.recordLen > 65535-flowSetHeaderLen {
+	if !t.fitsASet() {
 		issue(ReasonInvalidTemplate)
 		return
 	}
@@ -233,6 +229,14 @@ func (d *Decoder) registerTemplate(key domainKey, port, id uint16, t *template, 
 	if !t.noted.Load() {
 		t.noted.Store(d.noteUnread(key, port, id, t))
 	}
+}
+
+// fitsASet reports whether a record of t fits a set alongside its header and
+// consumes input. A v9 options template may declare a zero-length scope, so
+// one whose every field is such a scope sums to nothing, and the data sets
+// naming it would divide their length by it.
+func (t *template) fitsASet() bool {
+	return t.recordLen >= 1 && t.recordLen <= 65535-flowSetHeaderLen
 }
 
 // fixedRecordLen sums a fixed-length field set.
