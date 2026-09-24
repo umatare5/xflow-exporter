@@ -137,7 +137,6 @@ func finishRecord(r *flow.Record, state *fieldState, clock exportClock, domain *
 func resolveFlowClock(r *flow.Record, state *fieldState, clock exportClock, domain *domainState) {
 	start, end, complete := flowClockPair(state, clock)
 	if !complete {
-		r.Start, r.End = start, end
 		return
 	}
 
@@ -147,12 +146,12 @@ func resolveFlowClock(r *flow.Record, state *fieldState, clock exportClock, doma
 }
 
 // flowClockPair resolves the record's instants and reports whether they form
-// a pair. Absolute elements are taken as the device wrote them; the
-// uptime-relative ones are anchored against the export clock, which IPFIX
-// leaves to IE 160 to supply.
+// a pair. A complete absolute pair is taken as the device wrote it. Short of
+// one, the uptime-relative pair is anchored against the export clock, which
+// IPFIX leaves to IE 160 to supply, so a lone absolute end displaces nothing.
 func flowClockPair(state *fieldState, clock exportClock) (start, end time.Time, complete bool) {
-	if !state.startAbs.IsZero() || !state.endAbs.IsZero() {
-		return state.startAbs, state.endAbs, !state.startAbs.IsZero() && !state.endAbs.IsZero()
+	if !state.startAbs.IsZero() && !state.endAbs.IsZero() {
+		return state.startAbs, state.endAbs, true
 	}
 	if !state.hasFirstUptime || !state.hasLastUptime {
 		return time.Time{}, time.Time{}, false
@@ -437,19 +436,19 @@ func applyRareField(r *flow.Record, state *fieldState, fieldType uint16, value [
 			state.bootAt = at
 		}
 	case fieldFlowStartSeconds:
-		if at, ok := unixSeconds(value); ok {
+		if at, ok := pastEpoch(unixSeconds(value)); ok {
 			state.startAbs = at
 		}
 	case fieldFlowEndSeconds:
-		if at, ok := unixSeconds(value); ok {
+		if at, ok := pastEpoch(unixSeconds(value)); ok {
 			state.endAbs = at
 		}
 	case fieldFlowStartMilliseconds:
-		if at, ok := unixMilliseconds(value); ok {
+		if at, ok := pastEpoch(unixMilliseconds(value)); ok {
 			state.startAbs = at
 		}
 	case fieldFlowEndMilliseconds:
-		if at, ok := unixMilliseconds(value); ok {
+		if at, ok := pastEpoch(unixMilliseconds(value)); ok {
 			state.endAbs = at
 		}
 	case fieldApplicationName:
@@ -564,4 +563,12 @@ func unixMilliseconds(value []byte) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	return time.UnixMilli(int64(v)), true
+}
+
+// pastEpoch passes on a flow instant read from IE 150-153 unless it is the
+// epoch itself, which no flow reached, so a zero reads as unset. IE 160 keeps
+// its zero: the uptime instants anchored on it still differ by the duration
+// the device measured.
+func pastEpoch(at time.Time, ok bool) (time.Time, bool) {
+	return at, ok && at.UnixNano() != 0
 }

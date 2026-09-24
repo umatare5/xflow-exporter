@@ -2,6 +2,7 @@ package decoder
 
 import (
 	"encoding/binary"
+	"slices"
 	"testing"
 	"time"
 
@@ -321,5 +322,103 @@ func TestDecodeNetFlowV8_WithholdsAnInvertedClockUncounted(t *testing.T) {
 	}
 	if domain.ClocksAnchored {
 		t.Error("ClocksAnchored = true, want false: an aggregate publishes no span")
+	}
+}
+
+// flowClockMessage carries one IPFIX record of the given specs and values.
+func flowClockMessage(specs [][]byte, values ...[]byte) []byte {
+	var body []byte
+	for _, v := range values {
+		body = append(body, v...)
+	}
+	return ipfixMessage(1, ipfixTemplateSet(specs...), flowSet(fixtureIPFIXTemplateID, body))
+}
+
+// TestFlowClock_TakesOnlyAWholePair pins that an absolute instant wins over
+// the uptime pair only beside its other end, and that a zero in IE 150-153 is
+// the epoch rather than a reading: neither publishes instants of its own, and
+// neither displaces an uptime pair or counts as an inversion.
+func TestFlowClock_TakesOnlyAWholePair(t *testing.T) {
+	t.Parallel()
+
+	const (
+		exportMs = int64(fixtureIPFIXExportSecs) * 1000
+		upForMs  = 3_600_000
+	)
+	exportAt := time.Unix(fixtureIPFIXExportSecs, 0)
+	uptime := [][]byte{
+		ipfixSpec(fieldSystemInitTime, 8, 0),
+		ipfixSpec(fieldFirstSwitched, 4, 0),
+		ipfixSpec(fieldLastSwitched, 4, 0),
+	}
+	uptimeValues := be32(be32(be64(nil, uint64(exportMs-upForMs)), upForMs-60_000), upForMs-30_000)
+	absolute := [][]byte{
+		ipfixSpec(fieldFlowStartMilliseconds, 8, 0),
+		ipfixSpec(fieldFlowEndMilliseconds, 8, 0),
+	}
+	at := func(ms int64) []byte { return be64(nil, uint64(ms)) }
+
+	tests := []struct {
+		name      string
+		message   []byte
+		anchored  bool
+		wantStart time.Time
+	}{
+		{
+			name:    "a lone start",
+			message: flowClockMessage(absolute[:1], at(exportMs-10_000)),
+		},
+		{
+			name:    "a zero start",
+			message: flowClockMessage(absolute, at(0), at(exportMs-10_000)),
+		},
+		{
+			name:    "a zero end",
+			message: flowClockMessage(absolute, at(exportMs-10_000), at(0)),
+		},
+		{
+			name: "a lone start beside the uptime pair",
+			message: flowClockMessage(append(slices.Clone(uptime), absolute[0]),
+				uptimeValues, at(exportMs-10_000)),
+			anchored: true, wantStart: exportAt.Add(-60 * time.Second),
+		},
+		{
+			name: "a zero start beside the uptime pair",
+			message: flowClockMessage(append(slices.Clone(uptime), absolute...),
+				uptimeValues, at(0), at(exportMs-10_000)),
+			anchored: true, wantStart: exportAt.Add(-60 * time.Second),
+		},
+		{
+			name: "the uptime pair on a zero IE 160",
+			message: flowClockMessage(uptime,
+				be32(be32(be64(nil, 0), upForMs-60_000), upForMs-30_000)),
+			anchored: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			r := decodeOneRecord(t, d, tt.message)
+			domain := oneDomain(t, d)
+			if domain.ClockInversions != 0 || domain.ClocksAnchored != tt.anchored {
+				t.Errorf("inversions = %d, anchored = %v; want 0, %v",
+					domain.ClockInversions, domain.ClocksAnchored, tt.anchored)
+			}
+			if !tt.anchored {
+				if !r.Start.IsZero() || !r.End.IsZero() {
+					t.Errorf("Start, End = %v, %v; want neither published", r.Start, r.End)
+				}
+				return
+			}
+			if got := r.End.Sub(r.Start); got != 30*time.Second {
+				t.Errorf("End - Start = %v, want the 30 s the uptime pair measured", got)
+			}
+			if !tt.wantStart.IsZero() && !r.Start.Equal(tt.wantStart) {
+				t.Errorf("Start = %v, want %v", r.Start, tt.wantStart)
+			}
+		})
 	}
 }

@@ -365,7 +365,7 @@ Field types are 16-bit and vendor-assigned. Cisco defines types 1–104, reserve
 | 34, 50  | `SAMPLING_INTERVAL`, `FLOW_SAMPLER_RANDOM_INTERVAL` | 4 each       |
 | 150–153 | `flowStart`/`flowEnd`, seconds and milliseconds     | 4, 8         |
 
-Classic NetFlow exports uptime-relative clocks (21, 22). Flexible NetFlow may export absolute clocks (150–153) instead. [`fields.go`](../internal/decoder/fields.go) defines all consumed fields; any undeclared type is skipped using its specified length.
+Classic NetFlow exports uptime-relative clocks (21, 22). Flexible NetFlow may export absolute clocks (150–153) instead, which win over the uptime pair only with both ends present, a zero among them reading as unset rather than as the epoch. [`fields.go`](../internal/decoder/fields.go) defines all consumed fields; any undeclared type is skipped using its specified length.
 
 RFC 7011 section 9 requires a collector to note every element it does not read, so a template carrying an undeclared type is logged at `info` when it arrives or changes layout. A refresh repeating a logged layout logs nothing. The lines stop at 60 a minute because a forged sender can change a layout with every datagram, and a withheld layout is logged on its next refresh, each line counting those withheld before it.
 
