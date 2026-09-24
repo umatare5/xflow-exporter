@@ -478,12 +478,12 @@ func (d *domainState) countClockPair(inverted bool) {
 // reports whether a rate is still owed to it. NetFlow's samplerId is the
 // device's and PSAMP's selectorId the domain's, which isSampler separates.
 //
-// Cisco names an unsampled cache with samplerId 0 rather than leaving the
-// element out, so a record naming an undeclared 0 is complete as it stands
-// and inherits nothing. A device that does declare 0 is taken at its word,
-// neither RFC 5477 nor IANA reserving the value, and an expiry then owes
-// those records a rate rather than handing them one the device never tied to
-// that cache.
+// Cisco names an unsampled cache with samplerId 0 where its record collects
+// or matches the sampler, so a record naming an undeclared 0 is complete as
+// it stands and inherits nothing. A device that does declare 0 is taken at
+// its word, neither RFC 5477 nor IANA reserving the value, and an expiry then
+// owes those records a rate rather than handing them one the device never
+// tied to that cache.
 //
 // Naming any other identifier is the device saying it samples, which every
 // protocol states the same way while only v9 and IPFIX can also declare it.

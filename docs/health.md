@@ -101,7 +101,7 @@ Captures loss or reordering based on protocol sequence numbering. The position i
 
 **`xflow_flow_clock_inversions_total`**
 
-Counts the records whose flow ended before it began, both instants withheld rather than published. A domain whose records carry no flow clock never reaches the check, so it publishes no series.
+Counts the records whose flow ended before it began, both instants withheld rather than published. A domain that has never anchored a complete pair of instants never reaches the check, so it publishes no series.
 
 **`xflow_aggregate_zero_flows_total`**
 
@@ -145,7 +145,7 @@ These notes hold across the subsystems rather than for one metric.
 
 **Correction Precedence**: A record takes the rate its own domain declared for the sampler it names, or, naming none, the rate scoped to its template and then to the interface it arrived on. A samplerId then reaches the device's other domains and stops undecided where those disagree, while a selectorId is looked up in its own domain alone, IANA numbering it within the domain. A record the precedence has not settled takes the rate `xflow_sampling_rate` reports for its domain, which no rate scoped below the domain joins, and is corrected by one where there is none. A declaration carrying several scopes keys on the first of template, interface and domain alone, where RFC 7011 section 3.4.2.1 has a record match every scope it carries.
 
-**Unsampled Caches**: A router exporting one sampled cache and one unsampled names samplerId `0` for every record of the second, Cisco marking the absence of a sampler rather than leaving the element out. Those records inherit no rate and are not counted uncorrected. The value is ordinary to RFC 5477 and to IANA, so a device declaring a rate for `0` is taken at its word, and an expiry then leaves its records owed one.
+**Unsampled Caches**: A router exporting a sampled and an unsampled cache names samplerId `0` in the second's records where they collect or match the sampler, Cisco's mark for no sampler. Those records inherit no rate and are not counted uncorrected, while a record carrying no samplerId takes the device's one rate and reads that many times high. The value is ordinary to RFC 5477 and to IANA, so a device declaring a rate for `0` is taken at its word, and an expiry then leaves its records owed one.
 
 **Series Presence**: A series keyed by wire data appears on its first event, so `xflow_decode_errors_total`, `xflow_last_flow_timestamp_seconds` and `xflow_sampling_rate` read as absent rather than zero beforehand. The `_refused_total` counters are seeded at zero instead, a first refusal reading as a rise. `xflow_flow_clock_inversions_total` seeds at zero once a domain has anchored a flow clock, `xflow_sampler_rate_changes_total` once its device is known to sample, and `xflow_aggregate_zero_flows_total` once one of its templates has declared a flow count.
 

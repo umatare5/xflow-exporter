@@ -48,8 +48,9 @@ const (
 	// tiny fields.
 	DefaultParserMaxFieldsPerTemplate = 128
 	// DefaultParserTemplateTTL is how long an unrefreshed template stays
-	// usable. Devices resend templates every few minutes, so half an hour of
-	// silence means the template is orphaned.
+	// usable. Traditional Cisco IOS NetFlow resends a template every 20
+	// packets or 30 minutes by default, so a quiet cache refreshes it only at
+	// this edge.
 	DefaultParserTemplateTTL = 30 * time.Minute
 
 	// DefaultRemoteWriteInterval is how often the registry is shipped. It
