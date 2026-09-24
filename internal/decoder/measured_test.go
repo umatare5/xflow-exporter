@@ -75,3 +75,61 @@ func TestCounters_ReportWhatTheTemplateCarried(t *testing.T) {
 		})
 	}
 }
+
+// TestCounters_KeepTheReportedValue pins that a counter the record carried is
+// the reading, zero included: the OUT_ pair fills only a counter the template
+// left out, judged per counter rather than by the value read.
+func TestCounters_KeepTheReportedValue(t *testing.T) {
+	t.Parallel()
+
+	const odid = 921
+
+	tests := []struct {
+		name        string
+		fields      [][2]uint16
+		record      []byte
+		wantBytes   uint64
+		wantPackets uint64
+	}{
+		{
+			name:   "zero IN_ counters beside the OUT_ pair",
+			fields: [][2]uint16{{fieldInBytes, 4}, {fieldInPackets, 4}, {fieldOutBytes, 4}, {fieldOutPackets, 4}},
+			record: be32(be32(be32(be32(nil, 0), 0), 12345), 9),
+		},
+		{
+			name:        "IN_ bytes beside OUT_ packets",
+			fields:      [][2]uint16{{fieldInBytes, 4}, {fieldOutPackets, 4}},
+			record:      be32(be32(nil, 0), 9),
+			wantPackets: 9,
+		},
+		{
+			name:      "the OUT_ pair alone",
+			fields:    [][2]uint16{{fieldOutBytes, 4}, {fieldOutPackets, 4}},
+			record:    be32(be32(nil, 12345), 9),
+			wantBytes: 12345, wantPackets: 9,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			decodeSampling(t, d, v9Packet(1, odid,
+				flowSet(templateFlowSetID, templateSpec(measuredTemplateID, tc.fields...))))
+			records := decodeSampling(t, d, v9Packet(2, odid,
+				flowSet(measuredTemplateID, tc.record)))
+
+			if len(records) != 1 {
+				t.Fatalf("Decode() returned %d records, want 1", len(records))
+			}
+			got := records[0]
+			if got.Bytes != tc.wantBytes || !got.BytesReported {
+				t.Errorf("Bytes = %d (reported %t), want %d", got.Bytes, got.BytesReported, tc.wantBytes)
+			}
+			if got.Packets != tc.wantPackets || !got.PacketsReported {
+				t.Errorf("Packets = %d (reported %t), want %d", got.Packets, got.PacketsReported, tc.wantPackets)
+			}
+		})
+	}
+}
