@@ -568,6 +568,7 @@ func TestDecodeIPFIX_DiscardWithdrawsARedefinedLayout(t *testing.T) {
 	held := ipfixTemplateSet(ipfixSpec(fieldIPv4SrcAddr, 4, 0), ipfixSpec(fieldInBytes, 4, 0))
 	redefined := ipfixTemplateSet(
 		ipfixSpec(fieldIPv4SrcAddr, 4, 0), ipfixSpec(fieldIPv4DstAddr, 4, 0), ipfixSpec(fieldInBytes, 4, 0))
+	refused := ipfixTemplateSet(ipfixSpec(fieldIPv4SrcAddr, 4, 0), ipfixSpec(fieldIPv4DstAddr, 0, 0))
 	short := flowSet(fixtureIPFIXTemplateID, []byte{10, 0, 0, 1, 0})
 	// Two records of the redefined layout, which the held one reads as three.
 	next := flowSet(fixtureIPFIXTemplateID, be32(be32(be32(be32(be32(be32(nil,
@@ -582,6 +583,7 @@ func TestDecodeIPFIX_DiscardWithdrawsARedefinedLayout(t *testing.T) {
 		{"redefined behind a short data set", [][]byte{short, redefined}, true},
 		{"redefined ahead of a set shorter than its header", [][]byte{redefined, be16(be16(nil, 500), 2)}, true},
 		{"redefined ahead of a set running past the message", [][]byte{redefined, be16(be16(nil, 500), 60000)}, true},
+		{"refused behind a short data set", [][]byte{short, refused}, true},
 		{"refreshed ahead of a short data set", [][]byte{held, short}, false},
 	}
 

@@ -172,3 +172,113 @@ const testPort = 50000
 func sentFrom(addr netip.Addr) netip.AddrPort {
 	return netip.AddrPortFrom(addr, testPort)
 }
+
+// TestDecode_RefusedAnnouncementWithdrawsTheLayout pins RFC 3954 section 9 and
+// RFC 7011 section 8.4 on the parser's refusals: a redefinition it cannot read
+// still retires the layout its ID held, so the device's new data counts as
+// missing its template rather than decoding against the old one, whether it
+// shares the announcement's message or follows it.
+func TestDecode_RefusedAnnouncementWithdrawsTheLayout(t *testing.T) {
+	t.Parallel()
+
+	const id = fixtureIPFIXTemplateID
+	held := [][2]uint16{{fieldIPv4SrcAddr, 4}, {fieldInBytes, 4}}
+	tooMany := make([][2]uint16, config.DefaultParserMaxFieldsPerTemplate+1)
+	for i := range tooMany {
+		tooMany[i] = [2]uint16{fieldInPackets, 1}
+	}
+
+	ipfixTemplate := func(fields [][2]uint16) []byte {
+		specs := make([][]byte, len(fields))
+		for i, f := range fields {
+			specs[i] = ipfixSpec(f[0], f[1], 0)
+		}
+		return ipfixTemplateSet(specs...)
+	}
+	protocols := []struct {
+		version  flow.Version
+		message  func(seq uint32, sets ...[]byte) []byte
+		template func(fields [][2]uint16) []byte
+	}{
+		{
+			flow.VersionNetFlowV9,
+			func(seq uint32, sets ...[]byte) []byte { return v9Packet(seq, fixtureIPFIXODID, sets...) },
+			func(fields [][2]uint16) []byte { return flowSet(templateFlowSetID, templateSpec(id, fields...)) },
+		},
+		{flow.VersionIPFIX, ipfixMessage, ipfixTemplate},
+	}
+	refusals := map[string][][2]uint16{
+		"more fields than the parser takes": tooMany,
+		"a zero-width field":                {{fieldIPv4SrcAddr, 4}, {fieldIPv4DstAddr, 0}, {fieldInBytes, 4}},
+	}
+	// Two records of a three-field layout, which the held layout would read as
+	// three, and a body no held record fits, which it would call malformed.
+	bodies := map[string][]byte{
+		"whole records": be32(be32(be32(be32(be32(be32(nil,
+			0x0a000001), 0x0a000002), 1000), 0x0a000003), 0x0a000004), 2000),
+		"a short body": {10, 0, 0, 1, 0},
+	}
+
+	for _, p := range protocols {
+		for refusal, fields := range refusals {
+			for body, data := range bodies {
+				for _, together := range []bool{false, true} {
+					d := newTestDecoder()
+					decode := func(message []byte) []flow.Record {
+						records, _ := d.Decode(sentFrom(testExporter), message, nil)
+						return records
+					}
+					decode(p.message(1, p.template(held)))
+
+					var records []flow.Record
+					if together {
+						records = decode(p.message(2, p.template(fields), flowSet(id, data)))
+					} else {
+						decode(p.message(2, p.template(fields)))
+						records = decode(p.message(3, flowSet(id, data)))
+					}
+
+					name := p.version.String() + ", " + refusal + ", " + body
+					if len(records) != 0 {
+						t.Errorf("%s: Decode() = %d records, want none from a withdrawn layout", name, len(records))
+					}
+					for reason, want := range map[string]uint64{
+						ReasonInvalidTemplate: 1, ReasonMissingTemplate: 1, ReasonMalformed: 0,
+					} {
+						if got := errorCountFor(d, p.version, reason); got != want {
+							t.Errorf("%s, together %v: %s = %d, want %d", name, together, reason, got, want)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestDecodeNetFlowV9_RefusedOptionsTemplateWithdrawsTheLayout pins the same
+// withdrawal where the refusal is the record length rather than the parser: an
+// options template whose only field is a zero-length scope reads nothing.
+func TestDecodeNetFlowV9_RefusedOptionsTemplateWithdrawsTheLayout(t *testing.T) {
+	t.Parallel()
+
+	const odid, id = 7, 300
+	d := newTestDecoder()
+	for seq, set := range [][]byte{
+		flowSet(templateFlowSetID, templateSpec(id, [2]uint16{fieldIPv4SrcAddr, 4}, [2]uint16{fieldInBytes, 4})),
+		v9OptionsTemplate(id, 1, [2]uint16{1, 0}),
+	} {
+		if _, err := d.Decode(sentFrom(testExporter), v9Packet(uint32(seq), odid, set), nil); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
+	}
+
+	records, err := d.Decode(sentFrom(testExporter),
+		v9Packet(2, odid, flowSet(id, be32(be32(nil, 0x0a000001), 1000))), nil)
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if len(records) != 0 || errorCount(d, ReasonMissingTemplate) != 1 {
+		t.Errorf("Decode() = %d records, missing_template %d, want none and 1",
+			len(records), errorCount(d, ReasonMissingTemplate))
+	}
+}

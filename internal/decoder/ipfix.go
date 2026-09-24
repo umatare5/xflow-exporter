@@ -89,18 +89,18 @@ func (d *Decoder) decodeIPFIX(
 // withdraws each ID it redefines, so the device's next data miss their
 // template rather than decode against the layout the device left.
 func (d *Decoder) checkIPFIXLengths(key domainKey, port uint16, msg []byte) *decodeError {
+	// A refused announcement withdraws its ID, so it names no layout here
+	// either.
 	var announced map[uint16]*template
 	announce := func(id uint16, t *template) {
-		if !t.fitsASet() {
-			return
+		if t != nil && !t.fitsASet() {
+			t = nil
 		}
 		if announced == nil {
 			announced = make(map[uint16]*template)
 		}
 		announced[id] = t
 	}
-	// The pass applying the message counts the templates it refuses.
-	ignore := func(string) {}
 
 	var err *decodeError
 	for offset := ipfixHeaderLen; offset+flowSetHeaderLen <= len(msg); {
@@ -120,17 +120,17 @@ func (d *Decoder) checkIPFIXLengths(key domainKey, port uint16, msg []byte) *dec
 
 		switch {
 		case setID == ipfixTemplateSetID:
-			d.parseIPFIXTemplates(set, ignore, announce)
+			d.parseIPFIXTemplates(set, announce)
 		case setID == ipfixOptionsTemplateSetID:
-			d.parseIPFIXOptionsTemplates(set, ignore, announce)
+			d.parseIPFIXOptionsTemplates(set, announce)
 		case setID >= minDataSetID && err == nil:
 			tpl, ok := announced[setID]
 			if !ok {
-				tpl, ok = d.templates.lookup(key, port, setID)
+				tpl, _ = d.templates.lookup(key, port, setID)
 			}
 			// The sets behind a failed data set stay framed, so the walk
 			// reads on to the announcements among them.
-			if ok && !holdsRecords(tpl, set) {
+			if tpl != nil && !holdsRecords(tpl, set) {
 				err = malformed("ipfix data set %d does not hold whole records of its template", setID)
 			}
 		}
@@ -138,7 +138,7 @@ func (d *Decoder) checkIPFIXLengths(key domainKey, port uint16, msg []byte) *dec
 
 	if err != nil {
 		for id, t := range announced {
-			if held, ok := d.templates.lookup(key, port, id); ok && !held.sameLayout(t) {
+			if held, ok := d.templates.lookup(key, port, id); ok && (t == nil || !held.sameLayout(t)) {
 				d.templates.withdraw(key, port, id)
 			}
 		}
@@ -176,10 +176,10 @@ func (d *Decoder) decodeIPFIXSet(
 	register := func(id uint16, t *template) { d.registerTemplate(key, port, id, t, issue) }
 	switch {
 	case setID == ipfixTemplateSetID:
-		d.parseIPFIXTemplates(set, issue, register)
+		d.parseIPFIXTemplates(set, register)
 		return dst, 0, complete
 	case setID == ipfixOptionsTemplateSetID:
-		d.parseIPFIXOptionsTemplates(set, issue, register)
+		d.parseIPFIXOptionsTemplates(set, register)
 		return dst, 0, complete
 	case setID >= minDataSetID:
 		return d.decodeIPFIXDataSet(key, port, domain, setID, set, clock, dst, complete, issue)
@@ -190,10 +190,11 @@ func (d *Decoder) decodeIPFIXSet(
 }
 
 // parseIPFIXTemplates compiles every template in one template set and hands
-// each to register. A field count of zero is a withdrawal, which RFC 7011
-// section 8.4 tells a collector to ignore over UDP: the set is still walked
-// past it so the announcements behind it are read.
-func (d *Decoder) parseIPFIXTemplates(set []byte, issue func(reason string), register func(id uint16, t *template)) {
+// each to register, one it cannot read going without a layout. A field count
+// of zero is a withdrawal, which RFC 7011 section 8.4 tells a collector to
+// ignore over UDP: the set is still walked past it so the announcements
+// behind it are read.
+func (d *Decoder) parseIPFIXTemplates(set []byte, register func(id uint16, t *template)) {
 	offset := 0
 	for offset+flowSetHeaderLen <= len(set) {
 		templateID := binary.BigEndian.Uint16(set[offset : offset+2])
@@ -204,13 +205,13 @@ func (d *Decoder) parseIPFIXTemplates(set []byte, issue func(reason string), reg
 			continue
 		}
 		if templateID < minDataSetID || fieldCount > d.templates.maxFields {
-			issue(ReasonInvalidTemplate)
+			register(templateID, nil)
 			return
 		}
 
 		fields, minLen, hasVariable, next, ok := parseIPFIXFieldSpecs(set, offset, fieldCount)
 		if !ok {
-			issue(ReasonInvalidTemplate)
+			register(templateID, nil)
 			return
 		}
 		offset = next
@@ -224,11 +225,9 @@ func (d *Decoder) parseIPFIXTemplates(set []byte, issue func(reason string), reg
 }
 
 // parseIPFIXOptionsTemplates compiles every options template in one set and
-// hands each to register. The head differs from v9: a total field count and a
-// scope field count.
-func (d *Decoder) parseIPFIXOptionsTemplates(
-	set []byte, issue func(reason string), register func(id uint16, t *template),
-) {
+// hands each to register as parseIPFIXTemplates does. The head differs from
+// v9: a total field count and a scope field count.
+func (d *Decoder) parseIPFIXOptionsTemplates(set []byte, register func(id uint16, t *template)) {
 	// RFC 7011 figures T and V put no scope field count on a withdrawal, so
 	// it is the template id and a field count of zero and nothing else. An
 	// all-options withdrawal is therefore a set of length 8, whose body falls
@@ -258,13 +257,13 @@ func (d *Decoder) parseIPFIXOptionsTemplates(
 		// are a prefix of the field list.
 		if templateID < minDataSetID || scopeCount < 1 || scopeCount > fieldCount ||
 			fieldCount > d.templates.maxFields {
-			issue(ReasonInvalidTemplate)
+			register(templateID, nil)
 			return
 		}
 
 		fields, minLen, hasVariable, next, ok := parseIPFIXFieldSpecs(set, offset, fieldCount)
 		if !ok {
-			issue(ReasonInvalidTemplate)
+			register(templateID, nil)
 			return
 		}
 		offset = next
