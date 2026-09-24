@@ -52,7 +52,7 @@ Eviction is the push model's spelling of absence. A conversation nobody has seen
 
 ## Decoder
 
-A template cache holds every NetFlow v9 and IPFIX layout, keyed on [the exporter address, the protocol and the observation domain](../internal/decoder/templates.go#L92) and then on [the source port](../internal/decoder/templates.go#L105). The port names the transport session RFC 7011 scopes a template to, so two export processes numbering one ID under one domain keep their layouts apart. The protocol joins the key because three decoders share this store, each numbering its templates from 256 in a space of its own.
+A template cache holds every NetFlow v9 and IPFIX layout, keyed on [the exporter address, the protocol and the observation domain](../internal/decoder/templates.go#L98) and then on [the source port](../internal/decoder/templates.go#L111). The port names the transport session RFC 7011 scopes a template to, so two export processes numbering one ID under one domain keep their layouts apart. The protocol joins the key because three decoders share this store, each numbering its templates from 256 in a space of its own.
 
 A v9 Source ID, an IPFIX Observation Domain ID and an sFlow sub-agent id are unrelated numbers that collide freely. A device exporting two protocols from one address would otherwise decode a data set against whichever protocol announced the id last. That miss is silent, because the record walks to a length the fields agree on and reaches the aggregator as a measurement.
 
@@ -78,25 +78,28 @@ The [Top-K and min-bytes cuts](../internal/collector/flows.go#L531) withhold the
 
 Every map keyed by wire data takes a bound, because a push protocol cannot choose its senders.
 
-| Bounded                           | Limit                                        | Action at the limit                              |
-| :-------------------------------- | :------------------------------------------- | :----------------------------------------------- |
-| Observation domains per device    | [256](../internal/decoder/templates.go#L37)  | Discard the record; v5 and v8 lose sequence      |
-| Devices holding domain state      | [65536](../internal/decoder/stats.go#L29)    | Discard the datagram; v5 and v8 lose sequence    |
-| Templates per domain              | [8192](../internal/decoder/templates.go#L18) | Prune expired, then reject as `invalid_template` |
-| Samplers per domain               | [4096](../internal/decoder/templates.go#L23) | Prune idle, then leave the sampler untracked     |
-| Transport sessions per domain     | [16](../internal/decoder/templates.go#L44)   | Leave that session's sequence unfollowed         |
-| Sampler declarations per device   | [256](../internal/decoder/templates.go#L49)  | Refuse; records take the device's own rate       |
-| Interned vendor strings           | [65536](../internal/decoder/apps.go#L173)    | Copy per occurrence rather than refuse           |
-| One vendor string                 | [255 B](../internal/decoder/apps.go#L180)    | Refuse like invalid UTF-8, once per field        |
-| Announced applications per device | [16384](../internal/decoder/apps.go#L38)     | Leave the application numbered, never named      |
-| Devices with decode statistics    | [65536](../internal/decoder/stats.go#L29)    | Decode on, but publish no decode counters        |
-| AS names cached from the database | [65536](../internal/enrich/mmdb.go#L86)      | Leave the AS unnamed; a join finds no name       |
+| Bounded                           | Limit                                         | Action at the limit                              |
+| :-------------------------------- | :-------------------------------------------- | :----------------------------------------------- |
+| Observation domains per device    | [256](../internal/decoder/templates.go#L43)   | Discard the record; v5 and v8 lose sequence      |
+| Devices holding domain state      | [65536](../internal/decoder/stats.go#L29)     | Discard the datagram; v5 and v8 lose sequence    |
+| Templates per domain              | [8192](../internal/decoder/templates.go#L18)  | Prune expired, then reject as `invalid_template` |
+| Template fields per device        | [65536](../internal/decoder/templates.go#L24) | Prune the domain's expired, then reject          |
+| Samplers per domain               | [4096](../internal/decoder/templates.go#L29)  | Prune idle, then leave the sampler untracked     |
+| Transport sessions per domain     | [16](../internal/decoder/templates.go#L50)    | Leave that session's sequence unfollowed         |
+| Sampler declarations per device   | [256](../internal/decoder/templates.go#L55)   | Refuse; records take the device's own rate       |
+| Interned vendor strings           | [65536](../internal/decoder/apps.go#L173)     | Copy per occurrence rather than refuse           |
+| One vendor string                 | [255 B](../internal/decoder/apps.go#L180)     | Refuse like invalid UTF-8, once per field        |
+| Announced applications per device | [16384](../internal/decoder/apps.go#L38)      | Leave the application numbered, never named      |
+| Devices with decode statistics    | [65536](../internal/decoder/stats.go#L29)     | Decode on, but publish no decode counters        |
+| AS names cached from the database | [65536](../internal/enrich/mmdb.go#L86)       | Leave the AS unnamed; a join finds no name       |
 
 A device reporting both observation points of one path keys each conversation twice, so the aggregation entry bound covers roughly half as many of them. A device reporting one point, or none, is unaffected.
 
 The six `_refused_total` counters rise per attempt rather than per entity, so one flooding sender moves them faster than the state it failed to open. The application bounds hold ten times a standard NBAR2 pack, `--aggregation.max-entries` bounds the aggregation tables, and their bucket cap and the device budget bound the two histograms.
 
-Idle domains, templates, sampler declarations and application tables expire on `--parser.template-ttl` in a sweep, while the sweep reclaims a device only once the fleet reaches its budget. A refused device keeps decoding and feeding the aggregation tables, losing its decode counters and timestamps alone. The two domain budgets bound a product: a full fleet holds 256 domains per device.
+Idle domains, templates, sampler declarations and application tables expire on `--parser.template-ttl` in a sweep, while the sweep reclaims a device only once the fleet reaches its budget. A refused device keeps decoding and feeding the aggregation tables, losing its decode counters and timestamps alone.
+
+The two domain budgets bound a product: a full fleet holds 256 domains per device. The template bounds multiply the same way, so the field budget is what caps one device's templates, at about 8 MiB when every template carries one field. A redefinition that budget refuses counts `invalid_template` and withdraws the layout its ID held, so the ID's data counts `missing_template` rather than decoding against the old layout.
 
 ## Dashboards
 
