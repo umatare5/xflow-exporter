@@ -62,7 +62,7 @@ nft add rule inet filter input udp dport 4739 drop
 ```
 
 > [!IMPORTANT]
-> The receive path bounds datagram size at `--receiver.max-packet-size`, and the parsers bound field counts, observation domains per device and interned vendor strings. Input that evades any of those bounds is a vulnerability – memory exhaustion, a panic and a read past a bound alike – because they are what keeps an untrusted sender from taking the process down.
+> The receive path bounds datagram size at `--receiver.max-packet-size`, and the parsers bound field counts, the template fields and observation domains per device, and interned vendor strings. Input that evades any of those bounds is a vulnerability – memory exhaustion, a panic and a read past a bound alike – because they are what keeps an untrusted sender from taking the process down.
 
 ## Egress Paths
 

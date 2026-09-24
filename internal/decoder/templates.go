@@ -17,6 +17,12 @@ import (
 // attacker, registering templates without end. Real devices carry tens.
 const maxTemplatesPerDomain = 8192
 
+// maxTemplateFieldsPerExporter bounds the field specifiers one device's
+// templates hold across its domains and sessions. The domain and template
+// bounds alone multiply to millions per source address, which a forged one
+// can fill; a device carries a few hundred.
+const maxTemplateFieldsPerExporter = 65536
+
 // maxSamplersPerDomain bounds the samplers one observation domain tracks. A
 // source id is a wire field, so the map it keys grows with what a sender
 // chooses rather than with the ports a device holds.
@@ -288,6 +294,10 @@ func (t *samplerTable) soleRateLocked() uint32 {
 type domainState struct {
 	mu        sync.RWMutex
 	templates map[templateRef]*template
+	// fields is the field specifiers templates hold, charged to the device's
+	// budget as well so evicting the domain returns them in one step.
+	fields int
+	budget *exporterBudget
 
 	// odid is the observation domain this state was opened for, held so the
 	// record path reaches it without the store's key.
@@ -503,6 +513,15 @@ type samplerState struct {
 	lastSeen int64
 }
 
+// exporterBudget is one device's share of the store's bounds. Its domains
+// share the pointer, so a template is charged against it under the domain
+// lock alone.
+type exporterBudget struct {
+	// domains counts the device's live domains; the store lock guards it.
+	domains int
+	fields  atomic.Int64
+}
+
 // templateStore indexes the per-domain state. Domains appear on first use,
 // are bounded per exporter, and are swept once idle, so their count follows
 // the fleet rather than the traffic.
@@ -512,8 +531,8 @@ type templateStore struct {
 	// samplerTables holds each device's sampler declarations per protocol,
 	// which outlive the domain whose options record announced them.
 	samplerTables map[samplerKey]*samplerTable
-	// perExporter counts each device's live domains against its budget.
-	perExporter map[netip.Addr]int
+	// perExporter holds each device's budget while it has a live domain.
+	perExporter map[netip.Addr]*exporterBudget
 
 	// domainsRefused counts the datagrams the budget turned away, one per
 	// datagram naming a domain past it, so the loss is visible rather than
@@ -539,7 +558,7 @@ func newTemplateStore(cfg config.Parser) *templateStore {
 	return &templateStore{
 		domains:       make(map[domainKey]*domainState),
 		samplerTables: make(map[samplerKey]*samplerTable),
-		perExporter:   make(map[netip.Addr]int),
+		perExporter:   make(map[netip.Addr]*exporterBudget),
 		maxFields:     cfg.MaxFieldsPerTemplate,
 		ttl:           cfg.TemplateTTL,
 		now:           time.Now,
@@ -568,12 +587,12 @@ func (s *templateStore) domain(key domainKey) *domainState {
 		d.lastSeen.Store(now)
 		return d
 	}
-	owned := s.perExporter[key.exporter]
-	if owned >= maxDomainsPerExporter {
+	budget := s.perExporter[key.exporter]
+	if budget != nil && budget.domains >= maxDomainsPerExporter {
 		s.domainsRefused.Add(1)
 		return nil
 	}
-	if owned == 0 && len(s.perExporter) >= maxExporters {
+	if budget == nil && len(s.perExporter) >= maxExporters {
 		s.domainsRefused.Add(1)
 		return nil
 	}
@@ -585,10 +604,20 @@ func (s *templateStore) domain(key domainKey) *domainState {
 		s.samplerTables[tk] = table
 	}
 
-	d = &domainState{templates: make(map[templateRef]*template), odid: key.odid, declared: table}
+	if budget == nil {
+		budget = &exporterBudget{}
+		s.perExporter[key.exporter] = budget
+	}
+	budget.domains++
+
+	d = &domainState{
+		templates: make(map[templateRef]*template),
+		budget:    budget,
+		odid:      key.odid,
+		declared:  table,
+	}
 	d.lastSeen.Store(now)
 	s.domains[key] = d
-	s.perExporter[key.exporter]++
 	return d
 }
 
@@ -623,8 +652,11 @@ func (s *templateStore) evictIdleDomains(cutoff int64) (evicted int, live []*dom
 		}
 
 		delete(s.domains, key)
-		s.perExporter[key.exporter]--
-		if s.perExporter[key.exporter] <= 0 {
+		d.mu.Lock()
+		d.budget.fields.Add(-int64(d.fields))
+		d.mu.Unlock()
+		d.budget.domains--
+		if d.budget.domains <= 0 {
 			delete(s.perExporter, key.exporter)
 		}
 		evicted++
@@ -694,8 +726,11 @@ func (s *templateStore) refusedSamplers() uint64 {
 	return s.samplersRefused.Load()
 }
 
-// add registers or refreshes one template. A full domain drops expired
-// templates first and rejects the addition when nothing expired.
+// add registers or refreshes one template. A domain or device at its bound
+// drops the domain's expired templates first and rejects the addition when
+// that frees too little. A rejected redefinition still withdraws the layout
+// its ID held: RFC 3954 section 9 and RFC 7011 section 8.4 replace it with
+// the one announced, so the device's data no longer fits it.
 func (s *templateStore) add(key domainKey, port, id uint16, t *template) bool {
 	d := s.domain(key)
 	if d == nil {
@@ -708,15 +743,44 @@ func (s *templateStore) add(key domainKey, port, id uint16, t *template) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if _, exists := d.templates[ref]; !exists && len(d.templates) >= maxTemplatesPerDomain {
+	if !d.fitsLocked(ref, t) {
 		d.pruneExpiredLocked(now, s.ttl)
-		if len(d.templates) >= maxTemplatesPerDomain {
+		if !d.fitsLocked(ref, t) {
+			d.dropLocked(ref)
 			return false
 		}
 	}
 
+	d.chargeLocked(len(t.fields) - d.heldFieldsLocked(ref))
 	d.templates[ref] = t
 	return true
+}
+
+// fitsLocked reports whether the domain and its device can hold t under ref,
+// a refresh counting only the fields it adds. The domain lock is held by the
+// caller.
+func (d *domainState) fitsLocked(ref templateRef, t *template) bool {
+	if _, exists := d.templates[ref]; !exists && len(d.templates) >= maxTemplatesPerDomain {
+		return false
+	}
+	grow := len(t.fields) - d.heldFieldsLocked(ref)
+	return d.budget.fields.Load()+int64(grow) <= maxTemplateFieldsPerExporter
+}
+
+// heldFieldsLocked reports the fields the template under ref holds, zero when
+// there is none. The domain lock is held by the caller.
+func (d *domainState) heldFieldsLocked(ref templateRef) int {
+	if t, ok := d.templates[ref]; ok {
+		return len(t.fields)
+	}
+	return 0
+}
+
+// chargeLocked moves the domain's and its device's field counts together.
+// The domain lock is held by the caller.
+func (d *domainState) chargeLocked(fields int) {
+	d.fields += fields
+	d.budget.fields.Add(int64(fields))
 }
 
 // pruneExpiredLocked drops every template past the TTL. The domain lock is
@@ -724,8 +788,17 @@ func (s *templateStore) add(key domainKey, port, id uint16, t *template) bool {
 func (d *domainState) pruneExpiredLocked(now time.Time, ttl time.Duration) {
 	for ref, t := range d.templates {
 		if now.Sub(t.refreshedAt) > ttl {
-			delete(d.templates, ref)
+			d.dropLocked(ref)
 		}
+	}
+}
+
+// dropLocked removes the template under ref, if one is held, and returns its
+// fields to the budget. The domain lock is held by the caller.
+func (d *domainState) dropLocked(ref templateRef) {
+	if t, ok := d.templates[ref]; ok {
+		d.chargeLocked(-len(t.fields))
+		delete(d.templates, ref)
 	}
 }
 

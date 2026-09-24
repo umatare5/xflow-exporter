@@ -270,6 +270,130 @@ func TestTemplateStore_SweepFreesExpiredTemplates(t *testing.T) {
 	}
 }
 
+// TestTemplateStore_FieldBudgetSpansTheDevice pins the device's field budget.
+// A template past it is refused whichever domain carries it, a refresh of a
+// held one still lands, another device keeps its own budget, and the sweep
+// returns what expired or evicted templates held.
+func TestTemplateStore_FieldBudgetSpansTheDevice(t *testing.T) {
+	t.Parallel()
+
+	d := New(config.Parser{MaxFieldsPerTemplate: 128, TemplateTTL: time.Minute})
+	now := time.Unix(1_756_600_000, 0)
+	d.templates.now = func() time.Time { return now }
+
+	fields := make([][2]uint16, 128)
+	for i := range fields {
+		fields[i] = [2]uint16{uint16(1000 + i), 1}
+	}
+	announce := func(from netip.Addr, odid uint32, first, count int) {
+		var body []byte
+		for id := first; id < first+count; id++ {
+			body = append(body, templateSpec(uint16(id), fields...)...)
+		}
+		_, _ = d.Decode(sentFrom(from), v9Packet(1, odid, flowSet(templateFlowSetID, body)), nil)
+	}
+	refused := func(want uint64, why string) {
+		t.Helper()
+		if got := errorCount(d, ReasonInvalidTemplate); got != want {
+			t.Errorf("invalid_template = %d %s, want %d", got, why, want)
+		}
+	}
+
+	// Two domains fill the budget exactly between them.
+	const perDomain = maxTemplateFieldsPerExporter / 128 / 2
+	for odid := uint32(1); odid <= 2; odid++ {
+		for first := 256; first < 256+perDomain; first += 64 {
+			announce(testExporter, odid, first, 64)
+		}
+	}
+	refused(0, "filling the budget")
+
+	announce(testExporter, 3, 256, 1)
+	refused(1, "past the budget")
+	announce(testExporter, 1, 256, 1)
+	refused(1, "refreshing a held template")
+	announce(netip.MustParseAddr("192.0.2.80"), 1, 256, 1)
+	refused(1, "from another device")
+
+	// Domain 1 keeps one template fresh while domain 2 falls silent: the sweep
+	// evicts domain 2 and prunes domain 1's expired templates.
+	now = now.Add(50 * time.Second)
+	announce(testExporter, 1, 256, 1)
+	now = now.Add(30 * time.Second)
+	d.SweepDomains()
+
+	announce(testExporter, 3, 256, 1)
+	refused(1, "after the sweep freed the budget")
+
+	d.templates.mu.RLock()
+	defer d.templates.mu.RUnlock()
+	var held int
+	for key, dom := range d.templates.domains {
+		if key.exporter != testExporter {
+			continue
+		}
+		dom.mu.RLock()
+		for _, tpl := range dom.templates {
+			held += len(tpl.fields)
+		}
+		dom.mu.RUnlock()
+	}
+	if charged := d.templates.perExporter[testExporter].fields.Load(); charged != int64(held) {
+		t.Errorf("budget charged %d fields, want the %d the device's templates hold", charged, held)
+	}
+}
+
+// TestTemplateStore_RefusedRedefinitionWithdrawsTheLayout pins RFC 7011
+// section 8.4 at the device's field budget: a redefinition the budget refuses
+// still retires the layout its ID held, so the device's new data counts as
+// missing its template rather than decoding against the old layout.
+func TestTemplateStore_RefusedRedefinitionWithdrawsTheLayout(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	send := func(odid uint32, set []byte) []flow.Record {
+		t.Helper()
+		records, err := d.Decode(sentFrom(testExporter), v9Packet(1, odid, set), nil)
+		if err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
+		return records
+	}
+
+	// Template 256 holds two fields, and a second domain spends the rest of
+	// the device's budget.
+	send(1, flowSet(templateFlowSetID, templateSpec(256, [2]uint16{fieldIPv4SrcAddr, 4}, [2]uint16{fieldInBytes, 4})))
+	filler := make([][2]uint16, 128)
+	for i := range filler {
+		filler[i] = [2]uint16{uint16(1000 + i), 1}
+	}
+	for id, left := uint16(256), maxTemplateFieldsPerExporter-2; left > 0; id++ {
+		n := min(left, len(filler))
+		send(2, flowSet(templateFlowSetID, templateSpec(id, filler[:n]...)))
+		left -= n
+	}
+
+	send(1, flowSet(templateFlowSetID, templateSpec(256,
+		[2]uint16{fieldIPv4SrcAddr, 4}, [2]uint16{fieldIPv4DstAddr, 4}, [2]uint16{fieldInBytes, 4})))
+	if got := errorCount(d, ReasonInvalidTemplate); got != 1 {
+		t.Fatalf("invalid_template = %d, want the redefinition refused", got)
+	}
+
+	var body []byte
+	for range 2 {
+		body = be32(be32(be32(body, 0x0a000001), 0x0a000002), 1000)
+	}
+	if records := send(1, flowSet(256, body)); len(records) != 0 {
+		t.Errorf("Decode() = %+v, want no record read against the withdrawn layout", records)
+	}
+	if got := errorCount(d, ReasonMissingTemplate); got != 1 {
+		t.Errorf("missing_template = %d, want the data set counted", got)
+	}
+	if got := d.templates.perExporter[testExporter].fields.Load(); got != maxTemplateFieldsPerExporter-2 {
+		t.Errorf("budget charged %d fields, want the withdrawn layout's two returned", got)
+	}
+}
+
 // TestInterner_RefusesUnrepresentableStrings pins the guard on the one label
 // value this exporter takes from the wire. A name cut through a multi-byte
 // rune by a fixed export width is not valid UTF-8, and Prometheus cannot hold

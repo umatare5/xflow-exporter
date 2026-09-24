@@ -223,8 +223,8 @@ func (d *Decoder) registerTemplate(key domainKey, port, id uint16, t *template, 
 	}
 
 	if !d.templates.add(key, port, id, t) {
-		// The domain is at its template bound; treat the announcement like an
-		// invalid template so the loss is visible.
+		// The domain or its device is at its template bound; treat the
+		// announcement like an invalid template so the loss is visible.
 		issue(ReasonInvalidTemplate)
 	}
 }
