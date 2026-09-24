@@ -465,10 +465,8 @@ func applicationName(r *flow.Record) string {
 // formatAppID renders an applicationId as engine:selector, the split RFC
 // 6759 defines.
 func formatAppID(appID uint32) string {
-	const selectorBits = 24
-
-	engine := appID >> selectorBits
-	selector := appID & (1<<selectorBits - 1)
+	engine := appID >> flow.AppSelectorBits
+	selector := appID & (1<<flow.AppSelectorBits - 1)
 	return strconv.FormatUint(uint64(engine), 10) + ":" + strconv.FormatUint(uint64(selector), 10)
 }
 

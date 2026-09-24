@@ -162,6 +162,8 @@ These notes hold across the traffic families rather than for one of them.
 
 **Observation Points**: `direction` carries IE 61 on v9 and IPFIX, and is derived on sFlow. It separates the two readings a device gives for a path it watches at both ends without correcting their sum, so summing across the label returns the doubled figure and selecting one direction the measured one. The two flow distributions carry no such label and double the same way.
 
+**Application Identifiers**: `engine:selector` reads IE 95 as RFC 6759 lays it out, the first octet the engine and the rest the selector in its low bits, so one application keys alike at any width. A selector wider than 24 bits leaves the identifier unread rather than cut.
+
 **Application Names**: The table a device announces through its options expires on `--parser.template-ttl`, so a device whose application-table timer is longer than that loses its names between announcements. The `application` label then falls back to `engine:selector`, splitting one application across two series until the device announces again.
 
 **Cardinality Impact**: Splitting conversations across multiple asymmetrical paths (via interface pairs) increases entries by `1 + share × (k−1)`, where `k` is the interface pair count. This sparsity can cause entries to idle, face eviction, and under-report rates upon reappearance.

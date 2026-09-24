@@ -77,6 +77,10 @@ func (d Direction) String() string {
 	}
 }
 
+// AppSelectorBits is the width of the selector in Record.AppID, below its
+// 8-bit classification engine.
+const AppSelectorBits = 24
+
 // Record is one flow reading normalized from any supported protocol. A field
 // the protocol or the record did not carry stays at its zero value, and the
 // *Reported flags and Duration's second result distinguish that absence from
@@ -157,10 +161,10 @@ type Record struct {
 	// unsampled export.
 	SamplingRate uint32
 
-	// AppID is the applicationId (IE 95) as exported. RFC 6759 sizes the
-	// selector by engine; the value is read as the 4-octet Cisco layout, an
-	// 8-bit engine over a 24-bit selector, which is the split published
-	// downstream. Zero means the record carried none.
+	// AppID is the applicationId (IE 95): the RFC 6759 classification engine
+	// over a selector AppSelectorBits wide, whatever width the device
+	// exported, which is the split published downstream. Zero means the
+	// record carried none.
 	AppID uint32
 	// AppName and AppCategory are resolved from the device's own application
 	// table options, or carried inline where the vendor exports strings.
