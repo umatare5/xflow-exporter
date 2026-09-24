@@ -4,6 +4,23 @@ Notable changes to the metric surface, one section per release, listing the pull
 
 ## [Unreleased]
 
+## [v0.13.0]
+
+- [#90](https://github.com/umatare5/xflow-exporter/pull/90) — Align the documentation set with cisco-wnc-exporter
+- [#91](https://github.com/umatare5/xflow-exporter/pull/91) — Close the remaining gaps against cisco-wnc-exporter
+- [#92](https://github.com/umatare5/xflow-exporter/pull/92) — Consolidate markdownlint-cli2.jsonc comment
+- [#93](https://github.com/umatare5/xflow-exporter/pull/93) — Scope templates by transport session
+- [#94](https://github.com/umatare5/xflow-exporter/pull/94) — Free the expired templates of live domains in the sweep
+- [#95](https://github.com/umatare5/xflow-exporter/pull/95) — Bound the template fields one device holds
+- [#96](https://github.com/umatare5/xflow-exporter/pull/96) — Apply a scoped sampling rate only to what it names
+- [#97](https://github.com/umatare5/xflow-exporter/pull/97) — State the RFC deviations and correct the audited claims
+- [#98](https://github.com/umatare5/xflow-exporter/pull/98) — Log the template elements no reader consumes
+- [#99](https://github.com/umatare5/xflow-exporter/pull/99) — Discard a malformed IPFIX message whole
+- [#100](https://github.com/umatare5/xflow-exporter/pull/100) — Read applicationId as RFC 6759 lays it out
+- [#101](https://github.com/umatare5/xflow-exporter/pull/101) — Take an absolute flow clock only as a whole pair
+- [#102](https://github.com/umatare5/xflow-exporter/pull/102) — Withdraw a refused template and read past it
+- [#103](https://github.com/umatare5/xflow-exporter/pull/103) — Replace a counter only when the record omits it
+
 ## [v0.12.0]
 
 - [#67](https://github.com/umatare5/xflow-exporter/pull/67) — Narrow the collector table so no cell wraps on GitHub
@@ -117,7 +134,8 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#1](https://github.com/umatare5/xflow-exporter/pull/1) — Start the exporter with its flags, HTTP surface and UDP receiver
 - [#2](https://github.com/umatare5/xflow-exporter/pull/2) — Add the release workflow the tag and the artifacts come from
 
-[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.13.0...HEAD
+[v0.13.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.13.0
 [v0.12.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.12.0
 [v0.11.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.11.0
 [v0.10.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.10.0
