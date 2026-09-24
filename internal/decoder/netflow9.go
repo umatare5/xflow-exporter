@@ -328,32 +328,35 @@ func (d *Decoder) decodeV9DataSet(
 	for i := range count {
 		record := set[i*tpl.recordLen : (i+1)*tpl.recordLen]
 		if tpl.options {
-			d.readV9OptionsRecord(key, domain, tpl, record)
+			d.readV9OptionsRecord(key, port, domain, tpl, record)
 			continue
 		}
-		dst = d.appendV9Record(key, tpl, record, clock, domain, dst)
+		dst = d.appendV9Record(key, templateRef{port: port, id: setID}, tpl, record, clock, domain, dst)
 	}
 	return dst
 }
 
 // readV9OptionsRecord walks one fixed-length options record and feeds the
 // shared options consumer.
-func (d *Decoder) readV9OptionsRecord(key domainKey, domain *domainState, tpl *template, record []byte) {
+func (d *Decoder) readV9OptionsRecord(key domainKey, port uint16, domain *domainState, tpl *template, record []byte) {
 	var opts optionsState
 
 	offset := 0
-	for _, f := range tpl.fields {
+	for i, f := range tpl.fields {
 		value := record[offset : offset+int(f.length)]
 		offset += int(f.length)
+		if i < tpl.scopeCount {
+			opts.applyV9Scope(f.fieldType, value)
+		}
 		opts.apply(f.fieldType, f.enterprise, value)
 	}
 
-	opts.commit(d, key, domain)
+	opts.commit(d, key, port, domain)
 }
 
 // appendV9Record decodes one data record in place at the end of dst.
 func (d *Decoder) appendV9Record(
-	key domainKey, tpl *template, record []byte,
+	key domainKey, ref templateRef, tpl *template, record []byte,
 	clock exportClock, domain *domainState, dst []flow.Record,
 ) []flow.Record {
 	dst = append(dst, flow.Record{
@@ -364,7 +367,7 @@ func (d *Decoder) appendV9Record(
 	})
 	r := &dst[len(dst)-1]
 
-	state := fieldState{intern: d.strings}
+	state := fieldState{intern: d.strings, template: ref}
 
 	offset := 0
 	for _, f := range tpl.fields {

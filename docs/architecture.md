@@ -56,7 +56,7 @@ A template cache holds every NetFlow v9 and IPFIX layout, keyed on [the exporter
 
 A v9 Source ID, an IPFIX Observation Domain ID and an sFlow sub-agent id are unrelated numbers that collide freely. A device exporting two protocols from one address would otherwise decode a data set against whichever protocol announced the id last. That miss is silent, because the record walks to a length the fields agree on and reaches the aggregator as a measurement.
 
-sFlow ships sampled packet headers rather than flow state, so each readable record decodes into one single-packet record the sample's own rate then scales. A packet section is [kept until every field is read](../internal/decoder/fields.go#L89), so a device's own parsed fields win over the header the exporter would otherwise walk.
+sFlow ships sampled packet headers rather than flow state, so each readable record decodes into one single-packet record the sample's own rate then scales. A packet section is [kept until every field is read](../internal/decoder/fields.go#L93), so a device's own parsed fields win over the header the exporter would otherwise walk.
 
 ## Sampling Correction
 

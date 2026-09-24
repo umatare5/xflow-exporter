@@ -259,7 +259,16 @@ func (d *Decoder) decodeIPFIXDataSet(
 	offset := 0
 	for len(set)-offset >= tpl.recordLen {
 		var walked bool
-		dst, offset, walked = d.decodeIPFIXRecord(key, domain, tpl, set, offset, clock, dst)
+		dst, offset, walked = d.decodeIPFIXRecord(
+			key,
+			domain,
+			templateRef{port: port, id: setID},
+			tpl,
+			set,
+			offset,
+			clock,
+			dst,
+		)
 		if !walked {
 			issue(ReasonMalformed)
 			return dst, records, false
@@ -283,11 +292,11 @@ func (d *Decoder) decodeIPFIXDataSet(
 // decodeIPFIXRecord walks one record, flow or options, returning the offset
 // past it.
 func (d *Decoder) decodeIPFIXRecord(
-	key domainKey, domain *domainState, tpl *template, set []byte, offset int, clock exportClock,
-	dst []flow.Record,
+	key domainKey, domain *domainState, ref templateRef, tpl *template, set []byte, offset int,
+	clock exportClock, dst []flow.Record,
 ) ([]flow.Record, int, bool) {
 	if tpl.options {
-		next, ok := d.readIPFIXOptionsRecord(key, domain, tpl, set, offset)
+		next, ok := d.readIPFIXOptionsRecord(key, ref.port, domain, tpl, set, offset)
 		return dst, next, ok
 	}
 
@@ -298,7 +307,7 @@ func (d *Decoder) decodeIPFIXRecord(
 		Flows:    1,
 	})
 	r := &dst[len(dst)-1]
-	state := fieldState{intern: d.strings}
+	state := fieldState{intern: d.strings, template: ref}
 
 	for _, f := range tpl.fields {
 		value, next, ok := nextFieldValue(f, set, offset)
@@ -316,20 +325,23 @@ func (d *Decoder) decodeIPFIXRecord(
 
 // readIPFIXOptionsRecord walks one options record into the shared consumer.
 func (d *Decoder) readIPFIXOptionsRecord(
-	key domainKey, domain *domainState, tpl *template, set []byte, offset int,
+	key domainKey, port uint16, domain *domainState, tpl *template, set []byte, offset int,
 ) (int, bool) {
 	var opts optionsState
 
-	for _, f := range tpl.fields {
+	for i, f := range tpl.fields {
 		value, next, ok := nextFieldValue(f, set, offset)
 		if !ok {
 			return 0, false
 		}
 		offset = next
+		if i < tpl.scopeCount {
+			opts.applyIPFIXScope(f.fieldType, f.enterprise, value)
+		}
 		opts.apply(f.fieldType, f.enterprise, value)
 	}
 
-	opts.commit(d, key, domain)
+	opts.commit(d, key, port, domain)
 	return offset, true
 }
 
