@@ -124,9 +124,10 @@ func (d *Decoder) resolveApplication(exporter netip.Addr, r *flow.Record) {
 }
 
 // SweepDomains drops the observation domains idle past the template TTL,
-// returning their slots to each exporter's budget. The application tables go
-// on the same cutoff: they are announced through the same options templates,
-// so a sender that has stopped announcing holds neither.
+// returning their slots to each exporter's budget, and the templates the
+// others hold past it. The application tables go on the same cutoff: they
+// are announced through the same options templates, so a sender that has
+// stopped announcing holds neither.
 func (d *Decoder) SweepDomains() int {
 	cutoff := d.templates.cutoff()
 	d.apps.sweep(cutoff)
