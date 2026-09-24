@@ -654,7 +654,7 @@ func TestDecodeV9_RefusesAVariableLengthTemplate(t *testing.T) {
 	const odid = 7
 
 	key := domainKey{exporter: testExporter, odid: odid, proto: flow.VersionNetFlowV9}
-	if !d.templates.add(key, 256, &template{
+	if !d.templates.add(key, testPort, 256, &template{
 		fields:      []templateField{{fieldType: fieldApplicationName, length: variableFieldLength}},
 		recordLen:   1,
 		hasVariable: true,

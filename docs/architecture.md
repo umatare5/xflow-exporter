@@ -52,7 +52,7 @@ Eviction is the push model's spelling of absence. A conversation nobody has seen
 
 ## Decoder
 
-A template cache holds every NetFlow v9 and IPFIX layout, keyed on [the exporter address, the protocol and the observation domain](../internal/decoder/templates.go#L91). The address and the domain scope a template the way RFC 7011 does, and the protocol joins them because three decoders share this store, each numbering its templates from 256 in a space of its own.
+A template cache holds every NetFlow v9 and IPFIX layout, keyed on [the exporter address, the protocol and the observation domain](../internal/decoder/templates.go#L92) and then on [the source port](../internal/decoder/templates.go#L105). The port names the transport session RFC 7011 scopes a template to, so two export processes numbering one ID under one domain keep their layouts apart. The protocol joins the key because three decoders share this store, each numbering its templates from 256 in a space of its own.
 
 A v9 Source ID, an IPFIX Observation Domain ID and an sFlow sub-agent id are unrelated numbers that collide freely. A device exporting two protocols from one address would otherwise decode a data set against whichever protocol announced the id last. That miss is silent, because the record walks to a length the fields agree on and reaches the aggregator as a measurement.
 

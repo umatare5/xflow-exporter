@@ -76,9 +76,10 @@ type template struct {
 	refreshedAt time.Time
 }
 
-// domainKey scopes templates as RFC 7011 requires: one exporter address and
-// one Observation Domain ID together. Either alone lets two domains reusing
-// one template ID corrupt each other's records.
+// domainKey scopes templates to one exporter address and one Observation
+// Domain ID together, since either alone lets two domains reusing one
+// template ID corrupt each other's records. templateRef narrows them to one
+// transport session inside the domain.
 //
 // The protocol joins them because that pair is not enough here. Three
 // decoders share this store, each numbering templates from 256 in a space of
@@ -92,6 +93,18 @@ type domainKey struct {
 	exporter netip.Addr
 	odid     uint32
 	proto    flow.Version
+}
+
+// templateRef names one template inside a domain. RFC 7011 section 3.4.1 makes
+// a Template ID unique only within the transport session that announced it,
+// and a Cisco router exporting its traditional cache beside a Flexible NetFlow
+// monitor numbers the two independently under one Source ID. Keyed by the ID
+// alone, each announcement swapped in the other's layout and the data decoded
+// against it. The source port names the session, the address being the
+// domain's.
+type templateRef struct {
+	port uint16
+	id   uint16
 }
 
 // samplerKey scopes a sampler table. An options record declaring Scope System
@@ -274,7 +287,7 @@ func (t *samplerTable) soleRateLocked() uint32 {
 // that are naturally per-domain rather than per-exporter.
 type domainState struct {
 	mu        sync.RWMutex
-	templates map[uint16]*template
+	templates map[templateRef]*template
 
 	// odid is the observation domain this state was opened for, held so the
 	// record path reaches it without the store's key.
@@ -572,7 +585,7 @@ func (s *templateStore) domain(key domainKey) *domainState {
 		s.samplerTables[tk] = table
 	}
 
-	d = &domainState{templates: make(map[uint16]*template), odid: key.odid, declared: table}
+	d = &domainState{templates: make(map[templateRef]*template), odid: key.odid, declared: table}
 	d.lastSeen.Store(now)
 	s.domains[key] = d
 	s.perExporter[key.exporter]++
@@ -668,34 +681,35 @@ func (s *templateStore) refusedSamplers() uint64 {
 
 // add registers or refreshes one template. A full domain drops expired
 // templates first and rejects the addition when nothing expired.
-func (s *templateStore) add(key domainKey, id uint16, t *template) bool {
+func (s *templateStore) add(key domainKey, port, id uint16, t *template) bool {
 	d := s.domain(key)
 	if d == nil {
 		return false
 	}
 	now := s.now()
 	t.refreshedAt = now
+	ref := templateRef{port: port, id: id}
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if _, exists := d.templates[id]; !exists && len(d.templates) >= maxTemplatesPerDomain {
+	if _, exists := d.templates[ref]; !exists && len(d.templates) >= maxTemplatesPerDomain {
 		d.pruneExpiredLocked(now, s.ttl)
 		if len(d.templates) >= maxTemplatesPerDomain {
 			return false
 		}
 	}
 
-	d.templates[id] = t
+	d.templates[ref] = t
 	return true
 }
 
 // pruneExpiredLocked drops every template past the TTL. The domain lock is
 // held by the caller.
 func (d *domainState) pruneExpiredLocked(now time.Time, ttl time.Duration) {
-	for id, t := range d.templates {
+	for ref, t := range d.templates {
 		if now.Sub(t.refreshedAt) > ttl {
-			delete(d.templates, id)
+			delete(d.templates, ref)
 		}
 	}
 }
@@ -703,7 +717,7 @@ func (d *domainState) pruneExpiredLocked(now time.Time, ttl time.Duration) {
 // lookup returns one template, treating a template past the TTL as absent:
 // an orphaned template decoding new records would trust a schema the device
 // may have replaced.
-func (s *templateStore) lookup(key domainKey, id uint16) (*template, bool) {
+func (s *templateStore) lookup(key domainKey, port, id uint16) (*template, bool) {
 	d := s.domain(key)
 	if d == nil {
 		return nil, false
@@ -712,7 +726,7 @@ func (s *templateStore) lookup(key domainKey, id uint16) (*template, bool) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	t, ok := d.templates[id]
+	t, ok := d.templates[templateRef{port: port, id: id}]
 	if !ok || s.now().Sub(t.refreshedAt) > s.ttl {
 		return nil, false
 	}

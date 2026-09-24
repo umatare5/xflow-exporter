@@ -123,7 +123,7 @@ func (d *Decoder) decodeNetFlowV9(
 		}
 
 		set := payload[offset+flowSetHeaderLen : offset+setLen]
-		dst = d.decodeV9FlowSet(key, domain, setID, set, clock, dst, issue)
+		dst = d.decodeV9FlowSet(key, port, domain, setID, set, clock, dst, issue)
 		offset += setLen
 	}
 
@@ -133,16 +133,16 @@ func (d *Decoder) decodeNetFlowV9(
 
 // decodeV9FlowSet routes one flowset by its id.
 func (d *Decoder) decodeV9FlowSet(
-	key domainKey, domain *domainState, setID uint16, set []byte,
+	key domainKey, port uint16, domain *domainState, setID uint16, set []byte,
 	clock exportClock, dst []flow.Record, issue func(reason string),
 ) []flow.Record {
 	switch {
 	case setID == templateFlowSetID:
-		d.parseV9Templates(key, set, issue)
+		d.parseV9Templates(key, port, set, issue)
 	case setID == optionsTemplateFlowSetID:
-		d.parseV9OptionsTemplates(key, set, issue)
+		d.parseV9OptionsTemplates(key, port, set, issue)
 	case setID >= minDataSetID:
-		dst = d.decodeV9DataSet(key, domain, setID, set, clock, dst, issue)
+		dst = d.decodeV9DataSet(key, port, domain, setID, set, clock, dst, issue)
 	default:
 		// 2-255 are reserved. A device using one speaks a dialect this
 		// exporter does not, which must be visible rather than skipped.
@@ -154,7 +154,7 @@ func (d *Decoder) decodeV9FlowSet(
 // parseV9Templates compiles every template in one template flowset. A broken
 // specifier desynchronizes the rest of the flowset, so parsing stops at the
 // first invalid template.
-func (d *Decoder) parseV9Templates(key domainKey, set []byte, issue func(reason string)) {
+func (d *Decoder) parseV9Templates(key domainKey, port uint16, set []byte, issue func(reason string)) {
 	offset := 0
 	for offset+flowSetHeaderLen <= len(set) {
 		templateID := binary.BigEndian.Uint16(set[offset : offset+2])
@@ -167,7 +167,7 @@ func (d *Decoder) parseV9Templates(key domainKey, set []byte, issue func(reason 
 		}
 		offset = next
 
-		d.registerTemplate(key, templateID,
+		d.registerTemplate(key, port, templateID,
 			&template{fields: fields, recordLen: fixedRecordLen(fields)}, issue)
 	}
 }
@@ -212,7 +212,7 @@ func (d *Decoder) parseV9FieldSpecs(
 
 // registerTemplate checks a compiled template's record length and registers
 // it. The caller has computed recordLen, fixed or minimum.
-func (d *Decoder) registerTemplate(key domainKey, id uint16, t *template, issue func(reason string)) {
+func (d *Decoder) registerTemplate(key domainKey, port, id uint16, t *template, issue func(reason string)) {
 	// A record must fit a set alongside its header, and must consume input.
 	// A v9 options template may declare a zero-length scope, so one whose
 	// every field is such a scope sums to nothing, and the data sets naming
@@ -222,7 +222,7 @@ func (d *Decoder) registerTemplate(key domainKey, id uint16, t *template, issue 
 		return
 	}
 
-	if !d.templates.add(key, id, t) {
+	if !d.templates.add(key, port, id, t) {
 		// The domain is at its template bound; treat the announcement like an
 		// invalid template so the loss is visible.
 		issue(ReasonInvalidTemplate)
@@ -240,7 +240,7 @@ func fixedRecordLen(fields []templateField) int {
 
 // parseV9OptionsTemplates compiles every options template in one flowset.
 // The scope and option lengths are byte lengths of the specifier sections.
-func (d *Decoder) parseV9OptionsTemplates(key domainKey, set []byte, issue func(reason string)) {
+func (d *Decoder) parseV9OptionsTemplates(key domainKey, port uint16, set []byte, issue func(reason string)) {
 	const (
 		headLen = 6
 		specLen = 4
@@ -285,7 +285,7 @@ func (d *Decoder) parseV9OptionsTemplates(key domainKey, set []byte, issue func(
 		}
 		offset += fieldCount * specLen
 
-		d.registerTemplate(key, templateID, &template{
+		d.registerTemplate(key, port, templateID, &template{
 			fields:     fields,
 			recordLen:  fixedRecordLen(fields),
 			scopeCount: scopeCount,
@@ -297,10 +297,10 @@ func (d *Decoder) parseV9OptionsTemplates(key domainKey, set []byte, issue func(
 // decodeV9DataSet decodes one data flowset against its template. Leftover
 // bytes shorter than one record are the padding some devices append.
 func (d *Decoder) decodeV9DataSet(
-	key domainKey, domain *domainState, setID uint16, set []byte,
+	key domainKey, port uint16, domain *domainState, setID uint16, set []byte,
 	clock exportClock, dst []flow.Record, issue func(reason string),
 ) []flow.Record {
-	tpl, ok := d.templates.lookup(key, setID)
+	tpl, ok := d.templates.lookup(key, port, setID)
 	if !ok {
 		// Expected after a restart until the device re-announces; the counter
 		// makes a device that never does visible.
