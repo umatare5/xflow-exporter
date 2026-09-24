@@ -389,7 +389,7 @@ Reduced-size encoding narrows an integer element to any width its value fits, so
 
 A field count of zero is a template withdrawal. UDP gives no ordering, so a withdrawal is ignored and the set is walked past its four octets, leaving announcements behind it readable. A data set whose template is known carries at least one record, so a shorter body counts `malformed` instead of passing as padding.
 
-A malformed message is discarded whole, as RFC 7011 section 9.1 requires, so each set is checked against the message and each data record against its set before anything in the message takes effect. An ID the message redefines is withdrawn all the same, so the device's next data count `missing_template` rather than decode against the layout it left.
+A malformed message is discarded whole, as RFC 7011 section 9.1 requires, so each set is checked against the message and each data record against its set before anything in the message takes effect. Such a message counts one `malformed` and no `invalid_template`, yet an ID it redefines or refuses is withdrawn all the same unless a set or message length ahead of it breaks the framing. The device's next data then count `missing_template` rather than decode against the layout it left.
 
 A device whose messages keep arriving malformed is still read. RFC 7011 section 9.1 advises stopping, but on UDP that is a switch a forged sender could flip for a real one.
 

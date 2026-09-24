@@ -86,8 +86,9 @@ func (d *Decoder) decodeIPFIX(
 // what encloses it, before anything in the message takes effect: a set
 // against the message, or a data set against the records of its template,
 // one announced earlier in the message included. A message it fails still
-// withdraws each ID it redefines, so the device's next data miss their
-// template rather than decode against the layout the device left.
+// withdraws each ID it redefines ahead of any set length that breaks the
+// framing, so the device's next data miss their template rather than decode
+// against the layout the device left.
 func (d *Decoder) checkIPFIXLengths(key domainKey, port uint16, msg []byte) *decodeError {
 	// A refused announcement withdraws its ID, so it names no layout here
 	// either.
@@ -206,13 +207,15 @@ func (d *Decoder) parseIPFIXTemplates(set []byte, register func(id uint16, t *te
 		}
 		if templateID < minDataSetID || fieldCount > d.templates.maxFields {
 			register(templateID, nil)
-			return
+			offset = skipIPFIXFieldSpecs(set, offset, fieldCount)
+			continue
 		}
 
 		fields, minLen, hasVariable, next, ok := parseIPFIXFieldSpecs(set, offset, fieldCount)
 		if !ok {
 			register(templateID, nil)
-			return
+			offset = skipIPFIXFieldSpecs(set, offset, fieldCount)
+			continue
 		}
 		offset = next
 
@@ -258,13 +261,15 @@ func (d *Decoder) parseIPFIXOptionsTemplates(set []byte, register func(id uint16
 		if templateID < minDataSetID || scopeCount < 1 || scopeCount > fieldCount ||
 			fieldCount > d.templates.maxFields {
 			register(templateID, nil)
-			return
+			offset = skipIPFIXFieldSpecs(set, offset, fieldCount)
+			continue
 		}
 
 		fields, minLen, hasVariable, next, ok := parseIPFIXFieldSpecs(set, offset, fieldCount)
 		if !ok {
 			register(templateID, nil)
-			return
+			offset = skipIPFIXFieldSpecs(set, offset, fieldCount)
+			continue
 		}
 		offset = next
 
@@ -324,6 +329,28 @@ func parseIPFIXFieldSpecs(
 	}
 
 	return fields, minLen, hasVariable, offset, true
+}
+
+// skipIPFIXFieldSpecs returns the offset past fieldCount specifiers without
+// compiling them, beyond the set when they run past it. The specifiers frame
+// a refused template as they frame one read, so the announcements behind it
+// stay readable.
+func skipIPFIXFieldSpecs(set []byte, offset, fieldCount int) int {
+	const (
+		specLen       = 4
+		enterpriseLen = 4
+	)
+
+	for range fieldCount {
+		if offset+specLen > len(set) {
+			return offset + specLen
+		}
+		if binary.BigEndian.Uint16(set[offset:offset+2])&enterpriseBit != 0 {
+			offset += enterpriseLen
+		}
+		offset += specLen
+	}
+	return offset
 }
 
 // decodeIPFIXDataSet decodes one data set. With a variable-length template
