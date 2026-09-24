@@ -60,7 +60,7 @@ sFlow ships sampled packet headers rather than flow state, so each readable reco
 
 ## Sampling Correction
 
-The decoder forms the product and stores it, so every table holds corrected volumes and no consumer re-applies a rate. A record carrying no rate multiplies by one, and both products [saturate rather than wrap](../internal/flow/flow.go#L224), because a counter handed a reading below the one before it reads as a reset.
+The decoder forms the product and stores it, so every table holds corrected volumes and no consumer re-applies a rate. A record carrying no rate multiplies by one, and both products [saturate rather than wrap](../internal/flow/flow.go#L228), because a counter handed a reading below the one before it reads as a reset.
 
 The rate comes from a v5 header, an options declaration or an sFlow sample's own field. An sFlow rate rides its sample and reaches no health series, while the decoder tracks a v9 or IPFIX declaration per domain and publishes it.
 

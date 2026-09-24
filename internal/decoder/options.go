@@ -100,7 +100,7 @@ func (o *optionsState) apply(fieldType uint16, enterprise uint32, value []byte) 
 	case fieldSamplingPopulation:
 		o.population, _ = beUint32(value)
 	case fieldApplicationID:
-		o.appID, _ = beUint32(value)
+		o.appID, _ = applicationID(value)
 	case fieldApplicationName:
 		o.appName = value
 	default:

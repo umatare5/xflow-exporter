@@ -726,6 +726,65 @@ func TestDecodeIPFIX_UnresolvedApplicationStaysNumbered(t *testing.T) {
 	}
 }
 
+// TestApplicationID_ReadsTheEngineAndTheRightAlignedSelector pins RFC 6759
+// section 4.2 on the examples it gives: the engine is the first octet and
+// the selector sits in the low bits of the rest at any width. An identifier
+// the record cannot carry whole stays unread rather than cut.
+func TestApplicationID_ReadsTheEngineAndTheRightAlignedSelector(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		value []byte
+		want  uint32
+		ok    bool
+	}{
+		{name: "IANA-L3 at two octets", value: []byte{1, 1}, want: 1<<24 | 1, ok: true},
+		{name: "IANA-L4 at three octets", value: []byte{3, 0, 161}, want: 3<<24 | 161, ok: true},
+		{name: "PANA-L7 at four octets", value: []byte{13, 0, 1, 197}, want: 13<<24 | 453, ok: true},
+		{name: "PANA-L7 at eight octets", value: []byte{13, 0, 0, 0, 0, 0, 1, 197}, want: 13<<24 | 453, ok: true},
+		{name: "engine 0 as sent", value: []byte{0, 0, 0, 1}, want: 1, ok: true},
+		{name: "engine alone", value: []byte{13}},
+		{name: "selector past 24 bits", value: []byte{12, 1, 0, 0, 0, 0}},
+		{name: "PANA-L7-PEN", value: []byte{20, 0, 0, 0, 9, 0, 39, 16}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got, ok := applicationID(tt.value); got != tt.want || ok != tt.ok {
+				t.Errorf("applicationID(%v) = %#x, %v, want %#x, %v", tt.value, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+// TestDecodeIPFIX_ApplicationKeysAlikeAtAnyWidth pins the property the RFC
+// 6759 reading exists for: a table widening the identifier and a record
+// narrowing it key the same application.
+func TestDecodeIPFIX_ApplicationKeysAlikeAtAnyWidth(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDecoder()
+	table := ipfixOptionsTemplate(600,
+		ipfixSpec(fieldApplicationID, 8, 0),
+		ipfixSpec(fieldApplicationName, 3, 0),
+	)
+	name := []byte{13, 0, 0, 0, 0, 0, 0, 42, 's', 's', 'h'}
+	data := ipfixTemplateSet(ipfixSpec(fieldApplicationID, 3, 0))
+	message := ipfixMessage(0, table, flowSet(600, name), data,
+		flowSet(fixtureIPFIXTemplateID, []byte{13, 0, 42}))
+
+	records, err := d.Decode(sentFrom(testExporter), message, nil)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("Decode() = %d records, %v; want 1, nil", len(records), err)
+	}
+	if records[0].AppID != 13<<24|42 || records[0].AppName != "ssh" {
+		t.Errorf("record = %+v, want 13:42 resolved to ssh", records[0])
+	}
+}
+
 func TestDecodeIPFIX_PSAMPSamplingPairWins(t *testing.T) {
 	t.Parallel()
 

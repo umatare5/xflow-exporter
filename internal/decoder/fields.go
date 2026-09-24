@@ -392,7 +392,7 @@ func applyField(r *flow.Record, state *fieldState, fieldType uint16, enterprise 
 			r.DstAS = v
 		}
 	case fieldApplicationID:
-		if v, ok := beUint32(value); ok {
+		if v, ok := applicationID(value); ok {
 			r.AppID = v
 		}
 	case fieldSamplerID:
@@ -525,6 +525,22 @@ func beUint32(value []byte) (uint32, bool) {
 		return 0, false
 	}
 	return uint32(v), true
+}
+
+// applicationID reads an RFC 6759 applicationId: the classification engine in
+// the first octet, and the selector in the low bits of the octets after it,
+// which section 4.2 lets a device widen or narrow. A selector past
+// AppSelectorBits is left unread rather than cut. Engine 0 is Invalid to RFC
+// 6759 yet kept as sent, a Catalyst 9800-CL naming ICMPv6 multicast 0:1.
+func applicationID(value []byte) (uint32, bool) {
+	if len(value) < 2 {
+		return 0, false
+	}
+	selector, ok := beUint(value[1:])
+	if !ok || selector >= 1<<flow.AppSelectorBits {
+		return 0, false
+	}
+	return uint32(value[0])<<flow.AppSelectorBits | uint32(selector), true
 }
 
 // unixSeconds and unixMilliseconds read an absolute flow clock. An epoch past
