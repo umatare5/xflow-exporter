@@ -375,6 +375,11 @@ func TestDecodeNetFlowV9_RejectsInvalidTemplates(t *testing.T) {
 			name: "specifiers cut short",
 			set:  flowSet(templateFlowSetID, templateSpec(fixtureV9TemplateID, [2]uint16{fieldInBytes, 4})[:6]),
 		},
+		{
+			name: "options lengths splitting a specifier",
+			set: flowSet(optionsTemplateFlowSetID, be16(be16(be16(nil, fixtureV9TemplateID), 6), 2),
+				be16(be16(nil, 1), 4), be16(be16(nil, fieldInBytes), 4)),
+		},
 	}
 
 	for _, tt := range tests {
@@ -397,6 +402,127 @@ func TestDecodeNetFlowV9_RejectsInvalidTemplates(t *testing.T) {
 				v9Packet(2, fixtureV9ODID, flowSet(fixtureV9TemplateID, fixtureV9DataRecord())), nil)
 			if got := errorCount(d2, ReasonMissingTemplate); got != 1 {
 				t.Errorf("missing_template count = %d, want the refused template absent", got)
+			}
+		})
+	}
+}
+
+// TestDecodeNetFlowV9_ReadsPastARefusedTemplate pins that a refused template
+// leaves the templates behind it in its flowset readable: an ID redefined
+// there takes the layout the device sent, so its next records are not
+// fabricated from the one it left.
+func TestDecodeNetFlowV9_ReadsPastARefusedTemplate(t *testing.T) {
+	t.Parallel()
+
+	overLimit := make([][2]uint16, config.DefaultParserMaxFieldsPerTemplate+1)
+	for i := range overLimit {
+		overLimit[i] = [2]uint16{fieldInBytes, 1}
+	}
+	options := func(id uint16, specs ...[2]uint16) []byte {
+		return v9OptionsTemplate(id, 1, specs...)[flowSetHeaderLen:]
+	}
+	redefined := templateSpec(fixtureV9TemplateID,
+		[2]uint16{fieldIPv4SrcAddr, 4}, [2]uint16{fieldIPv4DstAddr, 4}, [2]uint16{fieldInBytes, 4})
+	redefinedAsOptions := options(fixtureV9TemplateID, [2]uint16{1, 4}, [2]uint16{fieldInBytes, 8})
+
+	tests := []struct {
+		name    string
+		set     []byte
+		records int
+	}{
+		{
+			name:    "zero-width field",
+			set:     flowSet(templateFlowSetID, templateSpec(500, [2]uint16{fieldInBytes, 0}), redefined),
+			records: 2,
+		},
+		{
+			name:    "template id in the reserved range",
+			set:     flowSet(templateFlowSetID, templateSpec(255, [2]uint16{fieldInBytes, 4}), redefined),
+			records: 2,
+		},
+		{
+			name:    "field count past the limit",
+			set:     flowSet(templateFlowSetID, templateSpec(500, overLimit...), redefined),
+			records: 2,
+		},
+		{
+			name: "zero-length option field",
+			set: flowSet(optionsTemplateFlowSetID,
+				options(500, [2]uint16{1, 4}, [2]uint16{fieldInBytes, 0}), redefinedAsOptions),
+		},
+		{
+			name: "options template id in the reserved range",
+			set: flowSet(optionsTemplateFlowSetID,
+				options(255, [2]uint16{1, 4}, [2]uint16{fieldInBytes, 4}), redefinedAsOptions),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			decode := func(sequence uint32, set []byte) []flow.Record {
+				records, err := d.Decode(sentFrom(testExporter), v9Packet(sequence, fixtureV9ODID, set), nil)
+				if err != nil {
+					t.Fatalf("Decode() error = %v, want the datagram read", err)
+				}
+				return records
+			}
+			decode(1, flowSet(templateFlowSetID, templateSpec(fixtureV9TemplateID,
+				[2]uint16{fieldIPv4SrcAddr, 4}, [2]uint16{fieldInBytes, 4})))
+			decode(2, tt.set)
+
+			// Two records of the redefined layout, which the held one reads as three.
+			records := decode(3, flowSet(fixtureV9TemplateID, be32(be32(be32(be32(be32(be32(nil,
+				0x0a000001), 0x0a000002), 1000), 0x0a000003), 0x0a000004), 2000)))
+			if len(records) != tt.records {
+				t.Errorf("Decode() = %d records, want %d from the layout the device sent", len(records), tt.records)
+			}
+			if got := errorCount(d, ReasonInvalidTemplate); got != 1 {
+				t.Errorf("invalid_template count = %d, want 1", got)
+			}
+			if got := errorCount(d, ReasonMissingTemplate); got != 0 {
+				t.Errorf("missing_template count = %d, want the redefinition held", got)
+			}
+		})
+	}
+}
+
+// TestDecodeNetFlowV9_ZeroPaddingEndsATemplateFlowset pins that a template of
+// no fields ends the walk: RFC 3954 gives it no meaning and zero padding reads
+// as one, so padding behind a template counts once rather than once per head
+// it would parse as.
+func TestDecodeNetFlowV9_ZeroPaddingEndsATemplateFlowset(t *testing.T) {
+	t.Parallel()
+
+	padding := make([]byte, 16)
+	tests := []struct {
+		name string
+		set  []byte
+	}{
+		{
+			name: "template flowset",
+			set: flowSet(templateFlowSetID,
+				templateSpec(fixtureV9TemplateID, [2]uint16{fieldInBytes, 4}), padding),
+		},
+		{
+			name: "options template flowset",
+			set: flowSet(optionsTemplateFlowSetID, v9OptionsTemplate(fixtureV9TemplateID, 1,
+				[2]uint16{1, 4}, [2]uint16{fieldSamplingInterval, 4})[flowSetHeaderLen:], padding),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			if _, err := d.Decode(sentFrom(testExporter), v9Packet(1, fixtureV9ODID, tt.set), nil); err != nil {
+				t.Fatalf("Decode() error = %v, want the datagram read", err)
+			}
+			if got := errorCount(d, ReasonInvalidTemplate); got != 1 {
+				t.Errorf("invalid_template count = %d, want the padding counted once", got)
 			}
 		})
 	}

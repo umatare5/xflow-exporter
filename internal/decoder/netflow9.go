@@ -151,9 +151,10 @@ func (d *Decoder) decodeV9FlowSet(
 	return dst
 }
 
-// parseV9Templates compiles every template in one template flowset. A broken
-// specifier desynchronizes the rest of the flowset, so parsing stops at the
-// first invalid template.
+// parseV9Templates compiles every template in one template flowset. A
+// refused template still spans the specifiers its count declares, so the
+// walk steps over it; only one running past the flowset or declaring no
+// field ends it.
 func (d *Decoder) parseV9Templates(key domainKey, port uint16, set []byte, issue func(reason string)) {
 	offset := 0
 	for offset+flowSetHeaderLen <= len(set) {
@@ -161,11 +162,12 @@ func (d *Decoder) parseV9Templates(key domainKey, port uint16, set []byte, issue
 		fieldCount := int(binary.BigEndian.Uint16(set[offset+2 : offset+4]))
 		offset += flowSetHeaderLen
 
-		fields, next, ok := d.parseV9FieldSpecs(set, offset, templateID, fieldCount, issue)
-		if !ok {
-			return
-		}
+		fields, next, ok := d.parseV9FieldSpecs(set, offset, templateID, fieldCount)
 		offset = next
+		if !ok {
+			d.registerTemplate(key, port, templateID, nil, issue)
+			continue
+		}
 
 		d.registerTemplate(key, port, templateID,
 			&template{fields: fields, recordLen: fixedRecordLen(fields)}, issue)
@@ -173,23 +175,21 @@ func (d *Decoder) parseV9Templates(key domainKey, port uint16, set []byte, issue
 }
 
 // parseV9FieldSpecs validates one template head and reads its field
-// specifiers, returning the offset past them.
+// specifiers, returning the offset the flowset's walk resumes at whether or
+// not it accepts them.
 func (d *Decoder) parseV9FieldSpecs(
-	set []byte, offset int, templateID uint16, fieldCount int, issue func(reason string),
+	set []byte, offset int, templateID uint16, fieldCount int,
 ) (fields []templateField, next int, ok bool) {
 	const specLen = 4
 
-	if templateID < minDataSetID {
-		issue(ReasonInvalidTemplate)
-		return nil, 0, false
+	// RFC 3954 gives a template of no fields no meaning, and zero padding
+	// reads as one, so nothing behind it is trusted as a template.
+	if fieldCount < 1 {
+		return nil, len(set), false
 	}
-	if fieldCount < 1 || fieldCount > d.templates.maxFields {
-		issue(ReasonInvalidTemplate)
-		return nil, 0, false
-	}
-	if offset+fieldCount*specLen > len(set) {
-		issue(ReasonInvalidTemplate)
-		return nil, 0, false
+	next = offset + fieldCount*specLen
+	if templateID < minDataSetID || fieldCount > d.templates.maxFields || next > len(set) {
+		return nil, next, false
 	}
 
 	fields = make([]templateField, fieldCount)
@@ -202,19 +202,21 @@ func (d *Decoder) parseV9FieldSpecs(
 		// A zero-width field would let a record decode forever without
 		// consuming input; v9 has no variable-length encoding to excuse it.
 		if fields[i].length == 0 {
-			issue(ReasonInvalidTemplate)
-			return nil, 0, false
+			return nil, next, false
 		}
 	}
 
-	return fields, offset + fieldCount*specLen, true
+	return fields, next, true
 }
 
 // registerTemplate checks a compiled template's record length and registers
-// it. The caller has computed recordLen, fixed or minimum.
+// it. The caller has computed recordLen, fixed or minimum, and passes a nil t
+// for an announcement it could not read, which withdraws the layout its ID
+// held as a refusal inside add does.
 func (d *Decoder) registerTemplate(key domainKey, port, id uint16, t *template, issue func(reason string)) {
-	if !t.fitsASet() {
+	if t == nil || !t.fitsASet() {
 		issue(ReasonInvalidTemplate)
+		d.templates.withdraw(key, port, id)
 		return
 	}
 
@@ -257,26 +259,28 @@ func (d *Decoder) parseV9OptionsTemplates(key domainKey, port uint16, set []byte
 	)
 
 	offset := 0
+templates:
 	for offset+headLen <= len(set) {
 		templateID := binary.BigEndian.Uint16(set[offset : offset+2])
 		scopeBytes := int(binary.BigEndian.Uint16(set[offset+2 : offset+4]))
 		optionBytes := int(binary.BigEndian.Uint16(set[offset+4 : offset+6]))
 		offset += headLen
 
-		if templateID < minDataSetID || scopeBytes%specLen != 0 || optionBytes%specLen != 0 {
-			issue(ReasonInvalidTemplate)
-			return
-		}
 		scopeCount := scopeBytes / specLen
 		optionCount := optionBytes / specLen
 		fieldCount := scopeCount + optionCount
-		if fieldCount < 1 || fieldCount > d.templates.maxFields {
-			issue(ReasonInvalidTemplate)
+		// Lengths that split a specifier, or declare none as zero padding
+		// does, leave no offset to trust for the next template, where any
+		// other refusal is stepped over.
+		if scopeBytes%specLen != 0 || optionBytes%specLen != 0 || fieldCount < 1 {
+			d.registerTemplate(key, port, templateID, nil, issue)
 			return
 		}
-		if offset+fieldCount*specLen > len(set) {
-			issue(ReasonInvalidTemplate)
-			return
+		next := offset + fieldCount*specLen
+		if templateID < minDataSetID || fieldCount > d.templates.maxFields || next > len(set) {
+			d.registerTemplate(key, port, templateID, nil, issue)
+			offset = next
+			continue
 		}
 
 		fields := make([]templateField, fieldCount)
@@ -289,11 +293,12 @@ func (d *Decoder) parseV9OptionsTemplates(key domainKey, port uint16, set []byte
 			// A zero-length scope is seen in the wild (a bare system scope);
 			// a zero-length option field would decode without consuming.
 			if fields[i].length == 0 && i >= scopeCount {
-				issue(ReasonInvalidTemplate)
-				return
+				d.registerTemplate(key, port, templateID, nil, issue)
+				offset = next
+				continue templates
 			}
 		}
-		offset += fieldCount * specLen
+		offset = next
 
 		d.registerTemplate(key, port, templateID, &template{
 			fields:     fields,

@@ -196,6 +196,8 @@ A **Cisco C891FJ-K9** runs its traditional cache and a Flexible NetFlow monitor 
 
 A data flowset arriving before its template counts `missing_template` and is dropped, and a clock change on the device leaves its templates in place. RFC 3954 section 9 recommends holding such records and flushing templates on a clock change. Held records are memory a forged sender can fill, and a flush on every NTP step would make each device's next records miss their templates.
 
+A template the parser refuses counts `invalid_template` and still withdraws the layout its ID held, since RFC 3954 section 9 and RFC 7011 section 8.4 have a new template replace the old. The ID's data then counts `missing_template` until a template the parser reads arrives.
+
 IE 61 carries the observation point, `0` for ingress and `1` for egress. RFC 5102 defines no other value, so anything else leaves the point unknown, as does a template omitting the element.
 
 ```text
@@ -387,7 +389,7 @@ Reduced-size encoding narrows an integer element to any width its value fits, so
 
 A field count of zero is a template withdrawal. UDP gives no ordering, so a withdrawal is ignored and the set is walked past its four octets, leaving announcements behind it readable. A data set whose template is known carries at least one record, so a shorter body counts `malformed` instead of passing as padding.
 
-A malformed message is discarded whole, as RFC 7011 section 9.1 requires, so each set is checked against the message and each data record against its set before anything in the message takes effect. An ID the message redefines is withdrawn all the same, so the device's next data count `missing_template` rather than decode against the layout it left.
+A malformed message is discarded whole, as RFC 7011 section 9.1 requires, so each set is checked against the message and each data record against its set before anything in the message takes effect. Such a message counts one `malformed` and no `invalid_template`, yet an ID it redefines or refuses is withdrawn all the same unless a set or message length ahead of it breaks the framing. The device's next data then count `missing_template` rather than decode against the layout it left.
 
 A device whose messages keep arriving malformed is still read. RFC 7011 section 9.1 advises stopping, but on UDP that is a switch a forged sender could flip for a real one.
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/umatare5/xflow-exporter/internal/config"
 	"github.com/umatare5/xflow-exporter/internal/flow"
 )
 
@@ -568,6 +569,7 @@ func TestDecodeIPFIX_DiscardWithdrawsARedefinedLayout(t *testing.T) {
 	held := ipfixTemplateSet(ipfixSpec(fieldIPv4SrcAddr, 4, 0), ipfixSpec(fieldInBytes, 4, 0))
 	redefined := ipfixTemplateSet(
 		ipfixSpec(fieldIPv4SrcAddr, 4, 0), ipfixSpec(fieldIPv4DstAddr, 4, 0), ipfixSpec(fieldInBytes, 4, 0))
+	refused := ipfixTemplateSet(ipfixSpec(fieldIPv4SrcAddr, 4, 0), ipfixSpec(fieldIPv4DstAddr, 0, 0))
 	short := flowSet(fixtureIPFIXTemplateID, []byte{10, 0, 0, 1, 0})
 	// Two records of the redefined layout, which the held one reads as three.
 	next := flowSet(fixtureIPFIXTemplateID, be32(be32(be32(be32(be32(be32(nil,
@@ -582,6 +584,9 @@ func TestDecodeIPFIX_DiscardWithdrawsARedefinedLayout(t *testing.T) {
 		{"redefined behind a short data set", [][]byte{short, redefined}, true},
 		{"redefined ahead of a set shorter than its header", [][]byte{redefined, be16(be16(nil, 500), 2)}, true},
 		{"redefined ahead of a set running past the message", [][]byte{redefined, be16(be16(nil, 500), 60000)}, true},
+		{"refused behind a short data set", [][]byte{short, refused}, true},
+		{"redefined behind another ID's refusal", [][]byte{short, flowSet(ipfixTemplateSetID,
+			be16(be16(nil, 500), 1), ipfixSpec(fieldInBytes, 0, 0), redefined[flowSetHeaderLen:])}, true},
 		{"refreshed ahead of a short data set", [][]byte{held, short}, false},
 	}
 
@@ -612,6 +617,99 @@ func TestDecodeIPFIX_DiscardWithdrawsARedefinedLayout(t *testing.T) {
 			}
 			if got := errorCountFor(d, flow.VersionIPFIX, ReasonMissingTemplate); got != 1 {
 				t.Errorf("missing_template count = %d, want 1", got)
+			}
+		})
+	}
+}
+
+// TestDecodeIPFIX_ReadsPastARefusedTemplate pins that a refused template
+// leaves the announcements behind it in its set readable, its specifiers
+// stepped over with their enterprise numbers, so an ID redefined there takes
+// the layout the device sent.
+func TestDecodeIPFIX_ReadsPastARefusedTemplate(t *testing.T) {
+	t.Parallel()
+
+	templateRecord := func(id uint16, specs ...[]byte) []byte {
+		body := be16(be16(nil, id), uint16(len(specs)))
+		for _, spec := range specs {
+			body = append(body, spec...)
+		}
+		return body
+	}
+	optionsRecord := func(id, scopeCount uint16, specs ...[]byte) []byte {
+		body := be16(be16(be16(nil, id), uint16(len(specs))), scopeCount)
+		for _, spec := range specs {
+			body = append(body, spec...)
+		}
+		return body
+	}
+	overLimit := make([][]byte, config.DefaultParserMaxFieldsPerTemplate+1)
+	for i := range overLimit {
+		overLimit[i] = ipfixSpec(9999, 4, 12325)
+	}
+	redefined := templateRecord(fixtureIPFIXTemplateID,
+		ipfixSpec(fieldIPv4SrcAddr, 4, 0), ipfixSpec(fieldIPv4DstAddr, 4, 0), ipfixSpec(fieldInBytes, 4, 0))
+	redefinedAsOptions := optionsRecord(fixtureIPFIXTemplateID, 1, ipfixSpec(1, 4, 0), ipfixSpec(fieldInBytes, 8, 0))
+
+	tests := []struct {
+		name    string
+		set     []byte
+		records int
+	}{
+		{
+			name: "zero-width field",
+			set: flowSet(ipfixTemplateSetID,
+				templateRecord(500, ipfixSpec(9999, 4, 12325), ipfixSpec(fieldInBytes, 0, 0)), redefined),
+			records: 2,
+		},
+		{
+			name:    "template id in the reserved range",
+			set:     flowSet(ipfixTemplateSetID, templateRecord(255, ipfixSpec(fieldInBytes, 4, 0)), redefined),
+			records: 2,
+		},
+		{
+			name:    "field count past the limit",
+			set:     flowSet(ipfixTemplateSetID, templateRecord(500, overLimit...), redefined),
+			records: 2,
+		},
+		{
+			name: "no scope field",
+			set: flowSet(ipfixOptionsTemplateSetID,
+				optionsRecord(500, 0, ipfixSpec(1, 4, 0), ipfixSpec(fieldInBytes, 4, 0)), redefinedAsOptions),
+		},
+		{
+			name: "zero-width option field",
+			set: flowSet(ipfixOptionsTemplateSetID,
+				optionsRecord(500, 1, ipfixSpec(1, 4, 0), ipfixSpec(fieldInBytes, 0, 0)), redefinedAsOptions),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newTestDecoder()
+			decode := func(sequence uint32, set []byte) []flow.Record {
+				records, err := d.Decode(sentFrom(testExporter), ipfixMessage(sequence, set), nil)
+				if err != nil {
+					t.Fatalf("Decode() error = %v, want the message read", err)
+				}
+				return records
+			}
+			decode(0, ipfixTemplateSet(ipfixSpec(fieldIPv4SrcAddr, 4, 0), ipfixSpec(fieldInBytes, 4, 0)))
+			decode(1, tt.set)
+
+			// Two records of the redefined layout, which the held one reads as three.
+			records := decode(2, flowSet(fixtureIPFIXTemplateID, be32(be32(be32(be32(be32(be32(nil,
+				0x0a000001), 0x0a000002), 1000), 0x0a000003), 0x0a000004), 2000)))
+			if len(records) != tt.records {
+				t.Errorf("Decode() = %d records, want %d from the layout the device sent", len(records), tt.records)
+			}
+			if got := errorCountFor(d, flow.VersionIPFIX, ReasonInvalidTemplate); got != 1 {
+				t.Errorf("invalid_template count = %d, want 1", got)
+			}
+			if got := errorCountFor(d, flow.VersionIPFIX, ReasonMissingTemplate); got != 0 {
+				t.Errorf("missing_template count = %d, want the redefinition held", got)
 			}
 		})
 	}
