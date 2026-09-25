@@ -464,7 +464,7 @@ func applyRareField(r *flow.Record, state *fieldState, fieldType uint16, value [
 }
 
 // addrFrom16 reads a 16-byte address, returning the IPv4 form of one written
-// as IPv4-mapped. A device that normalises its addresses into an IPv6 field
+// as IPv4-mapped. A device that normalizes its addresses into an IPv6 field
 // sends ::ffff:198.51.100.7 for what its own IPv4 fields, every published
 // list and every rendered label spell 198.51.100.7, and netip holds the two
 // as distinct values: the threat set would miss the address it holds, and the

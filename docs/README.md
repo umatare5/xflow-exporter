@@ -6,7 +6,7 @@ This directory contains the documentation for the exporter's implementation, fea
 
 - **[Collectors](collectors.md)**
 
-  The traffic metric catalogue, its labels and its per-family notes.
+  The traffic metric catalog, its labels and its per-family notes.
 
 - **[Exporter Health](health.md)**
 

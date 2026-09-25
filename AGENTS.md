@@ -81,7 +81,7 @@ How the network devices behave and interact with the collectors. See also [Colle
 
 - **One device may export two protocols from one address** — numbering both protocols' templates from 256 in one domain, as a Catalyst 9800-CL does, so the key carries the protocol. See [Protocols](docs/protocols.md#netflow-v9).
 - **Devices re-announce templates on their own timer** — `missing_template` after an exporter restart is expected until every device has done so, and an alert on it waits. See [Exporter health](docs/health.md#annotations).
-- **A device may accept a collect statement it cannot honour** — it exports `0` for the field, which NetFlow Lite platforms do for the output interface. See [Collectors](docs/collectors.md#labels).
+- **A device may accept a collect statement it cannot honor** — it exports `0` for the field, which NetFlow Lite platforms do for the output interface. See [Collectors](docs/collectors.md#labels).
 - **A device's own parse wins over a packet section** — no verified device exports a section, so that path is covered by fixtures alone. See [Protocols](docs/protocols.md#packet-sections).
 - **A sampling agent drops the samples it marked** — the rate in force is then not the rate delivered, and the agent's own counters are what say so. See [Exporter health](docs/health.md#technical-notes).
 
