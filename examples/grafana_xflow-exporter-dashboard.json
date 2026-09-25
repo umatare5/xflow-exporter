@@ -1980,7 +1980,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "A QoS policy is a claim about proportions, so this shows proportions against an explicit denominator. The share is legitimate here only because this table holds far fewer entries than the entry bound -- it is complete rather than truncated -- and the same construction on an address-keyed family would fabricate a whole. A bar labelled with a bare number is a code point the exporter knows no class name for, which is by definition an unexpected marking: a host marking its own traffic, or a trust boundary that is not re-marking.",
+          "description": "A QoS policy is a claim about proportions, so this shows proportions against an explicit denominator. The share is legitimate here only because this table holds far fewer entries than the entry bound -- it is complete rather than truncated -- and the same construction on an address-keyed family would fabricate a whole. A bar labeled with a bare number is a code point the exporter knows no class name for, which is by definition an unexpected marking: a host marking its own traffic, or a trust boundary that is not re-marking.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2062,7 +2062,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "A ranking over the raw flag string is monopolised by ack and psh,ack while the combinations that carry a diagnosis sit three orders of magnitude below it. Bucketing by outcome makes half-open connections, NULL scans and reset storms readable side by side. Clause order is load-bearing: reset is matched and excluded first, because an established bucket keyed on ack alone silently swallows rst,ack and every ECN variant of it. Measured in flow records, which are not sampling-multiplied, because a scan is measured in attempts rather than bytes. A bucket that is absent means the device reported no such combination.",
+          "description": "A ranking over the raw flag string is monopolized by ack and psh,ack while the combinations that carry a diagnosis sit three orders of magnitude below it. Bucketing by outcome makes half-open connections, NULL scans and reset storms readable side by side. Clause order is load-bearing: reset is matched and excluded first, because an established bucket keyed on ack alone silently swallows rst,ack and every ECN variant of it. Measured in flow records, which are not sampling-multiplied, because a scan is measured in attempts rather than bytes. A bucket that is absent means the device reported no such combination.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3362,7 +3362,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Services an inside host is using now and was not using over the preceding six hours: which machine changed behaviour, stated rather than inferred from a line chart. This is the only panel on the source-destination service family, which is the single bridge from a host to an application or an AS, neither of which carries an address. Read as not seen recently rather than never seen -- an entry evicted at the entry TTL and recreated surfaces here on its own. The endpoint says which end of the flow the port came from, and it joins the novelty test, so a pair whose endpoint flips between the two windows surfaces with nothing about the host having changed. Expect noise on a busy LAN.",
+          "description": "Services an inside host is using now and was not using over the preceding six hours: which machine changed behavior, stated rather than inferred from a line chart. This is the only panel on the source-destination service family, which is the single bridge from a host to an application or an AS, neither of which carries an address. Read as not seen recently rather than never seen -- an entry evicted at the entry TTL and recreated surfaces here on its own. The endpoint says which end of the flow the port came from, and it joins the novelty test, so a pair whose endpoint flips between the two windows surfaces with nothing about the host having changed. Expect noise on a busy LAN.",
           "fieldConfig": {
             "defaults": {
               "custom": {
