@@ -4,6 +4,13 @@ Notable changes to the metric surface, one section per release, listing the pull
 
 ## [Unreleased]
 
+## [v0.13.1]
+
+- [#105](https://github.com/umatare5/xflow-exporter/pull/105) — Rebuild on every make build and keep worktrees on make clean
+- [#106](https://github.com/umatare5/xflow-exporter/pull/106) — Prune a full domain only once a template can expire
+- [#108](https://github.com/umatare5/xflow-exporter/pull/108) — Write American English across the docs, comments and dashboard
+- [#109](https://github.com/umatare5/xflow-exporter/pull/109) — Render the coverage badge in CI instead of committing it
+
 ## [v0.13.0]
 
 - [#90](https://github.com/umatare5/xflow-exporter/pull/90) — Align the documentation set with cisco-wnc-exporter
@@ -134,7 +141,8 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#1](https://github.com/umatare5/xflow-exporter/pull/1) — Start the exporter with its flags, HTTP surface and UDP receiver
 - [#2](https://github.com/umatare5/xflow-exporter/pull/2) — Add the release workflow the tag and the artifacts come from
 
-[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.13.1...HEAD
+[v0.13.1]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.13.1
 [v0.13.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.13.0
 [v0.12.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.12.0
 [v0.11.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.11.0
