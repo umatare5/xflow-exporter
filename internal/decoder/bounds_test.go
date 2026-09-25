@@ -270,6 +270,39 @@ func TestTemplateStore_SweepFreesExpiredTemplates(t *testing.T) {
 	}
 }
 
+// TestTemplateStore_FullDomainDropsExpiredTemplatesFirst pins the prune a full
+// domain runs before it refuses a new ID, and the bound that skips the walk
+// until a held template can have aged out.
+func TestTemplateStore_FullDomainDropsExpiredTemplatesFirst(t *testing.T) {
+	t.Parallel()
+
+	filled := time.Unix(1_756_600_000, 0)
+	now := filled
+	s := newTemplateStore(config.Parser{MaxFieldsPerTemplate: 128, TemplateTTL: time.Minute})
+	s.now = func() time.Time { return now }
+	key := domainKey{exporter: testExporter, odid: 1, proto: flow.VersionIPFIX}
+	add := func(id int) bool {
+		return s.add(key, 4739, uint16(256+id), &template{fields: []templateField{{fieldType: 1, length: 4}}})
+	}
+
+	for id := range maxTemplatesPerDomain {
+		add(id)
+	}
+	now = filled.Add(30 * time.Second)
+	if add(maxTemplatesPerDomain) {
+		t.Fatal("a full domain of live templates stored a new ID")
+	}
+	if got := s.domain(key).templatesOldest; !got.Equal(filled) {
+		t.Errorf("oldest template = %v, want the fill instant %v", got, filled)
+	}
+
+	// Past the TTL the held templates give up their seats without a sweep.
+	now = filled.Add(61 * time.Second)
+	if !add(maxTemplatesPerDomain) {
+		t.Error("a full domain of expired templates refused a new ID")
+	}
+}
+
 // TestTemplateStore_FieldBudgetSpansTheDevice pins the device's field budget.
 // A template past it is refused whichever domain carries it, a refresh of a
 // held one still lands, another device keeps its own budget, and the sweep

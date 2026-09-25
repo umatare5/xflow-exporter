@@ -372,6 +372,11 @@ type domainState struct {
 	// budget as well so evicting the domain returns them in one step.
 	fields int
 	budget *exporterBudget
+	// templatesOldest lower-bounds the least refreshedAt the map holds: a
+	// template enters stamped now, so a prune before this ages out frees
+	// nothing. A full domain skips it rather than walk every template for
+	// each new ID a datagram announces.
+	templatesOldest time.Time
 
 	// odid is the observation domain this state was opened for, held so the
 	// record path reaches it without the store's key.
@@ -850,7 +855,9 @@ func (s *templateStore) add(key domainKey, port, id uint16, t *template) bool {
 	defer d.mu.Unlock()
 
 	if !d.fitsLocked(ref, t) {
-		d.pruneExpiredLocked(now, s.ttl)
+		if now.Sub(d.templatesOldest) > s.ttl {
+			d.pruneExpiredLocked(now, s.ttl)
+		}
 		if !d.fitsLocked(ref, t) {
 			d.dropLocked(ref)
 			return false
@@ -898,14 +905,20 @@ func (d *domainState) chargeLocked(fields int) {
 	d.budget.fields.Add(int64(fields))
 }
 
-// pruneExpiredLocked drops every template past the TTL. The domain lock is
-// held by the caller.
+// pruneExpiredLocked drops every template past the TTL and lower-bounds the
+// rest for add's guard. The domain lock is held by the caller.
 func (d *domainState) pruneExpiredLocked(now time.Time, ttl time.Duration) {
+	oldest := now
 	for ref, t := range d.templates {
 		if now.Sub(t.refreshedAt) > ttl {
 			d.dropLocked(ref)
+			continue
+		}
+		if t.refreshedAt.Before(oldest) {
+			oldest = t.refreshedAt
 		}
 	}
+	d.templatesOldest = oldest
 }
 
 // withdraw drops the layout an ID held, opening no domain for a device that
