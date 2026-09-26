@@ -1,9 +1,9 @@
 <div align="center">
 
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/logo_dark.png" width="115px" />
-    <source media="(prefers-color-scheme: light)" srcset="./docs/assets/logo.png" width="115px" />
-    <img alt="xflow-exporter" src="./docs/assets/logo.png" width="115px" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/logo_dark.png" width="115px" />
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/logo.png" width="115px" />
+    <img alt="xflow-exporter" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/logo.png" width="115px" />
   </picture>
 
   <h1>xflow-exporter</h1>
@@ -272,13 +272,13 @@ See the following Prometheus configuration examples:
 Import [`examples/grafana_xflow-exporter-dashboard.json`](./examples/grafana_xflow-exporter-dashboard.json) and visualize the metrics.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/xflow-exporter-dashboard_dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="./docs/assets/xflow-exporter-dashboard.png">
-  <img alt="Grafana dashboard showing flow volume, composition and exporter health panels" src="./docs/assets/xflow-exporter-dashboard.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard.png">
+  <img alt="Grafana dashboard showing flow volume, composition and exporter health panels" src="https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard.png">
 </picture>
 
 > [!TIP]
-> See [`docs/assets/xflow-exporter-dashboard_full.png`](./docs/assets/xflow-exporter-dashboard_full.png) for the full capture.
+> See [`docs/assets/xflow-exporter-dashboard_full.png`](https://raw.githubusercontent.com/umatare5/xflow-exporter/main/docs/assets/xflow-exporter-dashboard_full.png) for the full capture.
 
 ## Documentation
 
