@@ -121,7 +121,7 @@ show flow monitor EXAMPLE_FLOW_MONITOR
 
 ```bash
 docker run -p 10053:10053 -p 4739:4739/udp \
-  ghcr.io/umatare5/xflow-exporter:v0.12.0 --collector.exporters
+  ghcr.io/umatare5/xflow-exporter:v0.13.1 --collector.exporters
 ```
 
 ### 3. Scrape the metrics
