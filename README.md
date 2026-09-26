@@ -77,17 +77,17 @@ For example, on **Cisco C2960CX** and **NetFlow v9**, use the following configur
 ```bash
 # 1. Create minimum set of flow records
 flow record MINIMAL_FLOW_RECORDS_IPV4
-  match ipv4 tos                       # For DSCP
-  match ipv4 protocol                  # For the protocol type - 6: TCP, 17: UDP
+  match ipv4 tos                       # For the DSCP
+  match ipv4 protocol                  # Recommend: For the protocol type - 6: TCP, 17: UDP
   match ipv4 source address            # Required: Source IP address of the flow
   match ipv4 destination address       # Required: Destination IP address of the flow
-  match transport source-port          # Required: Source port of the flow
-  match transport destination-port     # Required: Destination port of the flow
+  match transport source-port          # Recommend: For the source port of the flow
+  match transport destination-port     # Recommend: For the destination port of the flow
   collect transport tcp flags          # Collect TCP flags
   collect interface input              # Collect input interface
   collect flow sampler                 # Collect flow sampler information
-  collect counter bytes long           # Collect byte count of the flow
-  collect counter packets long         # Collect packet count of the flow
+  collect counter bytes long           # Required: Collect byte count of the flow
+  collect counter packets long         # Required: Collect packet count of the flow
 
 # 2. Configure the flow exporter
 flow exporter XFLOW-EXPORTER
