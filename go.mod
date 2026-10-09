@@ -2,7 +2,7 @@ module github.com/umatare5/xflow-exporter
 
 go 1.27
 
-toolchain go1.27.1
+toolchain go1.27.2
 
 require (
 	github.com/golang/snappy v1.0.0
