@@ -12,7 +12,7 @@ require (
 	github.com/prometheus/client_model v0.6.3
 	github.com/urfave/cli/v3 v3.13.0
 	go.yaml.in/yaml/v3 v3.0.5
-	golang.org/x/net v0.59.0
+	golang.org/x/net v0.60.0
 	google.golang.org/protobuf v1.36.12
 )
 
