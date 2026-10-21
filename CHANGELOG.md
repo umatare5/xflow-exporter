@@ -6,8 +6,17 @@ Notable changes to the metric surface, one section per release, listing the pull
 
 ## [v0.13.2]
 
-- [#111](https://github.com/umatare5/xflow-exporter/pull/111) — Replace relative paths with absolute paths
-- [#112](https://github.com/umatare5/xflow-exporter/pull/112) — Replace absolute paths with relative paths
+- [#111](https://github.com/umatare5/xflow-exporter/pull/111) – Replace relative paths with absolute paths in README
+- [#112](https://github.com/umatare5/xflow-exporter/pull/112) – Replace absolute paths with relative paths in README
+- [#113](https://github.com/umatare5/xflow-exporter/pull/113) – Update all patch dependencies
+- [#114](https://github.com/umatare5/xflow-exporter/pull/114) – Update all minor dependencies
+- [#115](https://github.com/umatare5/xflow-exporter/pull/115) – Update go toolchain directive to v1.27.2
+- [#116](https://github.com/umatare5/xflow-exporter/pull/116) – Update module golang.org/x/net to v0.60.0
+- [#117](https://github.com/umatare5/xflow-exporter/pull/117) – Update module github.com/urfave/cli/v3 to v3.14.0
+- [#118](https://github.com/umatare5/xflow-exporter/pull/118) – Update all patch dependencies
+- [#119](https://github.com/umatare5/xflow-exporter/pull/119) – Update all minor dependencies
+- [#120](https://github.com/umatare5/xflow-exporter/pull/120) – Update go toolchain directive to v1.27.3
+- [#121](https://github.com/umatare5/xflow-exporter/pull/121) – Raise the toolchain to Go 1.27.3 and release v0.13.2
 
 ## [v0.13.1]
 
