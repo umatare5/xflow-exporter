@@ -4,6 +4,11 @@ Notable changes to the metric surface, one section per release, listing the pull
 
 ## [Unreleased]
 
+## [v0.13.2]
+
+- [#111](https://github.com/umatare5/xflow-exporter/pull/111) — Replace relative paths with absolute paths
+- [#112](https://github.com/umatare5/xflow-exporter/pull/112) — Replace absolute paths with relative paths
+
 ## [v0.13.1]
 
 - [#105](https://github.com/umatare5/xflow-exporter/pull/105) — Rebuild on every make build and keep worktrees on make clean
@@ -141,7 +146,8 @@ Notable changes to the metric surface, one section per release, listing the pull
 - [#1](https://github.com/umatare5/xflow-exporter/pull/1) — Start the exporter with its flags, HTTP surface and UDP receiver
 - [#2](https://github.com/umatare5/xflow-exporter/pull/2) — Add the release workflow the tag and the artifacts come from
 
-[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.13.1...HEAD
+[Unreleased]: https://github.com/umatare5/xflow-exporter/compare/v0.13.2...HEAD
+[v0.13.2]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.13.2
 [v0.13.1]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.13.1
 [v0.13.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.13.0
 [v0.12.0]: https://github.com/umatare5/xflow-exporter/releases/tag/v0.12.0
